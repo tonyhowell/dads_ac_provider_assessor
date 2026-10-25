@@ -17,21 +17,21 @@ const isStage = (s: string | undefined): s is SelectionStage => SELECTION_STAGES
 
 export function SelectionScreen() {
   const { stage } = useParams();
-  const { seed, state } = useApp();
+  const { providers, state } = useApp();
   if (!isStage(stage)) return <Navigate to="/selection/scan" replace />;
 
-  const byId = new Map(seed.providers.map((p) => [p.id, p]));
+  const byId = new Map(providers.map((p) => [p.id, p]));
   const entries = entriesAt(state, stage).flatMap((entry) => {
     const provider = byId.get(entry.provider_id);
     return provider ? [{ entry, provider }] : [];
   });
-  const unselected = seed.providers.length - state.selection.length;
+  const unselected = providers.length - state.selection.length;
 
   return (
     <section>
       <h1 className="text-2xl font-semibold">Provider selection</h1>
       <p className="muted mt-1">
-        {seed.providers.length} providers in the area · {unselected} not yet selected ·{' '}
+        {providers.length} providers in the area · {unselected} not yet selected ·{' '}
         <Link to="/providers">browse all providers</Link>
       </p>
 

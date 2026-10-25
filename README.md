@@ -24,16 +24,36 @@ The first time the server starts with an empty database, it creates the `BOOTSTR
 
 ## What works so far
 
-- **Sign-in with passkeys only.** There are no passwords and no self sign-up. An admin creates each username and sends a one-time enrolment link (valid 24 hours), and the person creates a passkey on their own device.
-- **Admin page:** add people, choose their role (administrator or family member), issue a new link (for a lost device or to add another device), view and remove passkeys, disable or re-enable access, and see when each person last signed in.
-- **Shared assessment:** the selection, notes, interviews, transcripts and drafted notes are stored on the server, so every family member sees the same thing. Notes show who wrote them. Every change is logged with who made it and when.
-- **Providers:** searchable list, filterable by selection stage, with "prices as at", source link and a warning once prices are over 60 days old.
-- **Provider selection, in three stages:**
-  1. **Initial scan:** providers you add from the full list for a first look.
-  2. **Refinement:** the ones worth comparing more closely.
-  3. **Interview shortlist:** the ones you'll interview, ranked, with "why" and "probe at interview" notes.
-- **Interviews:** record in the browser after confirming consent, with optional live transcription. You can correct the transcript, have Claude draft structured notes, and save them to the provider's notes.
-- The other screens are placeholders for the later phases in `docs/PLAN.md`.
+The full v1 build plan (SPEC §8 screens, calculations, question filtering, scoring and the printable pack) is in place, on top of passkey sign-in and shared family data.
+
+- **Participant setup:** suburb, postcode, classification, pension status, assessed rates, DVA card and no-worse-off status. Shows contribution rates live, the budget, and DVA prompts (suggestions to check with DVA, never eligibility claims). The name is optional.
+- **Overview:** key rules, the budget breakdown (care management, services, carry-over cap), the contribution table and years to the lifetime cap.
+- **Relative costs:**
+  - an editable weekly plan and a service date (personal care counts as Clinical from 1 Oct 2026);
+  - the cheapest and dearest provider and the spread;
+  - a cost chart against the services budget;
+  - out-of-pocket contributions, and rates against the IHACPA benchmark (±5% colouring).
+  Unpublished rates are filled from the benchmark and marked.
+- **Providers:**
+  - search and filter by stage;
+  - "prices as at" and source links, with a warning once prices are over 60 days old;
+  - flags for travel or admin fees;
+  - add or edit providers (with undo back to the starter-pack data) and import from CSV;
+  - assessment notes on each provider.
+- **Selection in three stages:** initial scan → refinement → interview shortlist (ranked, with why and probe notes).
+- **Bounding questions:** 8 groups and 29 questions, answered Yes/No/Unsure with notes and a "not relevant" toggle, plus a live count of interview questions included.
+- **Interview pack:**
+  - sections A–Q filtered by the bounding answers, with "must" questions always kept;
+  - your own questions added per section;
+  - answers and a "satisfactory?" mark per shortlisted provider;
+  - a printable landscape pack (Print or Save as PDF).
+- **Interviews:** in-browser recording with optional live transcription; drafting structured notes with Claude.
+- **Scoring and decision:**
+  - 8 weighted criteria (weights editable) with a ranking;
+  - a "disqualify?" flag when a must question lacks a satisfactory written answer;
+  - a suggested price score from the plan cost against the benchmark;
+  - shared decision notes.
+- **Admin:** passkey users, enrolment links and roles.
 
 ### Security and privacy
 - Passkeys are bound to the site's domain, so they can't be phished. The server stores only their public keys.

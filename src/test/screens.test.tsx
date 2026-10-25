@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { memoryServer, renderApp } from './renderApp';
+import { emptyState } from '../state/reducer';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -171,9 +172,7 @@ describe('Interview capture', () => {
 describe('Interview review', () => {
   const seededServer = () =>
     memoryServer({
-      version: 3,
-      notes: [],
-      selection: [],
+      ...emptyState(),
       interviews: [
         {
           id: 'int-1', provider_id: 'bolton-clarke', started_at: '2026-10-25T00:00:00.000Z', duration_seconds: 0,

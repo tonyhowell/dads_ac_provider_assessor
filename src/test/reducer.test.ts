@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entriesAt, initialState, migrate, reducer, type AppState } from '../state/reducer';
+import { effectiveProviders, emptyState, entriesAt, initialState, migrate, reducer, type AppState } from '../state/reducer';
 import type { Interview, Provider } from '../types';
 
 const provider = (id: string, name: string): Provider => ({
@@ -8,7 +8,7 @@ const provider = (id: string, name: string): Provider => ({
   prices_as_at: '2026-10-25', prices_as_at_date: '2026-10-25', veteran_fit: null, flags: [], source_url: null,
 });
 const providers = [provider('a', 'Alpha Care'), provider('b', 'Beta Care'), provider('c', 'Gamma Care')];
-const empty = (): AppState => ({ version: 3, notes: [], selection: [], interviews: [] });
+const empty = (): AppState => emptyState();
 const AT = '2026-10-25T00:00:00.000Z';
 
 describe('initialState', () => {
@@ -36,14 +36,12 @@ describe('migrate', () => {
       shortlist: [{ provider_id: 'a', why: 'local', watch: 'turnover', added_at: AT }],
     };
     expect(migrate(v1)).toEqual({
-      version: 3,
-      notes: [],
-      interviews: [],
+      ...emptyState(),
       selection: [{ provider_id: 'a', stage: 'interview', why: 'local', watch: 'turnover', added_at: AT, stage_changed_at: AT }],
     });
   });
 
-  it('remaps placeholder provider ids when upgrading v2 state', () => {
+  it('remaps placeholder provider ids and adds the v4 fields when upgrading v2 state', () => {
     const v2 = {
       version: 2,
       notes: [{ id: 'n1', provider_id: 'anglicare-sq', text: 'x', created_at: AT, source: 'manual' }],
@@ -51,7 +49,8 @@ describe('migrate', () => {
       interviews: [{ ...{ id: 'i', started_at: AT, duration_seconds: 0, consent_confirmed: true, interviewer: '', audio_id: null, audio_mime: null, transcript: '', notes: null, notes_generated_at: null }, provider_id: 'right-at-home-bayside-south' }],
     };
     const v3 = migrate(v2)!;
-    expect(v3.version).toBe(3);
+    expect(v3.version).toBe(4);
+    expect(v3.answers).toEqual({});
     expect(v3.notes[0].provider_id).toBe('anglicare-southern-queensland');
     expect(v3.selection[0].provider_id).toBe('bluecare-unitingcare-qld');
     expect(v3.interviews[0].provider_id).toBe('right-at-home-brisbane-bayside-south');
@@ -151,5 +150,54 @@ describe('interviews', () => {
     s = reducer(s, { type: 'interview/delete', id: 'i1' });
     expect(s.interviews).toEqual([]);
     expect(s.notes[0].interview_id).toBeUndefined();
+  });
+});
+
+describe('assessment state (v4)', () => {
+  const base = empty;
+
+  it('stores the participant, plan and service date', () => {
+    const participant = { id: 'p', name: '', suburb: 'Example', postcode: '4000', pension_status: 'full_pensioner' as const, ind_rate: null, ev_rate: null, dva_card: 'none' as const, nwop: false, classification: '5', lifetime_contributions_paid: 0 };
+    let s = reducer(base(), { type: 'participant/set', participant });
+    s = reducer(s, { type: 'plan/set', plan: [{ service: 'Domestic', key: 'domestic', hours_per_week: 2, category: 'everyday' }] });
+    s = reducer(s, { type: 'settings/serviceDate', date: '2026-09-30' });
+    expect(s.participant).toEqual(participant);
+    expect(s.plan).toHaveLength(1);
+    expect(s.serviceDate).toBe('2026-09-30');
+    expect(reducer(s, { type: 'plan/set', plan: null }).plan).toBeNull();
+  });
+
+  it('overrides seed providers with edits and appends new ones', () => {
+    const edited = { ...providers[0], rn: 150 };
+    const added = { ...providers[0], id: 'new-co', provider: 'New Co' };
+    let s = reducer(base(), { type: 'provider/upsert', provider: edited });
+    s = reducer(s, { type: 'provider/import', providers: [added, { ...edited, rn: 160 }] });
+    const merged = effectiveProviders(providers, s.providerEdits);
+    expect(merged.map((p) => p.id)).toEqual(['a', 'b', 'c', 'new-co']);
+    expect(merged[0].rn).toBe(160);
+    s = reducer(s, { type: 'provider/revert', id: 'a' });
+    expect(effectiveProviders(providers, s.providerEdits)[0].rn).toBeNull();
+  });
+
+  it('records bounding answers, custom questions and responses', () => {
+    let s = reducer(base(), { type: 'bounding/answer', questionId: 'B1.1', answer: { answer: 'Yes, classification 5', not_relevant: false } });
+    s = reducer(s, { type: 'question/add', question: { id: 'cq1', section: 'C', text: 'Can we meet the workers first?' } });
+    s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', text: 'Yes' });
+    s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', satisfactory: true });
+    expect(s.responses['a::cq1']).toEqual({ text: 'Yes', satisfactory: true });
+    expect(s.answers['B1.1'].answer).toBe('Yes, classification 5');
+    s = reducer(s, { type: 'question/delete', id: 'cq1' });
+    expect(s.customQuestions).toEqual([]);
+    expect(s.responses).toEqual({});
+  });
+
+  it('records scores, weights and decision notes', () => {
+    let s = reducer(base(), { type: 'score/set', providerId: 'a', criterion: 'veteran', score: 4 });
+    s = reducer(s, { type: 'weight/set', criterion: 'price', weight: 3 });
+    s = reducer(s, { type: 'decision/set', text: 'Going with A' });
+    expect(s.scores).toEqual({ 'a::veteran': 4 });
+    expect(s.weights).toEqual({ price: 3 });
+    expect(s.decisionNotes).toBe('Going with A');
+    expect(reducer(s, { type: 'score/set', providerId: 'a', criterion: 'veteran', score: null }).scores).toEqual({});
   });
 });

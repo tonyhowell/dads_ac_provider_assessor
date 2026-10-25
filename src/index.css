@@ -34,3 +34,60 @@
     @apply text-sm text-slate-600 dark:text-slate-400;
   }
 }
+
+/* Chart colours. Single-series bars use the accent; over-budget uses the warning status colour (always with a text label). */
+:root {
+  --chart-bar: #0f766e;
+  --chart-benchmark: #94a3b8;
+  --chart-over: #c2410c;
+  --chart-line: #334155;
+  --chart-grid: #e2e8f0;
+}
+.dark {
+  --chart-bar: #2dd4bf;
+  --chart-benchmark: #64748b;
+  --chart-over: #fb923c;
+  --chart-line: #cbd5e1;
+  --chart-grid: #1e293b;
+}
+
+/* Printable interview pack */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm 10mm 16mm;
+  }
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-pack {
+    max-width: none;
+    padding: 0;
+  }
+  .print-table thead {
+    display: table-header-group;
+  }
+  .print-table tr {
+    break-inside: avoid;
+  }
+  /* Repeated on every printed page. */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    background: white;
+  }
+}
+
+/* Visually hidden labels are absolutely positioned. Inside a horizontal scroller they would otherwise be
+   placed relative to the page and widen it at phone width, so make scrollers their containing block. */
+.overflow-x-auto {
+  position: relative;
+}

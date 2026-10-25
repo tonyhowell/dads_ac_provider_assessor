@@ -4,7 +4,7 @@ import { InterviewList } from '../components/InterviewList';
 import { entriesAt } from '../state/reducer';
 
 export function InterviewsScreen() {
-  const { seed, state } = useApp();
+  const { providers, state } = useApp();
   const shortlistIds = entriesAt(state, 'interview').map((e) => e.provider_id);
   const shortlisted = new Set(shortlistIds);
   // Interview shortlist first (in rank order), then any others that have interviews.
@@ -12,7 +12,7 @@ export function InterviewsScreen() {
     ...shortlistIds,
     ...new Set(state.interviews.map((i) => i.provider_id).filter((id) => !shortlisted.has(id))),
   ];
-  const byId = new Map(seed.providers.map((p) => [p.id, p]));
+  const byId = new Map(providers.map((p) => [p.id, p]));
 
   return (
     <section>

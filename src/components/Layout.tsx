@@ -17,7 +17,7 @@ const NAV = [
 ];
 
 export function Layout() {
-  const { seed, state, syncError } = useApp();
+  const { providers, state, syncError } = useApp();
   const { user, signOut } = useAuth();
   const nav = user?.role === 'admin' ? [...NAV, { to: '/admin', label: 'Admin' }] : NAV;
   return (
@@ -63,7 +63,7 @@ export function Layout() {
         </div>
       )}
 
-      {pricesMissing(seed.providers) && (
+      {pricesMissing(providers) && (
         <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <div className="mx-auto max-w-6xl">
             Placeholder seed data: no provider prices loaded yet. Replace the files in <code>data/</code> with the starter-pack data.
@@ -71,7 +71,7 @@ export function Layout() {
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+      <main className="mx-auto w-full max-w-6xl min-w-0 flex-1 px-4 py-6">
         <Outlet />
       </main>
 

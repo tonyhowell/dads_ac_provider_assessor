@@ -185,3 +185,24 @@ export const InterviewSchema = z.object({
   notes: InterviewNotesSchema.nullable(),
   notes_generated_at: z.string().nullable(),
 });
+
+/** Answer to a bounding question (SPEC §4 BoundingAnswer). "Not relevant" rules out the sections it informs. */
+export const BoundingAnswerSchema = z.object({
+  /** "yes" | "no" | "unsure" | "" (unanswered) */
+  answer: z.string().max(5000),
+  notes: z.string().max(5000).optional(),
+  not_relevant: z.boolean(),
+});
+
+/** A question the family adds to an interview section. Treated as "should". */
+export const CustomQuestionSchema = z.object({
+  id: z.string().min(1).max(100),
+  section: z.string().min(1).max(10),
+  text: z.string().trim().min(1).max(2000),
+});
+
+/** A provider's answer to one interview question (SPEC §4 InterviewResponse). */
+export const InterviewResponseSchema = z.object({
+  text: z.string().max(20_000),
+  satisfactory: z.boolean().nullable(),
+});

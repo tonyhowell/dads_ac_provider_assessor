@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '../App';
 import { loadSeedData, type SeedData } from '../data/load';
 import { AuthProvider, type SessionUser } from '../auth/AuthContext';
-import { reducer, type AppState } from '../state/reducer';
+import { emptyState, reducer, type AppState } from '../state/reducer';
 import type { StateSync } from '../state/sync';
 import type { AudioStore } from '../storage/audioStore';
 
@@ -24,7 +24,7 @@ export interface MemoryServer {
   sync: StateSync;
 }
 
-export function memoryServer(initial: AppState = { version: 3, notes: [], selection: [], interviews: [] }): MemoryServer {
+export function memoryServer(initial: AppState = emptyState()): MemoryServer {
   const server: MemoryServer = {
     state: initial,
     version: 0,
@@ -50,7 +50,8 @@ export async function renderApp(
     server = memoryServer(),
     audio = memoryAudioStore(),
     user = testUser,
-  }: { seed?: SeedData; server?: MemoryServer; audio?: AudioStore; user?: SessionUser | null } = {},
+    waitForNav = true,
+  }: { seed?: SeedData; server?: MemoryServer; audio?: AudioStore; user?: SessionUser | null; waitForNav?: boolean } = {},
 ) {
   const result = {
     server,
@@ -63,6 +64,7 @@ export async function renderApp(
       </MemoryRouter>,
     ),
   };
-  if (user) await screen.findByRole('navigation', { name: 'Main' });
+  if (user && waitForNav) await screen.findByRole('navigation', { name: 'Main' });
+  else if (user) await screen.findByRole('heading', { level: 1 });
   return result;
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { PriceProvenance } from '../components/Price';
 import { StageControls } from '../components/StageControls';
+import { mentionsDisallowedFees } from '../flags';
 import { STAGE_LABELS } from '../state/reducer';
 import { SELECTION_STAGES } from '../schemas';
 import type { SelectionStage } from '../types';
@@ -11,7 +12,7 @@ type SortKey = 'name' | 'notes';
 type StageFilter = 'all' | 'none' | SelectionStage;
 
 export function ProvidersScreen() {
-  const { seed, state } = useApp();
+  const { providers, state } = useApp();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [stageFilter, setStageFilter] = useState<StageFilter>('all');
@@ -25,7 +26,7 @@ export function ProvidersScreen() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = seed.providers.filter(
+    const filtered = providers.filter(
       (p) =>
         (!q || [p.provider, p.outlet, p.type, ...p.flags].some((v) => v?.toLowerCase().includes(q))) &&
         (stageFilter === 'all' || (stageOf.get(p.id) ?? 'none') === stageFilter),
@@ -35,11 +36,21 @@ export function ProvidersScreen() {
         ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider)
         : a.provider.localeCompare(b.provider),
     );
-  }, [seed.providers, query, sort, noteCounts, stageFilter, stageOf]);
+  }, [providers, query, sort, noteCounts, stageFilter, stageOf]);
 
   return (
     <section>
-      <h1 className="text-2xl font-semibold">Providers</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold">Providers</h1>
+        <div className="flex gap-2">
+          <Link to="/providers/new" className="btn no-underline hover:no-underline">
+            Add provider
+          </Link>
+          <Link to="/providers/import" className="btn no-underline hover:no-underline">
+            Import CSV
+          </Link>
+        </div>
+      </div>
       <p className="muted mt-1">
         All providers that service the area. Add the ones worth a first look to the initial scan, then narrow them down on the{' '}
         <Link to="/selection">Selection</Link> page. Keep notes on each provider as you assess them.
@@ -85,7 +96,7 @@ export function ProvidersScreen() {
       </div>
 
       <p className="muted mt-3" aria-live="polite">
-        {rows.length} of {seed.providers.length} providers · {state.selection.length} selected
+        {rows.length} of {providers.length} providers · {state.selection.length} selected
       </p>
 
       <ul className="mt-3 space-y-3">
@@ -97,6 +108,9 @@ export function ProvidersScreen() {
               </h2>
               {(p.outlet || p.type) && <p className="muted">{[p.type, p.outlet].filter(Boolean).join(' · ')}</p>}
               <PriceProvenance provider={p} />
+              {mentionsDisallowedFees(...p.flags) && (
+                <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-200">Check fees: mentions travel or admin charges</p>
+              )}
               {p.flags.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-1" aria-label="Flags">
                   {p.flags.map((f) => (

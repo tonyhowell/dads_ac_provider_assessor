@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SeedData } from '../data/load';
 import type { AudioStore } from '../storage/audioStore';
-import { reducer, type Action, type AppState } from './reducer';
+import { effectiveProviders, reducer, type Action, type AppState } from './reducer';
+import { toIsoDate } from '../rules';
+import type { PlanItem, Provider } from '../types';
 import type { StateSync } from './sync';
 
 const POLL_MS = 20_000;
@@ -13,6 +15,12 @@ interface AppContextValue {
   audio: AudioStore;
   /** Last save error, shown in a banner until the next successful save. */
   syncError: string | null;
+  /** Seed providers with the family's edits, plus providers they added. Use this, not seed.providers. */
+  providers: Provider[];
+  /** The family's plan, or the sample plan until they edit it. */
+  plan: PlanItem[];
+  /** Date services are costed at (YYYY-MM-DD). */
+  serviceDate: string;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -81,7 +89,22 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
     [sync, refresh],
   );
 
-  const value = useMemo(() => (state ? { seed, state, dispatch, audio, syncError } : null), [seed, state, dispatch, audio, syncError]);
+  const value = useMemo(
+    () =>
+      state
+        ? {
+            seed,
+            state,
+            dispatch,
+            audio,
+            syncError,
+            providers: effectiveProviders(seed.providers, state.providerEdits),
+            plan: state.plan ?? seed.samplePlan,
+            serviceDate: state.serviceDate ?? toIsoDate(new Date()),
+          }
+        : null,
+    [seed, state, dispatch, audio, syncError],
+  );
 
   if (!value) {
     return (
@@ -100,6 +123,6 @@ export function useApp(): AppContextValue {
 }
 
 export function useProvider(id: string | undefined) {
-  const { seed } = useApp();
-  return seed.providers.find((p) => p.id === id);
+  const { providers } = useApp();
+  return providers.find((p) => p.id === id);
 }

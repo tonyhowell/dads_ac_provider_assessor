@@ -43,6 +43,8 @@ src/
 
 > **Update 25 Oct 2026:** B1 is resolved, as the starter-pack data is in `data/`. B3 is resolved: the reference table assumes service on or after 1 Oct 2026, so personal care is Clinical. B4 is resolved: all figures match exactly, except that the SPEC rounds Anglicare's exact $12,980.50 down (round-half-to-even), which the test follows.
 
+> **Status 25 Oct 2026:** Phases 1–5 are built and deployed. Phase 6 hardening is partly done: phone-width check on every screen and light/dark themes. Still to do: an automated accessibility audit (axe), and drag-to-reorder (up/down buttons are used for now).
+
 ## Phase 1 — Scaffold, types, rules, data loaders
 
 **Tasks**

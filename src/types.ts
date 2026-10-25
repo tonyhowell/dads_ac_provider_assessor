@@ -1,6 +1,9 @@
 import type { z } from 'zod';
 import type {
   BenchmarkSchema,
+  BoundingAnswerSchema,
+  CustomQuestionSchema,
+  InterviewResponseSchema,
   BoundingGroupSchema,
   CategorySchema,
   ContributionRateSchema,
@@ -43,3 +46,7 @@ export interface Budget {
   annual: number;
   for_services: number;
 }
+
+export type BoundingAnswer = z.infer<typeof BoundingAnswerSchema>;
+export type CustomQuestion = z.infer<typeof CustomQuestionSchema>;
+export type InterviewResponse = z.infer<typeof InterviewResponseSchema>;
