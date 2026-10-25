@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "rank": 1,
+    "provider": "Bolton Clarke",
+    "why": "Veteran heritage and services, nurse-led clinical model, full published price list at or near benchmark for most services",
+    "watch": "Care management rate above benchmark; confirm Wynnum coverage and PTSD-informed staff"
+  },
+  {
+    "rank": 2,
+    "provider": "Anglicare Southern Queensland",
+    "why": "Fully itemised, current (1 Oct 2026) schedule; competitive personal care and gardening; clinical care management option",
+    "watch": "Highest nursing rates captured; 8% admin on consumables/expenses; 2-day cancellation rule"
+  },
+  {
+    "rank": 3,
+    "provider": "Right at Home Brisbane Bayside South",
+    "why": "Lowest unit prices captured; local franchise in the bayside; small consistent teams",
+    "watch": "Possible travel charges; confirm gardening/home maintenance capability and after-hours cover"
+  },
+  {
+    "rank": 4,
+    "provider": "BlueCare (UnitingCare QLD)",
+    "why": "Largest QLD in-home footprint; depth for complex, after-hours and palliative care",
+    "watch": "Highest unit prices captured \u2014 budget goes least far; confirm current schedule"
+  },
+  {
+    "rank": 5,
+    "provider": "Five Good Friends (Brisbane East & Bayside)",
+    "why": "Choose-your-helper model and family app favour continuity \u2014 valuable with PTSD",
+    "watch": "Pricing model differs; request a quote for the sample plan; check clinical depth"
+  },
+  {
+    "rank": 6,
+    "provider": "Carers Link (reserve)",
+    "why": "Wynnum-based local provider",
+    "watch": "Confirm registration is current before engaging"
+  }
+]

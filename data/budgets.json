@@ -1,6 +1,74 @@
 [
-  { "classification": "HCP L1", "quarterly": 2823.55 },
-  { "classification": "HCP L2", "quarterly": 4965.14 },
-  { "classification": "HCP L3", "quarterly": 10808.30 },
-  { "classification": "HCP L4", "quarterly": 16385.99 }
+  {
+    "classification": "1",
+    "quarterly": 2757.89,
+    "annual": 11031.56,
+    "for_services": 2482.1
+  },
+  {
+    "classification": "2",
+    "quarterly": 4120.89,
+    "annual": 16483.55,
+    "for_services": 3708.8
+  },
+  {
+    "classification": "3",
+    "quarterly": 5645.23,
+    "annual": 22580.93,
+    "for_services": 5080.71
+  },
+  {
+    "classification": "4",
+    "quarterly": 7632.04,
+    "annual": 30528.15,
+    "for_services": 6868.84
+  },
+  {
+    "classification": "5",
+    "quarterly": 10202.32,
+    "annual": 40809.27,
+    "for_services": 9182.09
+  },
+  {
+    "classification": "6",
+    "quarterly": 12365.48,
+    "annual": 49461.91,
+    "for_services": 11128.93
+  },
+  {
+    "classification": "7",
+    "quarterly": 14944.2,
+    "annual": 59776.8,
+    "for_services": 13449.78
+  },
+  {
+    "classification": "8",
+    "quarterly": 20073.5,
+    "annual": 80294.0,
+    "for_services": 18066.15
+  },
+  {
+    "classification": "HCP L1",
+    "quarterly": 2823.55,
+    "annual": 11294.2,
+    "for_services": 2541.2
+  },
+  {
+    "classification": "HCP L2",
+    "quarterly": 4965.14,
+    "annual": 19860.56,
+    "for_services": 4468.63
+  },
+  {
+    "classification": "HCP L3",
+    "quarterly": 10808.3,
+    "annual": 43233.2,
+    "for_services": 9727.47
+  },
+  {
+    "classification": "HCP L4",
+    "quarterly": 16385.99,
+    "annual": 65543.96,
+    "for_services": 14747.39
+  }
 ]

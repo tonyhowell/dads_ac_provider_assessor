@@ -5,10 +5,10 @@ import type { Interview, Provider } from '../types';
 const provider = (id: string, name: string): Provider => ({
   id, provider: name, type: null, outlet: null,
   rn: null, en: null, pc: null, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null,
-  prices_as_at: '2026-10-25', veteran_fit: null, flags: [], source_url: null,
+  prices_as_at: '2026-10-25', prices_as_at_date: '2026-10-25', veteran_fit: null, flags: [], source_url: null,
 });
 const providers = [provider('a', 'Alpha Care'), provider('b', 'Beta Care'), provider('c', 'Gamma Care')];
-const empty = (): AppState => ({ version: 2, notes: [], selection: [], interviews: [] });
+const empty = (): AppState => ({ version: 3, notes: [], selection: [], interviews: [] });
 const AT = '2026-10-25T00:00:00.000Z';
 
 describe('initialState', () => {
@@ -36,14 +36,28 @@ describe('migrate', () => {
       shortlist: [{ provider_id: 'a', why: 'local', watch: 'turnover', added_at: AT }],
     };
     expect(migrate(v1)).toEqual({
-      version: 2,
+      version: 3,
       notes: [],
       interviews: [],
       selection: [{ provider_id: 'a', stage: 'interview', why: 'local', watch: 'turnover', added_at: AT, stage_changed_at: AT }],
     });
   });
 
-  it('keeps v2 state and ignores anything unknown', () => {
+  it('remaps placeholder provider ids when upgrading v2 state', () => {
+    const v2 = {
+      version: 2,
+      notes: [{ id: 'n1', provider_id: 'anglicare-sq', text: 'x', created_at: AT, source: 'manual' }],
+      selection: [{ provider_id: 'bluecare', stage: 'scan', why: '', watch: '', added_at: AT, stage_changed_at: AT }],
+      interviews: [{ ...{ id: 'i', started_at: AT, duration_seconds: 0, consent_confirmed: true, interviewer: '', audio_id: null, audio_mime: null, transcript: '', notes: null, notes_generated_at: null }, provider_id: 'right-at-home-bayside-south' }],
+    };
+    const v3 = migrate(v2)!;
+    expect(v3.version).toBe(3);
+    expect(v3.notes[0].provider_id).toBe('anglicare-southern-queensland');
+    expect(v3.selection[0].provider_id).toBe('bluecare-unitingcare-qld');
+    expect(v3.interviews[0].provider_id).toBe('right-at-home-brisbane-bayside-south');
+  });
+
+  it('keeps current state and ignores anything unknown', () => {
     const v2 = empty();
     expect(migrate(v2)).toBe(v2);
     expect(migrate(undefined)).toBeUndefined();

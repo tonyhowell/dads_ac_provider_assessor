@@ -25,15 +25,15 @@ describe('Provider selection', () => {
     const user = userEvent.setup();
     await renderApp('/providers');
     await user.type(screen.getByLabelText('Search'), 'anglicare');
-    expect(screen.getByText(/1 of 4 providers/)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 7 providers/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Search'));
 
     const card = screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!;
     await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
     await user.selectOptions(screen.getByLabelText('Stage'), 'Not selected');
-    expect(screen.getByText(/3 of 4 providers/)).toBeInTheDocument();
+    expect(screen.getByText(/6 of 7 providers/)).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Stage'), 'Initial scan');
-    expect(screen.getByText(/1 of 4 providers/)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 7 providers/)).toBeInTheDocument();
   });
 
   it('moves providers through scan → refinement → interview shortlist', async () => {
@@ -65,7 +65,7 @@ describe('Provider selection', () => {
 
     const saved = server.state;
     expect(saved.selection.map((e) => [e.provider_id, e.stage])).toEqual([
-      ['bluecare', 'interview'],
+      ['bluecare-unitingcare-qld', 'interview'],
       ['bolton-clarke', 'interview'],
     ]);
     expect(saved.selection[1]).toMatchObject({ why: 'Published prices', watch: 'Worker turnover' });
@@ -83,7 +83,7 @@ describe('Provider selection', () => {
 describe('Provider notes', () => {
   it('adds, edits and deletes notes', async () => {
     const user = userEvent.setup();
-    await renderApp('/providers/anglicare-sq');
+    await renderApp('/providers/anglicare-southern-queensland');
 
     await user.type(screen.getByLabelText(/add a note/i), 'Rang intake line, call back Tuesday');
     await user.click(screen.getByRole('button', { name: 'Add note' }));
@@ -171,7 +171,7 @@ describe('Interview capture', () => {
 describe('Interview review', () => {
   const seededServer = () =>
     memoryServer({
-      version: 2,
+      version: 3,
       notes: [],
       selection: [],
       interviews: [

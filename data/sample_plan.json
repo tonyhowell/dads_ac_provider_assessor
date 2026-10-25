@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "service": "Personal care",
+    "key": "pc",
+    "hours_per_week": 3,
+    "category": "Clinical (from 1 Oct 2026)"
+  },
+  {
+    "service": "Domestic assistance",
+    "key": "domestic",
+    "hours_per_week": 2,
+    "category": "Everyday living"
+  },
+  {
+    "service": "Individual social support",
+    "key": "social",
+    "hours_per_week": 2,
+    "category": "Independence"
+  },
+  {
+    "service": "Gardening",
+    "key": "gardening",
+    "hours_per_week": 0.5,
+    "category": "Everyday living"
+  },
+  {
+    "service": "Registered nurse review",
+    "key": "rn",
+    "hours_per_week": 0.5,
+    "category": "Clinical"
+  }
+]

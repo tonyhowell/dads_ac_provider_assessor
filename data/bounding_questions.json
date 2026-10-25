@@ -1,1 +1,287 @@
-[]
+[
+  {
+    "group": "Where is he in the process?",
+    "questions": [
+      {
+        "id": "B1.1",
+        "text": "Has he had his aged care assessment, and does he hold a Notice of Decision with a classification?",
+        "informs_sections": [
+          "A",
+          "H"
+        ],
+        "note": null
+      },
+      {
+        "id": "B1.2",
+        "text": "Has a Support at Home budget been allocated, or is he still on the national priority queue?",
+        "informs_sections": [
+          "A"
+        ],
+        "note": null
+      },
+      {
+        "id": "B1.3",
+        "text": "Is he currently receiving CHSP, Veterans' Home Care, or a transitioned Home Care Package (no-worse-off rules)?",
+        "informs_sections": [
+          "A",
+          "F",
+          "G"
+        ],
+        "note": null
+      },
+      {
+        "id": "B1.4",
+        "text": "Is there a hospital discharge or other event creating urgency?",
+        "informs_sections": [
+          "A",
+          "P"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "What does he need, and how will that change?",
+    "questions": [
+      {
+        "id": "B2.1",
+        "text": "Which daily tasks does he need help with now \u2014 showering, dressing, medication, meals, cleaning, garden, transport?",
+        "informs_sections": [
+          "B",
+          "D"
+        ],
+        "note": null
+      },
+      {
+        "id": "B2.2",
+        "text": "Are there clinical needs (wounds, diabetes, continence, falls, cognition, pain) that need a nurse rather than a support worker?",
+        "informs_sections": [
+          "D"
+        ],
+        "note": null
+      },
+      {
+        "id": "B2.3",
+        "text": "Is decline expected over 12\u201324 months, and is residential care or palliative care a likely end-point?",
+        "informs_sections": [
+          "D",
+          "P"
+        ],
+        "note": null
+      },
+      {
+        "id": "B2.4",
+        "text": "Would short-term restorative care (e.g. physio after a fall) help before ongoing services are set?",
+        "informs_sections": [
+          "P"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "How does the PTSD shape the care?",
+    "questions": [
+      {
+        "id": "B3.1",
+        "text": "What are his known triggers \u2014 strangers in the house, unannounced visits, certain behaviours, gender of workers, loud equipment?",
+        "informs_sections": [
+          "C",
+          "E"
+        ],
+        "note": null
+      },
+      {
+        "id": "B3.2",
+        "text": "How much does continuity of the same one or two workers matter to him?",
+        "informs_sections": [
+          "C",
+          "E"
+        ],
+        "note": null
+      },
+      {
+        "id": "B3.3",
+        "text": "Who treats his PTSD now (GP, psychiatrist, Open Arms, psychologist), and should the provider liaise with them?",
+        "informs_sections": [
+          "E",
+          "F"
+        ],
+        "note": null
+      },
+      {
+        "id": "B3.4",
+        "text": "Does he want veteran-specific social connection (RSL sub-branch, Legacy, peer groups) as part of social support?",
+        "informs_sections": [
+          "E",
+          "N"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "Which DVA services does he already use or qualify for?",
+    "questions": [
+      {
+        "id": "B4.1",
+        "text": "Which DVA card does he hold \u2014 Gold, or White (specific conditions)?",
+        "informs_sections": [
+          "F"
+        ],
+        "note": null
+      },
+      {
+        "id": "B4.2",
+        "text": "Is he already receiving Veterans' Home Care, DVA community nursing, Coordinated Veterans' Care, or MRCA household services/attendant care?",
+        "informs_sections": [
+          "F",
+          "G"
+        ],
+        "note": null
+      },
+      {
+        "id": "B4.3",
+        "text": "Which services should DVA fund so the Support at Home budget is kept for the rest?",
+        "informs_sections": [
+          "F",
+          "H"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "What is his financial position?",
+    "questions": [
+      {
+        "id": "B5.1",
+        "text": "Is the \u201carmy pension\u201d a DVA Service Pension (means-tested) or military superannuation (DFRDB/MSBS)?",
+        "informs_sections": [
+          "G"
+        ],
+        "note": null
+      },
+      {
+        "id": "B5.2",
+        "text": "Has DVA issued his Support at Home contribution letter yet? If not, has the income and assets assessment been lodged?",
+        "informs_sections": [
+          "G"
+        ],
+        "note": null
+      },
+      {
+        "id": "B5.3",
+        "text": "Would he top up privately for extra hours beyond the budget?",
+        "informs_sections": [
+          "G",
+          "H"
+        ],
+        "note": null
+      },
+      {
+        "id": "B5.4",
+        "text": "Is anyone else's income or assets involved (partner)?",
+        "informs_sections": [
+          "G"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "Home, household and carers",
+    "questions": [
+      {
+        "id": "B6.1",
+        "text": "Does he live alone, or with a partner or family carer who needs respite or support?",
+        "informs_sections": [
+          "O"
+        ],
+        "note": null
+      },
+      {
+        "id": "B6.2",
+        "text": "Is the home safe as it is \u2014 steps, bathroom, rails, ramps, security, emergency alarm?",
+        "informs_sections": [
+          "K"
+        ],
+        "note": null
+      },
+      {
+        "id": "B6.3",
+        "text": "Does he drive? How far are his GP, specialists, pharmacy and hospital (QEII, PA)?",
+        "informs_sections": [
+          "N"
+        ],
+        "note": null
+      },
+      {
+        "id": "B6.4",
+        "text": "Are there pets, smoking, firearms or other worker-safety matters a provider will ask about?",
+        "informs_sections": [
+          "I"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "Decision-making and family involvement",
+    "questions": [
+      {
+        "id": "B7.1",
+        "text": "Is there an enduring power of attorney, and should a family member be his registered supporter?",
+        "informs_sections": [
+          "M"
+        ],
+        "note": null
+      },
+      {
+        "id": "B7.2",
+        "text": "Who should receive statements, incident notices and care-plan reviews?",
+        "informs_sections": [
+          "M",
+          "H"
+        ],
+        "note": null
+      },
+      {
+        "id": "B7.3",
+        "text": "How tech-capable are he and the family \u2014 app, portal, email, paper?",
+        "informs_sections": [
+          "Q"
+        ],
+        "note": null
+      }
+    ]
+  },
+  {
+    "group": "What matters most to him?",
+    "questions": [
+      {
+        "id": "B8.1",
+        "text": "Rank: same workers \u00b7 lowest price \u00b7 clinical depth \u00b7 flexibility of times \u00b7 local organisation \u00b7 veteran ethos.",
+        "informs_sections": [],
+        "note": "weights the scoring"
+      },
+      {
+        "id": "B8.2",
+        "text": "Are there faith, cultural or values preferences for the provider?",
+        "informs_sections": [
+          "L"
+        ],
+        "note": null
+      },
+      {
+        "id": "B8.3",
+        "text": "What would make him end a provider relationship?",
+        "informs_sections": [
+          "I",
+          "L"
+        ],
+        "note": null
+      }
+    ]
+  }
+]

@@ -1,4 +1,13 @@
-{
-  "provider": "IHACPA benchmark",
-  "rn": null, "en": null, "pc": null, "domestic": null, "social": null, "respite": null, "gardening": null, "care_mgmt": null
-}
+[
+  {
+    "provider": "IHACPA advised price 2026-27",
+    "rn": 184.55,
+    "en": 172.34,
+    "pc": 103.11,
+    "domestic": 111.87,
+    "social": 101.41,
+    "respite": 110.75,
+    "gardening": 116.11,
+    "care_mgmt": 118.4
+  }
+]

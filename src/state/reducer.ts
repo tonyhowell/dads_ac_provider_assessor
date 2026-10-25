@@ -1,9 +1,10 @@
 import { SELECTION_STAGES } from '../schemas';
 import type { Action } from './actions';
+import { nameKey } from '../data/normalise';
 import type { Interview, Provider, ProviderNote, SelectionEntry, SelectionStage, ShortlistSeed } from '../types';
 
 export interface AppState {
-  version: 2;
+  version: 3;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -26,14 +27,14 @@ export const entriesAt = (state: AppState, stage: SelectionStage) => state.selec
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
-  const byName = new Map(providers.map((p) => [p.provider.toLowerCase(), p.id]));
+  const byName = new Map(providers.map((p) => [nameKey(p.provider), p.id]));
   const selection = [...seedShortlist]
     .sort((a, b) => a.rank - b.rank)
     .flatMap((s): SelectionEntry[] => {
-      const id = byName.get(s.provider.toLowerCase());
+      const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 2, notes: [], selection, interviews: [] };
+  return { version: 3, notes: [], selection, interviews: [] };
 }
 
 interface StateV1 {
@@ -43,18 +44,39 @@ interface StateV1 {
   interviews: Interview[];
 }
 
-/** Upgrades saved state. v1 had a single shortlist, which becomes the interview stage. */
+/** Provider ids from the placeholder seed data, mapped to the ids derived from the starter pack. */
+const LEGACY_PROVIDER_IDS: Record<string, string> = {
+  'anglicare-sq': 'anglicare-southern-queensland',
+  bluecare: 'bluecare-unitingcare-qld',
+  'right-at-home-bayside-south': 'right-at-home-brisbane-bayside-south',
+};
+
+function remapProviderIds(s: Omit<AppState, 'version'>): Omit<AppState, 'version'> {
+  const id = (p: string) => LEGACY_PROVIDER_IDS[p] ?? p;
+  return {
+    ...s,
+    notes: s.notes.map((n) => ({ ...n, provider_id: id(n.provider_id) })),
+    selection: s.selection.map((e) => ({ ...e, provider_id: id(e.provider_id) })),
+    interviews: s.interviews.map((i) => ({ ...i, provider_id: id(i.provider_id) })),
+  };
+}
+
+/**
+ * Upgrades saved state to the current version.
+ * v1 → v2: the single shortlist becomes the interview stage. v2 → v3: placeholder provider ids are remapped.
+ */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 2) return s as AppState;
+  if (s?.version === 3) return s as AppState;
+  if (s?.version === 2) return { ...remapProviderIds(s as unknown as AppState), version: 3 };
   if (s?.version === 1) {
     const v1 = s as StateV1;
-    return {
-      version: 2,
+    return migrate({
+      version: 3,
       notes: v1.notes,
       interviews: v1.interviews,
       selection: v1.shortlist.map((e) => ({ ...e, stage: 'interview', stage_changed_at: e.added_at })),
-    };
+    });
   }
   return undefined;
 }

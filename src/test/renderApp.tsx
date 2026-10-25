@@ -24,7 +24,7 @@ export interface MemoryServer {
   sync: StateSync;
 }
 
-export function memoryServer(initial: AppState = { version: 2, notes: [], selection: [], interviews: [] }): MemoryServer {
+export function memoryServer(initial: AppState = { version: 3, notes: [], selection: [], interviews: [] }): MemoryServer {
   const server: MemoryServer = {
     state: initial,
     version: 0,

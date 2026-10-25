@@ -22,12 +22,22 @@ export const ProviderSchema = z.object({
   respite: rate,
   gardening: rate,
   care_mgmt: rate,
-  prices_as_at: isoDate,
+  /** As published, e.g. "1 Jul 2026 (schedule updated 22 Sep 2026)" or "Not captured". */
+  prices_as_at: z.string(),
+  /** Latest date in `prices_as_at`, used for the staleness warning. Null when no date is given. */
+  prices_as_at_date: isoDate.nullable(),
   veteran_fit: z.string().nullable(),
   flags: z.array(z.string()),
   source_url: z.url().nullable(),
   registration_status: z.string().optional(),
   postcodes_served: z.array(z.string()).optional(),
+});
+
+/** Provider as written in the starter pack: no id, flags as one string, free-text "prices as at". */
+export const ProviderSeedSchema = ProviderSchema.omit({ id: true, flags: true, prices_as_at_date: true, source_url: true }).extend({
+  id: z.string().min(1).optional(),
+  flags: z.union([z.array(z.string()), z.string()]).nullable(),
+  source_url: z.union([z.url(), z.literal('')]).nullable(),
 });
 
 export const BenchmarkSchema = z.object({
@@ -54,6 +64,8 @@ export const PlanItemSchema = z.object({
 export const BudgetSeedSchema = z.object({
   classification: z.string(),
   quarterly: z.number().positive(),
+  annual: z.number().positive().optional(),
+  for_services: z.number().positive().optional(),
 });
 
 export const PensionStatusSchema = z.enum([
@@ -65,7 +77,9 @@ export const PensionStatusSchema = z.enum([
 ]);
 
 export const ContributionRateSchema = z.object({
-  status: PensionStatusSchema,
+  /** Label from the starter pack, e.g. "Part pensioner / CSHC holder". */
+  status: z.string(),
+  key: PensionStatusSchema,
   clinical: z.number().min(0).max(1),
   ind_low: z.number().min(0).max(1),
   ind_high: z.number().min(0).max(1),
@@ -87,7 +101,7 @@ export const BoundingGroupSchema = z.object({
       id: z.string(),
       text: z.string(),
       informs_sections: z.array(z.string()),
-      note: z.string().optional(),
+      note: z.string().nullable().optional(),
     }),
   ),
 });
@@ -110,8 +124,9 @@ export const ParticipantSchema = z.object({
   suburb: z.string(),
   postcode: z.string(),
   pension_status: PensionStatusSchema,
-  ind_rate: z.number().min(0).max(1),
-  ev_rate: z.number().min(0).max(1),
+  /** Assessed rates from the contribution letter (part pensioners, no-worse-off). Null until entered. */
+  ind_rate: z.number().min(0).max(1).nullable(),
+  ev_rate: z.number().min(0).max(1).nullable(),
   dva_card: z.enum(['gold', 'white', 'none']),
   nwop: z.boolean(),
   classification: z.string(),

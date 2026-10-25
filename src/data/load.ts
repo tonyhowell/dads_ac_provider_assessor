@@ -14,11 +14,13 @@ import {
   ContributionRateSchema,
   InterviewSectionSchema,
   PlanItemSchema,
-  ProviderSchema,
+  CategorySchema,
+  ProviderSeedSchema,
   RATE_KEYS,
   ShortlistSeedSchema,
 } from '../schemas';
 import { ruleAt } from '../rules';
+import { categoryFromLabel, latestDateIn, slugify, statusFromLabel } from './normalise';
 import type {
   Benchmark,
   BoundingGroup,
@@ -61,14 +63,32 @@ function parse<T>(file: string, schema: z.ZodType<T>, raw: unknown): T {
   return result.data;
 }
 
-export function deriveBudget(classification: string, quarterly: number, onDate: string | Date = new Date()): Budget {
+/** Fills in annual and for-services amounts the data leaves out (published figures win, as they are rounded officially). */
+export function deriveBudget(
+  b: { classification: string; quarterly: number; annual?: number; for_services?: number },
+  onDate: string | Date = new Date(),
+): Budget {
   const careMgmt = ruleAt('careManagementShare', onDate);
-  return { classification, quarterly, annual: quarterly * 4, for_services: quarterly * (1 - careMgmt) };
+  return {
+    classification: b.classification,
+    quarterly: b.quarterly,
+    annual: b.annual ?? b.quarterly * 4,
+    for_services: b.for_services ?? b.quarterly * (1 - careMgmt),
+  };
 }
+
+const RawContributionSchema = ContributionRateSchema.omit({ key: true });
+const RawPlanItemSchema = PlanItemSchema.extend({ category: z.string() });
 
 /** Validates raw seed objects. Exposed separately so tests can feed in bad data. */
 export function parseSeedData(raw: Record<string, unknown>): SeedData {
-  const providers = parse('providers.json', z.array(ProviderSchema), raw.providers);
+  const providers: Provider[] = parse('providers.json', z.array(ProviderSeedSchema), raw.providers).map((p) => ({
+    ...p,
+    id: p.id ?? slugify(p.provider),
+    flags: (Array.isArray(p.flags) ? p.flags : (p.flags ?? '').split(';')).map((f) => f.trim()).filter(Boolean),
+    prices_as_at_date: latestDateIn(p.prices_as_at),
+    source_url: p.source_url || null,
+  }));
   const ids = new Set<string>();
   for (const p of providers) {
     if (ids.has(p.id)) throw new SeedDataError('providers.json', [`duplicate id "${p.id}"`]);
@@ -76,12 +96,19 @@ export function parseSeedData(raw: Record<string, unknown>): SeedData {
   }
   return {
     providers,
-    benchmark: parse('benchmark.json', BenchmarkSchema, raw.benchmark),
-    budgets: parse('budgets.json', z.array(BudgetSeedSchema), raw.budgets).map((b) =>
-      deriveBudget(b.classification, b.quarterly),
-    ),
-    contributions: parse('contributions.json', z.array(ContributionRateSchema), raw.contributions),
-    samplePlan: parse('sample_plan.json', z.array(PlanItemSchema), raw.samplePlan),
+    // The starter pack ships the benchmark as a one-item list.
+    benchmark: parse('benchmark.json', BenchmarkSchema, Array.isArray(raw.benchmark) ? raw.benchmark[0] : raw.benchmark),
+    budgets: parse('budgets.json', z.array(BudgetSeedSchema), raw.budgets).map((b) => deriveBudget(b)),
+    contributions: parse('contributions.json', z.array(RawContributionSchema), raw.contributions).map((c, i) => {
+      const key = statusFromLabel(c.status);
+      if (!key) throw new SeedDataError('contributions.json', [`${i}.status: unrecognised status "${c.status}"`]);
+      return { ...c, key };
+    }),
+    samplePlan: parse('sample_plan.json', z.array(RawPlanItemSchema), raw.samplePlan).map((item, i) => {
+      const category = categoryFromLabel(item.category);
+      if (!category) throw new SeedDataError('sample_plan.json', [`${i}.category: unrecognised category "${item.category}"`]);
+      return { ...item, category: CategorySchema.parse(category) };
+    }),
     shortlist: parse('shortlist.json', z.array(ShortlistSeedSchema), raw.shortlist),
     boundingGroups: parse('bounding_questions.json', z.array(BoundingGroupSchema), raw.boundingGroups),
     interviewSections: parse('interview_questions.json', z.array(InterviewSectionSchema), raw.interviewSections),
@@ -103,5 +130,5 @@ export function loadSeedData(): SeedData {
 
 /** True when no provider has any published rate — i.e. the placeholder seed is still in use. */
 export function pricesMissing(providers: Provider[]): boolean {
-  return providers.every((p) => RATE_KEYS.every((k) => p[k] === null));
+  return providers.length === 0 || providers.every((p) => RATE_KEYS.every((k) => p[k] === null));
 }

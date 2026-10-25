@@ -1,1 +1,474 @@
-[]
+[
+  {
+    "code": "A",
+    "section": "Eligibility, intake and start-up",
+    "questions": [
+      {
+        "id": "A1",
+        "text": "Do you have capacity to start in Wynnum now, and how soon after his budget is allocated?",
+        "priority": "must"
+      },
+      {
+        "id": "A2",
+        "text": "Which local team and office would serve him, and how many clients do you currently support in 4178/4179?",
+        "priority": "should"
+      },
+      {
+        "id": "A3",
+        "text": "What happens between agreement and first service \u2014 initial assessment visit, who attends, how long?",
+        "priority": "should"
+      },
+      {
+        "id": "A4",
+        "text": "Can you provide services privately or via CHSP while he waits for his budget?",
+        "priority": "should"
+      },
+      {
+        "id": "A5",
+        "text": "If he is transitioning from another program or provider, how do you manage the handover and any unspent funds?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "B",
+    "section": "Care management and planning",
+    "questions": [
+      {
+        "id": "B1",
+        "text": "Who will be his care partner, what are their qualifications, and how many clients do they carry?",
+        "priority": "must"
+      },
+      {
+        "id": "B2",
+        "text": "How often will the care partner contact him and visit in person?",
+        "priority": "should"
+      },
+      {
+        "id": "B3",
+        "text": "How do you build the care plan with him and family, and how often is it reviewed?",
+        "priority": "should"
+      },
+      {
+        "id": "B4",
+        "text": "How do you use the 10% care-management allocation \u2014 what activities, and how is it reported?",
+        "priority": "should"
+      },
+      {
+        "id": "B5",
+        "text": "How do you respond when his needs change quickly, e.g. after a hospital stay? What is the turnaround for a plan change or reassessment request?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "C",
+    "section": "Workforce and continuity",
+    "questions": [
+      {
+        "id": "C1",
+        "text": "Can you commit to a small, consistent team of named workers? What percentage of visits are by his regular workers?",
+        "priority": "must"
+      },
+      {
+        "id": "C2",
+        "text": "How do you handle worker leave and sickness \u2014 notice to him, introductions to replacements?",
+        "priority": "should"
+      },
+      {
+        "id": "C3",
+        "text": "Are workers employed or contractors/platform workers? What training and screening do they have?",
+        "priority": "should"
+      },
+      {
+        "id": "C4",
+        "text": "Can he choose worker gender, and can he decline a worker without penalty?",
+        "priority": "should"
+      },
+      {
+        "id": "C5",
+        "text": "What is your worker turnover rate in the bayside area?",
+        "priority": "should"
+      },
+      {
+        "id": "C6",
+        "text": "What notice is given for late arrivals, and what is your missed-visit rate?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "D",
+    "section": "Clinical capability",
+    "questions": [
+      {
+        "id": "D1",
+        "text": "Do you deliver nursing with your own RNs/ENs, or subcontract? Who is clinically accountable?",
+        "priority": "must"
+      },
+      {
+        "id": "D2",
+        "text": "How do you manage medications \u2014 prompting, administration, Webster packs, liaison with the pharmacist and GP?",
+        "priority": "should"
+      },
+      {
+        "id": "D3",
+        "text": "What is your approach to falls prevention, continence, skin integrity and wound care?",
+        "priority": "should"
+      },
+      {
+        "id": "D4",
+        "text": "Which allied health disciplines do you provide in-house versus refer out, and at what rates?",
+        "priority": "should"
+      },
+      {
+        "id": "D5",
+        "text": "What after-hours cover exists \u2014 is there a 24/7 number answered by a clinician?",
+        "priority": "should"
+      },
+      {
+        "id": "D6",
+        "text": "Can you deliver end-of-life care at home if needed, and how does the End-of-Life Pathway work with you?",
+        "priority": "should"
+      },
+      {
+        "id": "D7",
+        "text": "How do you detect and respond to cognitive decline or mental-health deterioration?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "E",
+    "section": "Veteran and PTSD-informed care",
+    "questions": [
+      {
+        "id": "E1",
+        "text": "What veteran-specific or trauma-informed training do your workers and care partners receive?",
+        "priority": "must"
+      },
+      {
+        "id": "E2",
+        "text": "How many veterans with PTSD do you currently support, and can you describe how you adapted care for one?",
+        "priority": "should"
+      },
+      {
+        "id": "E3",
+        "text": "How will you record his triggers and preferences so every worker follows them?",
+        "priority": "should"
+      },
+      {
+        "id": "E4",
+        "text": "How do you handle a client who becomes distressed or agitated during a visit? What is your escalation path?",
+        "priority": "should"
+      },
+      {
+        "id": "E5",
+        "text": "Will you liaise with his treating psychologist/psychiatrist or Open Arms counsellor, with his consent?",
+        "priority": "should"
+      },
+      {
+        "id": "E6",
+        "text": "Can social support connect him with veteran communities (RSL, Legacy, men's sheds, peer groups) locally?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "F",
+    "section": "DVA coordination",
+    "questions": [
+      {
+        "id": "F1",
+        "text": "Are you also a Veterans' Home Care or DVA community nursing provider?",
+        "priority": "must"
+      },
+      {
+        "id": "F2",
+        "text": "How will you coordinate Support at Home with his DVA services so nothing is duplicated and his budget is preserved?",
+        "priority": "should"
+      },
+      {
+        "id": "F3",
+        "text": "Which services would you recommend he takes through DVA instead of the Support at Home budget?",
+        "priority": "should"
+      },
+      {
+        "id": "F4",
+        "text": "Do you have experience working with DVA on his contribution assessment and any reassessment?",
+        "priority": "should"
+      },
+      {
+        "id": "F5",
+        "text": "Will you help him access Gold/White Card-funded items (aids, allied health, transport to treatment) outside the budget?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "G",
+    "section": "Prices and contributions",
+    "questions": [
+      {
+        "id": "G1",
+        "text": "Provide your full current price list and confirm the rates in his agreement will match it.",
+        "priority": "must"
+      },
+      {
+        "id": "G2",
+        "text": "Confirm there are no separate travel, admin, package-management, exit or establishment fees.",
+        "priority": "must"
+      },
+      {
+        "id": "G3",
+        "text": "What mark-ups apply to purchased items, consumables, subcontracted services and home modifications?",
+        "priority": "should"
+      },
+      {
+        "id": "G4",
+        "text": "How often do you change prices, how much notice do you give, and how were prices changed in the past year?",
+        "priority": "should"
+      },
+      {
+        "id": "G5",
+        "text": "What minimum visit length applies, and how are short visits rounded?",
+        "priority": "should"
+      },
+      {
+        "id": "G6",
+        "text": "What are your evening, weekend and public-holiday rates for the services he will use?",
+        "priority": "should"
+      },
+      {
+        "id": "G7",
+        "text": "Please cost our sample weekly plan for one quarter, showing budget drawn and his estimated contribution.",
+        "priority": "should"
+      },
+      {
+        "id": "G8",
+        "text": "How do you apply his contribution rate, and how quickly do you refund over-collected contributions?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "H",
+    "section": "Budget management and statements",
+    "questions": [
+      {
+        "id": "H1",
+        "text": "Show us a sample monthly statement. Does it show each service, price, his contribution and the remaining quarterly budget?",
+        "priority": "must"
+      },
+      {
+        "id": "H2",
+        "text": "How do you prevent overspending a quarter, and how do you use any carry-over?",
+        "priority": "should"
+      },
+      {
+        "id": "H3",
+        "text": "Can family see spending in real time (portal/app)?",
+        "priority": "should"
+      },
+      {
+        "id": "H4",
+        "text": "What happens if his needs exceed his classification \u2014 do you request reassessment, and what can he buy privately in the meantime?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "I",
+    "section": "Service agreement terms",
+    "questions": [
+      {
+        "id": "I1",
+        "text": "Provide a copy of your service agreement to review before signing.",
+        "priority": "must"
+      },
+      {
+        "id": "I2",
+        "text": "What is your cancellation policy and notice period, and is a cancelled visit charged to the budget?",
+        "priority": "should"
+      },
+      {
+        "id": "I3",
+        "text": "What notice does he need to give to change provider, and are there any charges?",
+        "priority": "should"
+      },
+      {
+        "id": "I4",
+        "text": "Under what circumstances would you suspend or withdraw services?",
+        "priority": "should"
+      },
+      {
+        "id": "I5",
+        "text": "How are worker-safety matters (pets, smoking, access) handled?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "J",
+    "section": "Subcontracting and third parties",
+    "questions": [
+      {
+        "id": "J1",
+        "text": "Which services do you subcontract, to whom, and how do you check their quality?",
+        "priority": "should"
+      },
+      {
+        "id": "J2",
+        "text": "Can he nominate a worker or business he already trusts (e.g. a local gardener) to be engaged through you?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "K",
+    "section": "Assistive technology and home modifications",
+    "questions": [
+      {
+        "id": "K1",
+        "text": "How do you arrange OT assessment and prescription for equipment and modifications, and how long does it take?",
+        "priority": "should"
+      },
+      {
+        "id": "K2",
+        "text": "What coordination fee applies to AT and home modifications?",
+        "priority": "should"
+      },
+      {
+        "id": "K3",
+        "text": "Can you arrange a personal emergency alarm and falls detection?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "L",
+    "section": "Quality, safety and complaints",
+    "questions": [
+      {
+        "id": "L1",
+        "text": "What do your most recent Aged Care Quality and Safety Commission audit and any compliance notices show?",
+        "priority": "must"
+      },
+      {
+        "id": "L2",
+        "text": "How do you handle complaints, and what is your typical resolution time? Can we see your complaints data?",
+        "priority": "should"
+      },
+      {
+        "id": "L3",
+        "text": "How are incidents reported to him and family?",
+        "priority": "should"
+      },
+      {
+        "id": "L4",
+        "text": "What client-feedback results can you share for this local team?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "M",
+    "section": "Communication and decision-making",
+    "questions": [
+      {
+        "id": "M1",
+        "text": "How will you involve his registered supporter or attorney in decisions and reviews?",
+        "priority": "should"
+      },
+      {
+        "id": "M2",
+        "text": "Who is the single point of contact for family, and what is the response time for calls/emails?",
+        "priority": "should"
+      },
+      {
+        "id": "M3",
+        "text": "How do you respect his right to make his own choices, including ones carrying some risk?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "N",
+    "section": "Transport, social and community",
+    "questions": [
+      {
+        "id": "N1",
+        "text": "How is transport priced (per trip, per km, per hour), and do you drive him to specialists across Brisbane?",
+        "priority": "should"
+      },
+      {
+        "id": "N2",
+        "text": "Can a worker accompany him into appointments?",
+        "priority": "should"
+      },
+      {
+        "id": "N3",
+        "text": "What group or individual social activities do you run in the Wynnum\u2013Manly area?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "O",
+    "section": "Respite and carer support",
+    "questions": [
+      {
+        "id": "O1",
+        "text": "What in-home and overnight respite can you provide, and with how much notice?",
+        "priority": "should"
+      },
+      {
+        "id": "O2",
+        "text": "Do you have access to residential respite beds, and how do you coordinate DVA-funded respite?",
+        "priority": "should"
+      },
+      {
+        "id": "O3",
+        "text": "How do you support a family carer (Carer Gateway, training, check-ins)?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "P",
+    "section": "Transitions",
+    "questions": [
+      {
+        "id": "P1",
+        "text": "Can you deliver the Restorative Care Pathway, and what outcomes have you seen?",
+        "priority": "should"
+      },
+      {
+        "id": "P2",
+        "text": "How do you support a move to residential care if it becomes necessary \u2014 including your own homes, if any?",
+        "priority": "should"
+      },
+      {
+        "id": "P3",
+        "text": "How do you manage hospital admission and discharge?",
+        "priority": "should"
+      }
+    ]
+  },
+  {
+    "code": "Q",
+    "section": "Technology and reporting",
+    "questions": [
+      {
+        "id": "Q1",
+        "text": "What app or portal do clients and families use, and what can it show (roster, worker, notes, budget)?",
+        "priority": "should"
+      },
+      {
+        "id": "Q2",
+        "text": "Do you use any monitoring technology at home, and how is his privacy protected?",
+        "priority": "should"
+      }
+    ]
+  }
+]

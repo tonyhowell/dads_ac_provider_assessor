@@ -207,8 +207,17 @@ describe('shared state', () => {
     const { agent: alex, app: a } = await enrolled();
     const { agent: sam } = await enrolled(a, 'sam', 'member');
     expect((await alex.get('/api/state')).json.version).toBe(0);
+    // A new database starts with the starter pack's shortlist at the interview stage.
+    expect((await alex.get('/api/state')).json.state.selection.map((e: { provider_id: string }) => e.provider_id)).toEqual([
+      'bolton-clarke',
+      'anglicare-southern-queensland',
+      'right-at-home-brisbane-bayside-south',
+      'bluecare-unitingcare-qld',
+      'five-good-friends-brisbane-east-bayside',
+      'carers-link',
+    ]);
 
-    await alex.post('/api/actions', { action: { type: 'selection/add', providerId: 'bolton-clarke', at: '1999-01-01T00:00:00Z' } });
+    await alex.post('/api/actions', { action: { type: 'selection/add', providerId: 'envigor-brisbane-bayside', at: '1999-01-01T00:00:00Z' } });
     const res = await sam.post('/api/actions', {
       action: { type: 'note/add', note: { id: 'n1', provider_id: 'bolton-clarke', text: 'Rang them', created_at: 'x', source: 'manual', author: 'Someone else' } },
     });
@@ -217,8 +226,9 @@ describe('shared state', () => {
     expect(res.json.state.notes[0].created_at).not.toBe('x');
 
     const seen = await alex.get('/api/state');
-    expect(seen.json.state.selection[0]).toMatchObject({ provider_id: 'bolton-clarke', stage: 'scan' });
-    expect(seen.json.state.selection[0].added_at).not.toMatch(/^1999/);
+    const added = seen.json.state.selection.find((e: { provider_id: string }) => e.provider_id === 'envigor-brisbane-bayside');
+    expect(added).toMatchObject({ stage: 'scan' });
+    expect(added.added_at).not.toMatch(/^1999/);
     const [log] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions');
     expect(Number(log.n)).toBe(2);
   });
@@ -230,7 +240,7 @@ describe('shared state', () => {
     );
     const { json } = await agent.get('/api/state');
     expect(json.version).toBe(5);
-    expect(json.state.selection).toHaveLength(5);
+    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(json.state.selection.some((e: { provider_id: string }) => e.provider_id === id)).toBe(true);
   });
 
   it('rejects malformed actions', async () => {

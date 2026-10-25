@@ -1,15 +1,21 @@
 # Seed data
 
-**These files are placeholders.** The starter pack's `data/*.json` files were not available when the skeleton was built. Replace each file with the starter-pack version (prices captured 25 Oct 2026).
+Starter-pack data, with prices captured 25 Oct 2026. Refresh them from My Aged Care before relying on them.
 
-What the placeholders contain:
-
-| File | Status |
+| File | Contents |
 |---|---|
-| `providers.json` | The four providers named in SPEC §5, with no rates (`null` = not captured). Source URLs only where SPEC §11 lists them. |
-| `benchmark.json` | IHACPA benchmark with no rates. |
-| `budgets.json` | Transitioned HCP L1–L4 only (SPEC §3.2). Classifications 1–8 are still to come from the starter pack. |
-| `contributions.json` | Rate bands from SPEC §3.3. |
-| `sample_plan.json`, `shortlist.json`, `bounding_questions.json`, `interview_questions.json` | Empty. |
+| `providers.json` | 7 providers servicing Wynnum 4178: weekday rates (`null` = not published), "prices as at", flags, source links |
+| `benchmark.json` | IHACPA advised prices 2026-27 |
+| `budgets.json` | Classifications 1–8 (effective 1 Oct 2026), plus transitioned HCP L1–L4 from SPEC §3.2 |
+| `contributions.json` | Contribution rates by pension status |
+| `sample_plan.json` | Sample weekly care plan |
+| `shortlist.json` | Suggested interview shortlist with rationale |
+| `bounding_questions.json` | 8 groups, 29 bounding questions |
+| `interview_questions.json` | Sections A–Q, 74 interview questions (11 "must") |
 
-All files are checked against `src/schemas.ts` at startup. If the starter-pack files use a different shape, change the schemas (not the components).
+The loader (`src/data/load.ts`) accepts the files as written and normalises them:
+- **Providers:** ids are derived from the names, and the flags text is split on semicolons. "Prices as at" stays as published; the latest date in it drives the 60-day staleness warning, and no date counts as stale.
+- **Benchmark:** may be a one-item list.
+- **Labels:** contribution statuses and plan categories are matched by their labels.
+
+No-worse-off contribution bands are program rules, so they live in `src/rules.ts`, not here. Files are validated at startup; a bad value names the file and field.
