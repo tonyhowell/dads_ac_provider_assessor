@@ -87,7 +87,7 @@ function Header() {
   const help = useHelp();
   return (
     <header data-app-header className="bg-[var(--header-bg)] text-[var(--on-dark)]">
-      <div className="mx-auto flex max-w-[var(--wrap)] flex-wrap items-center justify-between gap-2 px-4 py-3">
+      <div className="relative mx-auto flex max-w-[var(--wrap)] flex-wrap items-center justify-between gap-2 px-4 py-3">
         <Link to="/" className="flex items-center gap-3 no-underline">
           <AppMark onDark />
           <span className="leading-tight">
@@ -125,12 +125,12 @@ function UserMenu() {
     };
   }, [open]);
   return (
-    <div className="relative" ref={ref}>
+    <div ref={ref}>
       <button type="button" className="header-btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(!open)}>
         <Icon name="menu" size={20} /> Menu
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-64 space-y-1 rounded-[var(--radius-panel)] border border-[var(--rule)] bg-[var(--surface)] p-3 text-[var(--charcoal)] shadow-[var(--shadow-raised)]">
+        <div className="header-panel min-[721px]:w-64 space-y-1 rounded-[var(--radius-panel)] border border-[var(--rule)] bg-[var(--surface)] p-3 text-[var(--charcoal)] shadow-[var(--shadow-raised)]">
           <p className="muted px-1">Signed in as {user?.display_name}</p>
           {user?.role === 'admin' && (
             <Link to="/admin" className="btn w-full justify-start">

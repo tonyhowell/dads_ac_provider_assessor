@@ -26,7 +26,7 @@ export function DisplaySettingsButton() {
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div ref={ref}>
       <button type="button" className="header-btn" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
         <span aria-hidden className="font-semibold">
           Aa
@@ -37,7 +37,7 @@ export function DisplaySettingsButton() {
         <div
           role="dialog"
           aria-label="Display settings"
-          className="absolute right-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] space-y-4 rounded-[var(--radius-panel)] border border-[var(--rule)] bg-[var(--surface)] p-4 text-[var(--charcoal)] shadow-[var(--shadow-raised)]"
+          className="header-panel min-[721px]:w-[22rem] space-y-4 rounded-[var(--radius-panel)] border border-[var(--rule)] bg-[var(--surface)] p-4 text-[var(--charcoal)] shadow-[var(--shadow-raised)]"
         >
           <fieldset>
             <legend className="label">Text size</legend>
@@ -47,7 +47,7 @@ export function DisplaySettingsButton() {
                   <span aria-hidden style={{ fontSize: `${n}px` }} className="font-semibold">
                     Aa
                   </span>
-                  <span className="text-[0.8rem]">{['Standard', 'Large', 'Larger', 'Largest'][i]}</span>
+                  <span className="max-w-full text-[0.75rem] [overflow-wrap:anywhere]">{['Standard', 'Large', 'Larger', 'Largest'][i]}</span>
                 </button>
               ))}
             </div>

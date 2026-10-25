@@ -170,6 +170,30 @@
     border: 2px solid var(--charcoal);
     background: var(--amber-tint);
   }
+  /* Header dropdowns (Display, Menu): drop down from the button on wider screens; on phones, where the
+     header buttons wrap, a full-width sheet near the top of the screen that scrolls inside itself. */
+  .header-panel {
+    /* Positioned against the header row, so it lines up with the page edge however the buttons wrap. */
+    position: absolute;
+    top: 100%;
+    right: 1rem;
+    z-index: 30;
+    margin-top: -0.25rem;
+    max-height: calc(100dvh - 6rem);
+    overflow-y: auto;
+  }
+  @media (max-width: 720px) {
+    .header-panel {
+      position: fixed;
+      top: 0.75rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      width: auto;
+      margin-top: 0;
+      max-height: calc(100dvh - 1.5rem);
+    }
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--rule);
