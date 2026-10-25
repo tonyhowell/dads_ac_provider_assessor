@@ -3,7 +3,7 @@ import { Layout } from './components/Layout';
 import { Placeholder } from './screens/Placeholder';
 import { ProvidersScreen } from './screens/ProvidersScreen';
 import { ProviderDetailScreen } from './screens/ProviderDetailScreen';
-import { ShortlistScreen } from './screens/ShortlistScreen';
+import { SelectionScreen } from './screens/SelectionScreen';
 import { InterviewsScreen } from './screens/InterviewsScreen';
 import { InterviewCaptureScreen } from './screens/InterviewCaptureScreen';
 import { InterviewReviewScreen } from './screens/InterviewReviewScreen';
@@ -32,7 +32,9 @@ export function App() {
         />
         <Route path="providers" element={<ProvidersScreen />} />
         <Route path="providers/:id" element={<ProviderDetailScreen />} />
-        <Route path="shortlist" element={<ShortlistScreen />} />
+        <Route path="selection" element={<Navigate to="/selection/scan" replace />} />
+        <Route path="selection/:stage" element={<SelectionScreen />} />
+        <Route path="shortlist" element={<Navigate to="/selection/interview" replace />} />
         <Route
           path="bounding"
           element={<Placeholder title="Bounding questions" phase="Phase 3.6" description="Eight groups of questions that decide which interview sections apply." />}

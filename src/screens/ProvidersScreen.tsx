@@ -2,14 +2,20 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { PriceProvenance } from '../components/Price';
-import { ShortlistToggle } from '../components/ShortlistToggle';
+import { StageControls } from '../components/StageControls';
+import { STAGE_LABELS } from '../state/reducer';
+import { SELECTION_STAGES } from '../schemas';
+import type { SelectionStage } from '../types';
 
 type SortKey = 'name' | 'notes';
+type StageFilter = 'all' | 'none' | SelectionStage;
 
 export function ProvidersScreen() {
   const { seed, state } = useApp();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
+  const [stageFilter, setStageFilter] = useState<StageFilter>('all');
+  const stageOf = useMemo(() => new Map(state.selection.map((e) => [e.provider_id, e.stage])), [state.selection]);
 
   const noteCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -20,20 +26,23 @@ export function ProvidersScreen() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = seed.providers.filter(
-      (p) => !q || [p.provider, p.outlet, p.type, ...p.flags].some((v) => v?.toLowerCase().includes(q)),
+      (p) =>
+        (!q || [p.provider, p.outlet, p.type, ...p.flags].some((v) => v?.toLowerCase().includes(q))) &&
+        (stageFilter === 'all' || (stageOf.get(p.id) ?? 'none') === stageFilter),
     );
     return filtered.sort((a, b) =>
       sort === 'notes'
         ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider)
         : a.provider.localeCompare(b.provider),
     );
-  }, [seed.providers, query, sort, noteCounts]);
+  }, [seed.providers, query, sort, noteCounts, stageFilter, stageOf]);
 
   return (
     <section>
       <h1 className="text-2xl font-semibold">Providers</h1>
       <p className="muted mt-1">
-        All providers that service the area. Add the ones worth pursuing to your shortlist, and keep notes on each as you assess them.
+        All providers that service the area. Add the ones worth a first look to the initial scan, then narrow them down on the{' '}
+        <Link to="/selection">Selection</Link> page. Keep notes on each provider as you assess them.
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -51,6 +60,20 @@ export function ProvidersScreen() {
           />
         </div>
         <div>
+          <label htmlFor="provider-stage" className="muted block">
+            Stage
+          </label>
+          <select id="provider-stage" className="input" value={stageFilter} onChange={(e) => setStageFilter(e.target.value as StageFilter)}>
+            <option value="all">All</option>
+            <option value="none">Not selected</option>
+            {SELECTION_STAGES.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label htmlFor="provider-sort" className="muted block">
             Sort by
           </label>
@@ -62,7 +85,7 @@ export function ProvidersScreen() {
       </div>
 
       <p className="muted mt-3" aria-live="polite">
-        {rows.length} of {seed.providers.length} providers · {state.shortlist.length} shortlisted
+        {rows.length} of {seed.providers.length} providers · {state.selection.length} selected
       </p>
 
       <ul className="mt-3 space-y-3">
@@ -87,7 +110,7 @@ export function ProvidersScreen() {
                 {noteCounts.get(p.id) ?? 0} note{noteCounts.get(p.id) === 1 ? '' : 's'}
               </p>
             </div>
-            <ShortlistToggle provider={p} />
+            <StageControls provider={p} compact />
           </li>
         ))}
       </ul>

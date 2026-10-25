@@ -68,7 +68,7 @@ src/
 | Feature | Implementation |
 |---|---|
 | **Provider assessment notes** | `ProviderNote` records (manual or from an interview), with timestamps; add/edit/delete on the provider page. |
-| **Down-selected providers** | "Add to shortlist" on the full provider list feeds the SPEC §8 Shortlist screen. It's one ranked list, not two: the down-selection *is* the shortlist (reorder, why/watch notes, remove). |
+| **Three-stage provider selection** | Initial scan → Refinement → Interview shortlist. Each selected provider is at exactly one stage and can move forward or back a stage, or be dropped. Stage 3 is the SPEC §8 Shortlist (ranked, with why/watch notes) and feeds the Interviews screen. State v1's single shortlist migrates to stage 3. Later: show plan cost and variance on the refinement cards once Phase 2 lands. |
 | **Interview capture → notes** | Consent check, then the browser `MediaRecorder` records the interview to IndexedDB on this device. Optional live transcription uses the Web Speech API (en-AU) and is disclosed in the UI. The user can edit or paste the transcript. `POST /api/interview-notes` (a Vite server plugin holding `ANTHROPIC_API_KEY`) sends it to the Claude API, which returns structured notes. The user reviews them and saves them to the provider's notes. "Must" interview questions are passed along so unanswered ones show up as follow-ups. |
 
 Later options for interviews: transcribe recorded audio on the server (needs a speech-to-text service; the Claude API doesn't take audio), show notes per question once the interview pack exists (Phase 3.7), and pre-fill scores from interview notes (Phase 3.8).

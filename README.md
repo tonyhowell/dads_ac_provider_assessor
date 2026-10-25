@@ -25,7 +25,12 @@ Use `npm run dev` or `npm run preview` (after `npm run build`). The interview-no
 
 - **Providers:** searchable list with "prices as at", source link and a warning once prices are over 60 days old. Each provider has a detail page with rates against the benchmark.
 - **Assessment notes:** add, edit and delete notes on each provider.
-- **Shortlist:** the providers you pick from the full list, ranked. You can reorder them and record "why" and "probe at interview" notes for each.
+- **Provider selection, in three stages:**
+  1. **Initial scan:** providers you add from the full list for a first look.
+  2. **Refinement:** the ones worth comparing more closely.
+  3. **Interview shortlist:** the ones you'll interview, ranked, with "why" and "probe at interview" notes.
+
+  You can move a provider forward or back a stage, or drop it, from the Selection page or the provider's own page. The Providers list can be filtered by stage.
 - **Interviews:** record an interview in the browser after confirming consent, with optional live transcription (en-AU). Recordings are stored only in this browser (IndexedDB). You can correct the transcript, then have Claude draft structured notes (summary, strengths, concerns, commitments, prices mentioned, follow-ups) and save them to the provider's notes.
 - The other screens are placeholders for the later phases in `docs/PLAN.md`.
 

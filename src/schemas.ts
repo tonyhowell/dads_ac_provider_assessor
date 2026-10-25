@@ -130,12 +130,18 @@ export const ProviderNoteSchema = z.object({
   interview_id: z.string().optional(),
 });
 
-/** Down-selected provider. Order in the list is the rank. */
-export const ShortlistEntrySchema = z.object({
+/** Provider selection runs in three stages: initial scan → refinement → interview shortlist. */
+export const SELECTION_STAGES = ['scan', 'refine', 'interview'] as const;
+export const SelectionStageSchema = z.enum(SELECTION_STAGES);
+
+/** A provider the user has selected. Order within a stage is the rank. */
+export const SelectionEntrySchema = z.object({
   provider_id: z.string(),
+  stage: SelectionStageSchema,
   why: z.string(),
   watch: z.string(),
   added_at: z.string(),
+  stage_changed_at: z.string(),
 });
 
 /** Structured notes generated from an interview transcript. */

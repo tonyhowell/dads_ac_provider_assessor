@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNo
 import type { SeedData } from '../data/load';
 import type { Storage } from '../storage/storage';
 import type { AudioStore } from '../storage/audioStore';
-import { initialState, reducer, type Action, type AppState } from './reducer';
+import { initialState, migrate, reducer, type Action, type AppState } from './reducer';
 
 const STATE_KEY = 'state';
 
@@ -27,8 +27,7 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, undefined, () => {
-    const saved = storage.load<AppState>(STATE_KEY);
-    return saved?.version === 1 ? saved : initialState(seed.shortlist, seed.providers, new Date().toISOString());
+    return migrate(storage.load(STATE_KEY)) ?? initialState(seed.shortlist, seed.providers, new Date().toISOString());
   });
 
   useEffect(() => {

@@ -8,7 +8,7 @@ const NAV = [
   { to: '/overview', label: 'Overview' },
   { to: '/costs', label: 'Relative costs' },
   { to: '/providers', label: 'Providers' },
-  { to: '/shortlist', label: 'Shortlist' },
+  { to: '/selection', label: 'Selection' },
   { to: '/bounding', label: 'Bounding questions' },
   { to: '/interview-pack', label: 'Interview pack' },
   { to: '/interviews', label: 'Interviews' },
@@ -40,7 +40,7 @@ export function Layout() {
                   }
                 >
                   {n.label}
-                  {n.to === '/shortlist' && state.shortlist.length > 0 && ` (${state.shortlist.length})`}
+                  {n.to === '/selection' && state.selection.length > 0 && ` (${state.selection.length})`}
                 </NavLink>
               </li>
             ))}

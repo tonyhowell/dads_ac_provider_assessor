@@ -13,7 +13,8 @@ import type {
   ProviderNoteSchema,
   ProviderSchema,
   RateKeySchema,
-  ShortlistEntrySchema,
+  SelectionEntrySchema,
+  SelectionStageSchema,
   ShortlistSeedSchema,
 } from './schemas';
 
@@ -30,7 +31,8 @@ export type InterviewSection = z.infer<typeof InterviewSectionSchema>;
 export type Participant = z.infer<typeof ParticipantSchema>;
 
 export type ProviderNote = z.infer<typeof ProviderNoteSchema>;
-export type ShortlistEntry = z.infer<typeof ShortlistEntrySchema>;
+export type SelectionEntry = z.infer<typeof SelectionEntrySchema>;
+export type SelectionStage = z.infer<typeof SelectionStageSchema>;
 export type InterviewNotes = z.infer<typeof InterviewNotesSchema>;
 export type Interview = z.infer<typeof InterviewSchema>;
 

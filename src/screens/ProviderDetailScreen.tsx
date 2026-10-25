@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useApp, useProvider } from '../state/AppContext';
 import { PriceProvenance } from '../components/Price';
-import { ShortlistToggle } from '../components/ShortlistToggle';
+import { StageControls } from '../components/StageControls';
 import { ProviderNotes } from '../components/ProviderNotes';
 import { InterviewList } from '../components/InterviewList';
 import { formatRate } from '../format';
@@ -38,15 +38,13 @@ export function ProviderDetailScreen() {
       <Link to="/providers" className="muted">
         ← All providers
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{provider.provider}</h1>
-          {(provider.outlet || provider.type) && (
-            <p className="muted">{[provider.type, provider.outlet].filter(Boolean).join(' · ')}</p>
-          )}
-          <PriceProvenance provider={provider} />
-        </div>
-        <ShortlistToggle provider={provider} />
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold">{provider.provider}</h1>
+        {(provider.outlet || provider.type) && (
+          <p className="muted">{[provider.type, provider.outlet].filter(Boolean).join(' · ')}</p>
+        )}
+        <PriceProvenance provider={provider} />
+        <StageControls provider={provider} />
       </div>
 
       <section aria-labelledby="rates-heading" className="card overflow-x-auto">

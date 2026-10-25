@@ -9,46 +9,73 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Providers → shortlist', () => {
-  it('down-selects providers from the full list', async () => {
+describe('Provider selection', () => {
+  it('adds providers to the initial scan from the full list', async () => {
     const user = userEvent.setup();
     const { storage } = renderApp('/providers');
 
     const card = screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!;
-    const toggle = within(card).getByRole('button', { name: /add to shortlist/i });
-    await user.click(toggle);
+    await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
 
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('link', { name: 'Shortlist (1)' })).toBeInTheDocument();
-    expect(storage.load<AppState>('state')!.shortlist.map((e) => e.provider_id)).toEqual(['bolton-clarke']);
+    expect(within(card).getByText('Stage 1: Initial scan')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Selection (1)' })).toBeInTheDocument();
+    expect(storage.load<AppState>('state')!.selection).toMatchObject([{ provider_id: 'bolton-clarke', stage: 'scan' }]);
   });
 
-  it('filters by search', async () => {
+  it('filters by search and by stage', async () => {
     const user = userEvent.setup();
     renderApp('/providers');
     await user.type(screen.getByLabelText('Search'), 'anglicare');
     expect(screen.getByText(/1 of 4 providers/)).toBeInTheDocument();
-  });
-});
+    await user.clear(screen.getByLabelText('Search'));
 
-describe('Shortlist', () => {
-  it('reorders and annotates shortlisted providers', async () => {
+    const card = screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!;
+    await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
+    await user.selectOptions(screen.getByLabelText('Stage'), 'Not selected');
+    expect(screen.getByText(/3 of 4 providers/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Stage'), 'Initial scan');
+    expect(screen.getByText(/1 of 4 providers/)).toBeInTheDocument();
+  });
+
+  it('moves providers through scan → refinement → interview shortlist', async () => {
     const user = userEvent.setup();
     const { storage } = renderApp('/providers');
-    for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)']) {
+    for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)', 'Anglicare Southern Queensland']) {
       const card = screen.getByRole('heading', { name }).closest('li')!;
-      await user.click(within(card).getByRole('button', { name: /add to shortlist/i }));
+      await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
     }
-    await user.click(screen.getByRole('link', { name: 'Shortlist (2)' }));
+    await user.click(screen.getByRole('link', { name: 'Selection (3)' }));
+    expect(screen.getByRole('link', { name: 'Stage 1: Initial scan, 3 providers' })).toHaveAttribute('aria-current', 'page');
 
+    // Drop one at the scan stage, advance the other two.
+    await user.click(screen.getByRole('button', { name: 'Drop Anglicare Southern Queensland' }));
+    await user.click(screen.getByRole('button', { name: 'Advance to Refinement : Bolton Clarke' }));
+    await user.click(screen.getByRole('button', { name: 'Advance to Refinement : BlueCare (UnitingCare QLD)' }));
+    expect(screen.getByText('No providers at this stage.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'Stage 2: Refinement, 2 providers' }));
+    await user.type(screen.getByLabelText('Reason for keeping it', { selector: '#why-bolton-clarke' }), 'Published prices');
+    await user.click(screen.getByRole('button', { name: 'Advance to Interview shortlist : Bolton Clarke' }));
+    await user.click(screen.getByRole('button', { name: 'Advance to Interview shortlist : BlueCare (UnitingCare QLD)' }));
+
+    await user.click(screen.getByRole('link', { name: 'Stage 3: Interview shortlist, 2 providers' }));
     await user.click(screen.getByRole('button', { name: 'Move up BlueCare (UnitingCare QLD)' }));
-    const items = screen.getAllByRole('listitem').filter((li) => li.closest('ol'));
-    expect(within(items[0]).getByText('Rank 1:', { exact: false }).parentElement).toHaveTextContent('BlueCare');
+    await user.type(screen.getByLabelText('Probe at interview', { selector: '#watch-bolton-clarke' }), 'Worker turnover');
 
-    await user.type(screen.getByLabelText("Why it's on the list", { selector: '#why-bolton-clarke' }), 'Published prices');
     const saved = storage.load<AppState>('state')!;
-    expect(saved.shortlist.map((e) => e.provider_id)).toEqual(['bluecare', 'bolton-clarke']);
-    expect(saved.shortlist[1].why).toBe('Published prices');
+    expect(saved.selection.map((e) => [e.provider_id, e.stage])).toEqual([
+      ['bluecare', 'interview'],
+      ['bolton-clarke', 'interview'],
+    ]);
+    expect(saved.selection[1]).toMatchObject({ why: 'Published prices', watch: 'Worker turnover' });
+
+    await user.click(screen.getByRole('button', { name: 'Back to Refinement : Bolton Clarke' }));
+    expect(storage.load<AppState>('state')!.selection.find((e) => e.provider_id === 'bolton-clarke')!.stage).toBe('refine');
+  });
+
+  it('redirects the old shortlist URL to the interview stage', () => {
+    renderApp('/shortlist');
+    expect(screen.getByRole('link', { name: /Stage 3: Interview shortlist/ })).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -142,9 +169,9 @@ describe('Interview review', () => {
     const { MemoryStorage } = await import('../storage/storage');
     const storage = new MemoryStorage();
     storage.save<AppState>('state', {
-      version: 1,
+      version: 2,
       notes: [],
-      shortlist: [],
+      selection: [],
       interviews: [
         {
           id: 'int-1', provider_id: 'bolton-clarke', started_at: '2026-10-25T00:00:00.000Z', duration_seconds: 0,

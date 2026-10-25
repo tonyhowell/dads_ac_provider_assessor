@@ -1,13 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { InterviewList } from '../components/InterviewList';
+import { entriesAt } from '../state/reducer';
 
 export function InterviewsScreen() {
   const { seed, state } = useApp();
-  const shortlisted = new Set(state.shortlist.map((e) => e.provider_id));
-  // Shortlisted providers first (in rank order), then any others that have interviews.
+  const shortlistIds = entriesAt(state, 'interview').map((e) => e.provider_id);
+  const shortlisted = new Set(shortlistIds);
+  // Interview shortlist first (in rank order), then any others that have interviews.
   const providerIds = [
-    ...state.shortlist.map((e) => e.provider_id),
+    ...shortlistIds,
     ...new Set(state.interviews.map((i) => i.provider_id).filter((id) => !shortlisted.has(id))),
   ];
   const byId = new Map(seed.providers.map((p) => [p.id, p]));
@@ -21,9 +23,9 @@ export function InterviewsScreen() {
 
       {providerIds.length === 0 ? (
         <div className="card mt-4">
-          <p>Shortlist some providers first, then record your interviews with them here.</p>
+          <p>Advance providers to the interview shortlist (stage 3), then record your interviews with them here.</p>
           <p className="mt-2">
-            <Link to="/providers">Go to providers</Link>
+            <Link to="/selection">Go to provider selection</Link>
           </p>
         </div>
       ) : (
@@ -36,7 +38,7 @@ export function InterviewsScreen() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="font-semibold">
                     <Link to={`/providers/${id}`}>{provider.provider}</Link>
-                    {!shortlisted.has(id) && <span className="muted font-normal"> (not shortlisted)</span>}
+                    {!shortlisted.has(id) && <span className="muted font-normal"> (not on the interview shortlist)</span>}
                   </h2>
                   <Link to={`/interviews/new/${id}`} className="btn btn-primary no-underline hover:no-underline">
                     Record interview <span className="sr-only">with {provider.provider}</span>
