@@ -4,12 +4,18 @@ import { categoryFor } from '../calc';
 import { RATE_KEYS } from '../schemas';
 import { RATE_LABELS } from '../labels';
 import type { Category, PlanItem, RateKey } from '../types';
+import { HoursStepper } from './ui/Form';
+import { Term } from './ui/Help';
+import { Icon } from './ui/Icon';
+import { ResolutionCard } from './ui/Cards';
+import { useFieldHelp } from './ui/useFieldHelp';
 
-const CATEGORY_LABELS: Record<Category, string> = { clinical: 'Clinical', independence: 'Independence', everyday: 'Everyday living' };
+export const CATEGORY_LABELS: Record<Category, string> = { clinical: 'Clinical', independence: 'Independence', everyday: 'Everyday living' };
 
-/** Weekly care plan. Changes save for the whole family when a field is left or a choice is made. */
+/** Weekly care plan (UI-SPEC §7.4 section A). Changes save for the whole family. */
 export function PlanEditor() {
-  const { state, dispatch, plan, serviceDate } = useApp();
+  const { state, seed, dispatch, plan, serviceDate } = useApp();
+  const fh = useFieldHelp();
   const [rows, setRows] = useState<PlanItem[]>(plan);
   useEffect(() => setRows(plan), [plan]);
 
@@ -24,93 +30,109 @@ export function PlanEditor() {
   };
 
   return (
-    <section className="card space-y-3" aria-labelledby="plan-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="plan-heading" className="font-semibold">
-          Weekly care plan
-        </h2>
-        <span className="muted text-sm">{state.plan ? 'Edited plan' : 'Sample plan from the starter pack'}</span>
+    <section className="card space-y-4" aria-labelledby="plan-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="plan-heading">Your care plan</h2>
+        <span className="muted">{state.plan ? 'Your plan' : 'Sample plan to start from'}</span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-sm">
-          <thead>
-            <tr className="text-left">
-              <th scope="col" className="py-1 pr-2">Service</th>
-              <th scope="col" className="py-1 pr-2">Priced as</th>
-              <th scope="col" className="py-1 pr-2">Hours a week</th>
-              <th scope="col" className="py-1 pr-2">Category</th>
-              <th scope="col" className="py-1"><span className="sr-only">Remove</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-t border-slate-200 align-top dark:border-slate-800">
-                <td className="py-1 pr-2">
-                  <input
-                    aria-label={`Service ${i + 1}`}
-                    className="input"
-                    value={r.service}
-                    onChange={(e) => update(i, { service: e.target.value }, false)}
-                    onBlur={() => commit(rows)}
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  <select aria-label={`Rate for ${r.service || `service ${i + 1}`}`} className="input" value={r.key} onChange={(e) => update(i, { key: e.target.value as RateKey })}>
-                    {RATE_KEYS.map((k) => (
-                      <option key={k} value={k}>
-                        {RATE_LABELS[k]}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="py-1 pr-2">
-                  <input
-                    aria-label={`Hours a week for ${r.service || `service ${i + 1}`}`}
-                    className="input max-w-24 tabular-nums"
-                    type="number"
-                    min={0}
-                    step={0.25}
-                    value={Number.isNaN(r.hours_per_week) ? '' : r.hours_per_week}
-                    onChange={(e) => update(i, { hours_per_week: Math.max(0, Number(e.target.value)) }, false)}
-                    onBlur={() => commit(rows)}
-                  />
-                </td>
-                <td className="py-1 pr-2">
-                  {r.key === 'pc' ? (
-                    <span className="block py-2">
-                      {CATEGORY_LABELS[categoryFor(r, serviceDate)]} <span className="muted">(set by date)</span>
-                    </span>
-                  ) : (
-                    <select aria-label={`Category for ${r.service || `service ${i + 1}`}`} className="input" value={r.category} onChange={(e) => update(i, { category: e.target.value as Category })}>
-                      {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORY_LABELS[c]}
+      <p>The services you'd use each week. Change the hours to see how the cost changes.</p>
+
+      {rows.length === 0 ? (
+        <ResolutionCard
+          status="info"
+          title="Your care plan is empty, so there's nothing to cost yet"
+          actions={
+            <>
+              <button type="button" className="btn btn-primary" onClick={() => dispatch({ type: 'plan/set', plan: null })}>
+                Start from the sample plan
+              </button>
+              <button type="button" className="btn" onClick={() => commit([{ service: 'Domestic assistance', key: 'domestic', hours_per_week: 1, category: 'everyday' }])}>
+                Add a service
+              </button>
+            </>
+          }
+        />
+      ) : (
+        <ul className="space-y-3">
+          {rows.map((r, i) => {
+            const cat = categoryFor(r, serviceDate);
+            return (
+              <li key={i} className="well space-y-3">
+                <div className="grid gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
+                  <div>
+                    <label htmlFor={`svc-${i}`} className="label">
+                      Service
+                    </label>
+                    <input id={`svc-${i}`} className="input" value={r.service} onChange={(e) => update(i, { service: e.target.value }, false)} onBlur={() => commit(rows)} />
+                  </div>
+                  <div>
+                    <label htmlFor={`key-${i}`} className="label">
+                      Priced as
+                    </label>
+                    <select id={`key-${i}`} className="input" value={r.key} onChange={(e) => update(i, { key: e.target.value as RateKey })}>
+                      {RATE_KEYS.map((k) => (
+                        <option key={k} value={k}>
+                          {RATE_LABELS[k]}
                         </option>
                       ))}
                     </select>
-                  )}
-                </td>
-                <td className="py-1">
-                  <button type="button" className="btn" onClick={() => commit(rows.filter((_, j) => j !== i))}>
-                    Remove <span className="sr-only">{r.service}</span>
+                  </div>
+                  <div>
+                    {r.key === 'pc' ? (
+                      <>
+                        <p className="label">Kind of service</p>
+                        <p className="py-2">{CATEGORY_LABELS[cat]}</p>
+                        <p className="small">Personal care counts as Clinical (free) from 1 October 2026.</p>
+                      </>
+                    ) : (
+                      <>
+                        <label htmlFor={`cat-${i}`} className="label">
+                          {i === 0 ? <Term id="categories">Kind of service</Term> : 'Kind of service'}
+                        </label>
+                        <select id={`cat-${i}`} className="input" value={r.category} onChange={(e) => update(i, { category: e.target.value as Category })}>
+                          {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                            <option key={c} value={c}>
+                              {CATEGORY_LABELS[c]}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <label htmlFor={`hrs-${i}`} className="label">
+                      Hours a week for {r.service || 'this service'}
+                    </label>
+                    {i === 0 && <span className="hint">{fh('hours').hint}</span>}
+                    <HoursStepper id={`hrs-${i}`} label={`hours of ${r.service}`} value={r.hours_per_week} onChange={(v) => update(i, { hours_per_week: v })} />
+                  </div>
+                  <button type="button" className="btn btn-danger" onClick={() => commit(rows.filter((_, j) => j !== i))}>
+                    <Icon name="octagon" size={20} /> Remove <span className="sr-only">{r.service}</span>
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn" onClick={() => commit([...rows, { service: 'New service', key: 'domestic', hours_per_week: 1, category: 'everyday' }])}>
-          Add service
-        </button>
-        {state.plan && (
+        {rows.length > 0 && (
+          <button type="button" className="btn" onClick={() => commit([...rows, { service: 'New service', key: 'domestic', hours_per_week: 1, category: 'everyday' }])}>
+            <Icon name="plus" size={20} /> Add a service
+          </button>
+        )}
+        {state.plan && rows.length > 0 && (
           <button type="button" className="btn" onClick={() => dispatch({ type: 'plan/set', plan: null })}>
-            Reset to sample plan
+            Go back to the sample plan
           </button>
         )}
       </div>
-      <p className="muted text-xs">Weekday rates; hourly services are charged in 15-minute steps and providers may set minimum visits.</p>
+      <p className="muted">
+        Weekday prices. Hourly services are charged in 15-minute steps; providers may set minimum visit lengths. Sample plan: {seed.samplePlan.length} services.
+      </p>
     </section>
   );
 }

@@ -129,6 +129,8 @@ export const ParticipantSchema = z.object({
   ev_rate: z.number().min(0).max(1).nullable(),
   dva_card: z.enum(['gold', 'white', 'none']),
   nwop: z.boolean(),
+  /** Answered "I'm not sure" to the no-worse-off question; costed as not no-worse-off. */
+  nwop_unsure: z.boolean().optional(),
   classification: z.string(),
   lifetime_contributions_paid: z.number().nonnegative(),
 });
@@ -204,5 +206,68 @@ export const CustomQuestionSchema = z.object({
 /** A provider's answer to one interview question (SPEC §4 InterviewResponse). */
 export const InterviewResponseSchema = z.object({
   text: z.string().max(20_000),
-  satisfactory: z.boolean().nullable(),
+  /** "Answered well?" */
+  rating: z.enum(['yes', 'partly', 'no']).nullable(),
+  /** "Got it in writing" — SPEC §7: must questions need a written answer. */
+  in_writing: z.boolean(),
+});
+
+/** A note left on a screen for the rest of the family (UI-SPEC §5.9). Shown until marked done. */
+export const ScreenNoteSchema = z.object({
+  id: z.string().min(1).max(100),
+  route: z.string().max(200),
+  text: z.string().trim().min(1).max(5000),
+  author: z.string().max(100).optional(),
+  created_at: z.string(),
+  done: z.boolean(),
+});
+
+// --- Help content (UI-SPEC §5.8) ---
+
+export const HelpTopicSchema = z.object({
+  id: z.string(),
+  screen_route: z.string(),
+  title: z.string(),
+  purpose: z.string(),
+  steps: z.array(z.string()),
+  outcome: z.string(),
+  faqs: z.array(z.object({ q: z.string(), a: z.string() })),
+  troubleshooting: z.array(z.object({ symptom: z.string(), cause: z.string(), fix: z.string(), action_route: z.string().optional() })),
+  glossary_ids: z.array(z.string()),
+});
+
+export const GlossaryTermSchema = z.object({
+  id: z.string(),
+  term: z.string(),
+  plain: z.string(),
+  example: z.string().optional(),
+  more_topic_id: z.string().optional(),
+  source_url: z.url().optional(),
+});
+
+export const FieldHelpSchema = z.object({
+  field_id: z.string(),
+  label: z.string(),
+  hint: z.string(),
+  explain: z.string().optional(),
+  /** Uses {placeholders} filled from the user's own numbers. */
+  example_template: z.string().optional(),
+});
+
+export const ContactSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  hours: z.string(),
+  url: z.url(),
+  purpose: z.string(),
+  /** Date a person confirmed the number. Null = not yet confirmed (must be before public release). */
+  verified_on: z.string().nullable(),
+});
+
+export const HelpDataSchema = z.object({
+  topics: z.array(HelpTopicSchema),
+  glossary: z.array(GlossaryTermSchema),
+  fields: z.array(FieldHelpSchema),
+  contacts: z.array(ContactSchema),
 });

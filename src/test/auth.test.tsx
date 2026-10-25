@@ -40,9 +40,10 @@ describe('sign in', () => {
     await user.type(screen.getByLabelText('Username'), 'alex');
     await user.click(screen.getByRole('button', { name: 'Sign in with passkey' }));
 
-    expect(await screen.findByText('Signed in as Alex')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Menu' }));
+    expect(screen.getByText('Signed in as Alex')).toBeInTheDocument();
     expect(calls.find((c) => c.key === 'POST /api/auth/verify')!.body.response).toEqual({ id: 'cred-1', challenge: 'c1' });
-    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manage family access' })).not.toBeInTheDocument();
   });
 
   it('shows why sign-in failed', async () => {
@@ -67,6 +68,7 @@ describe('sign in', () => {
     const user = userEvent.setup();
     const calls = mockApi({ 'POST /api/auth/logout': () => json(200, { ok: true }) });
     await renderApp('/providers');
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByRole('button', { name: 'Sign in with passkey' })).toBeInTheDocument();
     expect(calls.map((c) => c.key)).toContain('POST /api/auth/logout');
@@ -87,7 +89,8 @@ describe('enrolment', () => {
     await user.type(screen.getByLabelText(/name this device/i), 'Sam phone');
     await user.click(screen.getByRole('button', { name: 'Create passkey' }));
 
-    expect(await screen.findByText('Signed in as Sam')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Menu' }));
+    expect(screen.getByText('Signed in as Sam')).toBeInTheDocument();
     expect(calls.find((c) => c.key === 'POST /api/enrol/tok123/verify')!.body).toEqual({
       response: { id: 'cred-1', challenge: 'r1' },
       nickname: 'Sam phone',
@@ -109,8 +112,8 @@ describe('administration', () => {
 
   it('is hidden from family members', async () => {
     await renderApp('/admin', { user: { id: 'u2', username: 'sam', display_name: 'Sam', role: 'member' } });
-    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Administration' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manage family access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Manage family access' })).not.toBeInTheDocument();
   });
 
   it('adds a person and shows their enrolment link once', async () => {

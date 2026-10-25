@@ -5,11 +5,15 @@ import { includedSections, interviewPack, packQuestionCount } from '../questions
 import { responseKey } from '../scoring';
 import { formatDate } from '../format';
 import { toIsoDate } from '../rules';
+import { Icon } from '../components/ui/Icon';
 
-const STATUS: Record<string, string> = { full_pensioner: 'Full pensioner', part_pensioner: 'Part pensioner / CSHC', self_funded: 'Self-funded' };
-const CARD: Record<string, string> = { gold: 'DVA Gold Card', white: 'DVA White Card', none: 'No DVA card' };
+const DISCLAIMER = 'General information only — not financial or legal advice. Check prices and eligibility with the provider, My Aged Care and DVA before deciding.';
 
-/** Print-friendly interview pack: sections A–Q, one response column per shortlisted provider. Use the browser's Print / Save as PDF. */
+/**
+ * Printable interview pack (UI-SPEC §10): one section of pages per provider, numbered questions with a ■ for
+ * must-ask, ruled lines for handwriting (or the answer already recorded), a "Got it in writing" box, and a
+ * footer on every page with the provider's name and the disclaimer.
+ */
 export function PrintPackScreen() {
   const { seed, state, providers } = useApp();
   const pack = interviewPack(seed.interviewSections, includedSections(seed.boundingGroups, seed.interviewSections, state.answers), state.customQuestions);
@@ -17,100 +21,103 @@ export function PrintPackScreen() {
     const p = providers.find((x) => x.id === e.provider_id);
     return p ? [{ provider: p, watch: e.watch }] : [];
   });
-  const p = state.participant;
+  // With nobody shortlisted yet, print one blank pack to write the provider's name on.
+  const sections = shortlist.length ? shortlist : [{ provider: null, watch: '' }];
+  const today = formatDate(toIsoDate(new Date()));
+  const who = state.participant?.name;
 
   return (
-    <div className="print-pack mx-auto max-w-[1100px] bg-white p-6 text-slate-900">
-      <div className="no-print mb-4 flex flex-wrap gap-2">
-        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
-          Print or save as PDF
-        </button>
-        <Link to="/interview-pack" className="btn no-underline hover:no-underline">
-          Back to the interview pack
-        </Link>
-        <p className="muted self-center text-sm">Prints landscape. Choose "Save as PDF" in the print dialog for a file.</p>
+    <main className="print-pack mx-auto max-w-[56rem] bg-[var(--surface)] p-6 text-[var(--charcoal)]">
+      <div className="no-print mb-6 space-y-3">
+        <h1>Print your interview questions</h1>
+        <p>
+          {shortlist.length ? `One section for each of your ${shortlist.length} providers, ` : 'A blank pack, '}
+          with lines to write answers on. Answers you've already recorded are printed in.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+            Print or save as PDF
+          </button>
+          <Link to="/interview-pack" className="btn">
+            <Icon name="arrowLeft" size={20} /> Back to your questions
+          </Link>
+        </div>
+        <p>In the print window, choose "Save as PDF" to get a file you can email.</p>
       </div>
 
-      <header className="mb-4 border-b border-slate-300 pb-3">
-        <h1 className="text-2xl font-semibold">Support at Home provider interview pack</h1>
-        <p className="text-sm">
-          Prepared {formatDate(toIsoDate(new Date()))}
-          {p && (
-            <>
-              {' '}
-              · {p.name ? `${p.name}, ` : ''}
-              {p.suburb} {p.postcode} · {p.classification.startsWith('HCP') ? p.classification.replace('HCP L', 'HCP level ') : `Classification ${p.classification}`} ·{' '}
-              {STATUS[p.pension_status] ?? p.pension_status}
-              {p.nwop ? ' (no-worse-off)' : ''} · {CARD[p.dva_card]}
-            </>
-          )}
-        </p>
-        <p className="text-sm">
-          {packQuestionCount(pack)} questions. <strong>MUST</strong> questions need a written answer from every provider; a provider that won't answer one in writing
-          should be reconsidered.
-        </p>
-      </header>
+      {sections.map(({ provider, watch }, si) => (
+        <table key={provider?.id ?? 'blank'} className={`w-full ${si > 0 ? 'print-break' : ''}`}>
+          <tfoot>
+            <tr>
+              <td className="pt-4 text-[9pt]">
+                <span className="font-semibold">{provider?.provider ?? 'Provider: ____________________'}</span> · Interview questions{who ? ` for ${who}` : ''} · {DISCLAIMER}
+              </td>
+            </tr>
+          </tfoot>
+          <tbody>
+            <tr>
+              <td>
+                <div className="print-keep mb-6 space-y-2 border-b-2 border-[var(--charcoal)] pb-4">
+                  <p className="text-[0.875rem]">Provider Assessor · from Quantivate</p>
+                  <h2 className="text-[1.75rem]">{provider ? provider.provider : 'Provider: ______________________________'}</h2>
+                  <p>Interview questions{who ? ` for ${who}` : ''} · printed {today}</p>
+                  {provider && (
+                    <p className="text-[0.95rem]">
+                      Prices as at {provider.prices_as_at}
+                      {provider.source_url ? ` · ${provider.source_url}` : ''}
+                    </p>
+                  )}
+                  <p>Date of interview: ____________________ Interviewed by: ______________________________</p>
+                  {watch && (
+                    <div className="mt-2 border-l-4 border-[var(--charcoal)] pl-3">
+                      <p className="font-semibold">Watch for</p>
+                      <p className="whitespace-pre-wrap">{watch}</p>
+                    </div>
+                  )}
+                  <p className="text-[0.95rem]">
+                    {packQuestionCount(pack)} questions. ■ = must ask: get a written answer. A provider that won't answer a must-ask question in writing should be reconsidered.
+                  </p>
+                </div>
 
-      {shortlist.length > 0 && (
-        <section className="mb-4 break-inside-avoid">
-          <h2 className="mb-1 text-lg font-semibold">Providers to interview</h2>
-          <ol className="list-decimal space-y-1 pl-5 text-sm">
-            {shortlist.map(({ provider, watch }) => (
-              <li key={provider.id}>
-                <strong>{provider.provider}</strong> — prices as at {provider.prices_as_at}
-                {provider.source_url && <span className="break-all"> ({provider.source_url})</span>}
-                {watch && <span className="block">Probe: {watch}</span>}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {pack.map((section) => (
-        <section key={section.code} className="mb-4">
-          <h2 className="mb-1 text-lg font-semibold break-after-avoid">
-            {section.code}. {section.section}
-            {!section.included && <span className="text-sm font-normal"> (must questions only)</span>}
-          </h2>
-          <table className="print-table w-full border-collapse text-xs">
-            <thead>
-              <tr>
-                <th scope="col" className="w-10 border border-slate-400 p-1 text-left">#</th>
-                <th scope="col" className="border border-slate-400 p-1 text-left">Question</th>
-                {shortlist.map(({ provider }) => (
-                  <th key={provider.id} scope="col" className="border border-slate-400 p-1 text-left" style={{ width: `${Math.max(10, 48 / Math.max(1, shortlist.length))}%` }}>
-                    {provider.provider}
-                  </th>
+                {pack.map((section) => (
+                  <section key={section.code} className="mb-6">
+                    <h3 className="print-keep mb-2 border-b border-[var(--charcoal)] pb-1 text-[1.2rem]">
+                      {section.code}. {section.section}
+                      {!section.included && <span className="font-normal"> (must ask only)</span>}
+                    </h3>
+                    <ol className="space-y-4">
+                      {section.questions.map((q) => {
+                        const r = provider ? state.responses[responseKey(provider.id, q.id)] : undefined;
+                        return (
+                          <li key={q.id} className="print-keep">
+                            <p>
+                              <span className="font-semibold">{q.custom ? '+' : q.id}</span> {q.priority === 'must' && <span aria-label="Must ask">■ </span>}
+                              {q.text}
+                            </p>
+                            {r?.text.trim() ? (
+                              <p className="mt-1 border-l-2 border-[var(--line)] pl-3 whitespace-pre-wrap">
+                                {r.text}
+                                {r.rating && <em> — answered well: {r.rating}</em>}
+                              </p>
+                            ) : (
+                              <div aria-hidden className="mt-1">
+                                {[0, 1, 2].map((i) => (
+                                  <div key={i} className="h-[9mm] border-b border-[var(--line)]" />
+                                ))}
+                              </div>
+                            )}
+                            {q.priority === 'must' && <p className="mt-1">Got it in writing {r?.in_writing ? '☑' : '☐'}</p>}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </section>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {section.questions.map((q) => (
-                <tr key={q.id} className="break-inside-avoid align-top">
-                  <td className="border border-slate-400 p-1">{q.custom ? '+' : q.id}</td>
-                  <td className="border border-slate-400 p-1">
-                    {q.priority === 'must' && <strong>MUST · </strong>}
-                    {q.text}
-                  </td>
-                  {shortlist.map(({ provider }) => {
-                    const r = state.responses[responseKey(provider.id, q.id)];
-                    return (
-                      <td key={provider.id} className="h-14 border border-slate-400 p-1 whitespace-pre-wrap">
-                        {r?.text}
-                        {r?.satisfactory === false && <em> (not satisfactory)</em>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       ))}
-
-      <footer className="print-footer mt-6 border-t border-slate-300 pt-2 text-xs">
-        General information only — not financial or legal advice. Check prices and eligibility with the provider, My Aged Care and DVA before deciding.
-      </footer>
-    </div>
+    </main>
   );
 }

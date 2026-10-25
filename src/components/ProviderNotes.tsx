@@ -26,7 +26,7 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
 
   return (
     <section aria-labelledby="notes-heading" className="card">
-      <h2 id="notes-heading" className="text-lg font-semibold">
+      <h2 id="notes-heading">
         Assessment notes
       </h2>
       <form onSubmit={add} className="mt-3 space-y-2">
@@ -65,7 +65,7 @@ function NoteItem({ note }: { note: ProviderNote }) {
   };
 
   return (
-    <li className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
+    <li className="well">
       <p className="muted text-xs">
         {note.author && `${note.author} · `}
         {formatDateTime(note.created_at)}

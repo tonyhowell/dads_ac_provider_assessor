@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp, useProvider } from '../state/AppContext';
 import { newId } from '../state/reducer';
 import { formatDate, formatDateTime, formatDuration } from '../format';
-import { mustQuestions, notesSections, notesToText, requestInterviewNotes } from '../interviews';
+import { mustQuestions, notesToText, requestInterviewNotes } from '../interviews';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { ResolutionCard } from '../components/ui/Cards';
+import { WorkingGrid } from '../components/ui/Feedback';
+import { Icon } from '../components/ui/Icon';
+import type { InterviewNotes } from '../types';
+
+type ListKey = Exclude<keyof InterviewNotes, 'summary'>;
 
 export function InterviewReviewScreen() {
   const { id } = useParams();
@@ -16,9 +22,10 @@ export function InterviewReviewScreen() {
   const [transcript, setTranscript] = useState(interview?.transcript ?? '');
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioMissing, setAudioMissing] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedToNotes, setSavedToNotes] = useState(false);
+  const abort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!interview?.audio_id) return;
@@ -40,49 +47,42 @@ export function InterviewReviewScreen() {
   }, [interview?.audio_id, audio]);
 
   if (!interview || !provider) {
-    return (
-      <section>
-        <h1 className="text-2xl font-semibold">Interview not found</h1>
-        <Link to="/interviews">Back to interviews</Link>
-      </section>
-    );
+    return <ResolutionCard status="caution" title="We couldn't find that interview" actions={<Link to="/interviews" className="btn btn-primary">Back to interviews</Link>} />;
   }
 
   const transcriptDirty = transcript !== interview.transcript;
   const saveTranscript = () => dispatch({ type: 'interview/save', interview: { ...interview, transcript } });
+  const setNotes = (notes: InterviewNotes) => {
+    dispatch({ type: 'interview/notes', id: interview.id, notes, at: new Date().toISOString() });
+    setSavedToNotes(false);
+  };
 
-  const generate = async () => {
+  const draft = async () => {
     if (transcriptDirty) saveTranscript();
-    setGenerating(true);
+    setDrafting(true);
     setError(null);
+    abort.current = new AbortController();
     try {
-      const notes = await requestInterviewNotes({
-        provider_name: provider.provider,
-        interview_date: formatDate(interview.started_at),
-        transcript,
-        questions: mustQuestions(seed.interviewSections),
-      });
-      dispatch({ type: 'interview/notes', id: interview.id, notes, at: new Date().toISOString() });
-      setSavedToNotes(false);
+      const notes = await requestInterviewNotes(
+        { provider_name: provider.provider, interview_date: formatDate(interview.started_at), transcript, questions: mustQuestions(seed.interviewSections) },
+        fetch,
+        abort.current.signal,
+      );
+      setNotes(notes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not generate notes.');
+      if (!(err instanceof DOMException && err.name === 'AbortError')) setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
-      setGenerating(false);
+      setDrafting(false);
     }
   };
+
+  const writeMyself = () => setNotes({ summary: '', strengths: [], concerns: [], commitments: [], pricing_mentions: [], follow_up_questions: [] });
 
   const saveToProviderNotes = () => {
     if (!interview.notes) return;
     dispatch({
       type: 'note/add',
-      note: {
-        id: newId(),
-        provider_id: provider.id,
-        text: notesToText(interview.notes, `Interview ${formatDateTime(interview.started_at)}`),
-        created_at: new Date().toISOString(),
-        source: 'interview',
-        interview_id: interview.id,
-      },
+      note: { id: newId(), provider_id: provider.id, text: notesToText(interview.notes, `Interview ${formatDateTime(interview.started_at)}`), created_at: new Date().toISOString(), source: 'interview', interview_id: interview.id },
     });
     setSavedToNotes(true);
   };
@@ -94,106 +94,177 @@ export function InterviewReviewScreen() {
   };
 
   return (
-    <section className="space-y-4">
-      <Link to="/interviews" className="muted">
-        ← All interviews
+    <section className="space-y-6">
+      <Link to="/interviews" className="btn-quiet">
+        <Icon name="arrowLeft" size={20} /> All interviews
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            Interview: <Link to={`/providers/${provider.id}`}>{provider.provider}</Link>
-          </h1>
-          <p className="muted">
-            {formatDateTime(interview.started_at)}
-            {interview.audio_id && ` · ${formatDuration(interview.duration_seconds)}`}
-            {interview.interviewer && ` · by ${interview.interviewer}`}
-            {interview.consent_confirmed && ' · consent confirmed'}
-          </p>
-        </div>
-        <ConfirmButton
-          prompt="Delete this interview for everyone? Notes already saved to the provider are kept."
-          confirmLabel="Delete interview"
-          onConfirm={remove}
-        >
-          Delete interview
-        </ConfirmButton>
+      <div className="space-y-2">
+        <h1>Check your interview with {provider.provider}</h1>
+        <p>
+          {formatDateTime(interview.started_at)}
+          {interview.audio_id && ` · ${formatDuration(interview.duration_seconds)}`}
+          {interview.interviewer && ` · by ${interview.interviewer}`}
+          {interview.consent_confirmed && ' · everyone agreed to the recording'}
+        </p>
       </div>
 
       {interview.audio_id && (
-        <section aria-labelledby="recording-heading" className="card">
-          <h2 id="recording-heading" className="font-semibold">
-            Recording
-          </h2>
+        <section aria-labelledby="recording-heading" className="card space-y-2">
+          <h2 id="recording-heading">Recording</h2>
           {audioUrl ? (
             <>
-              <audio controls src={audioUrl} className="mt-2 w-full">
+              <audio controls src={audioUrl} className="w-full">
                 Your browser can't play this recording.
               </audio>
-              <p className="muted mt-2">Stored only on this device. Clearing site data deletes it.</p>
+              <p className="muted">Stored only on this device. Clearing the browser's site data deletes it.</p>
             </>
           ) : audioMissing ? (
-            <p className="muted mt-2">The recording is kept only on the device that made it. The transcript below is shared.</p>
+            <p>The recording is kept only on the device that made it. The transcript below is shared with your family.</p>
           ) : (
-            <p className="muted mt-2">Loading recording…</p>
+            <p>Loading the recording…</p>
           )}
         </section>
       )}
 
-      <section aria-labelledby="transcript-heading" className="card space-y-2">
-        <h2 id="transcript-heading" className="font-semibold">
-          Transcript
-        </h2>
-        <p className="muted">
-          Correct misheard words and remove anything you don't want to keep before drafting notes.
-          {!interview.transcript && ' No live transcript was captured — type or paste one here.'}
-        </p>
-        <label htmlFor="transcript" className="sr-only">
-          Transcript
+      <section aria-labelledby="transcript-heading" className="card space-y-3">
+        <h2 id="transcript-heading">Transcript</h2>
+        <label htmlFor="transcript" className="label">
+          What was said
         </label>
-        <textarea id="transcript" className="input min-h-64 font-mono" value={transcript} onChange={(e) => setTranscript(e.target.value)} />
+        <span className="hint">
+          Fix any misheard words and remove anything you don't want kept before drafting notes.
+          {!interview.transcript && ' Nothing was captured automatically — type or paste what was said.'}
+        </span>
+        <textarea id="transcript" className="input min-h-64" value={transcript} onChange={(e) => setTranscript(e.target.value)} />
         <button type="button" className="btn" onClick={saveTranscript} disabled={!transcriptDirty}>
-          {transcriptDirty ? 'Save transcript' : 'Transcript saved'}
+          {transcriptDirty ? 'Save transcript' : (
+            <>
+              <Icon name="check" size={20} /> Transcript saved
+            </>
+          )}
         </button>
       </section>
 
-      <section aria-labelledby="notes-heading" className="card space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="notes-heading" className="font-semibold">
-            Interview notes
-          </h2>
-          <button type="button" className="btn btn-primary" onClick={generate} disabled={generating || transcript.trim().length < 20}>
-            {generating ? 'Drafting notes…' : interview.notes ? 'Redraft notes' : 'Draft notes from transcript'}
+      <section aria-labelledby="notes-heading" className="card space-y-4">
+        <h2 id="notes-heading">Notes</h2>
+        <p>Notes drafted by Claude from your transcript (not the audio). Check them, keep what's right, then save them to {provider.provider}'s notes.</p>
+        {!drafting && (
+          <button type="button" className={`btn ${interview.notes ? '' : 'btn-primary'}`} onClick={draft} disabled={transcript.trim().length < 20}>
+            {interview.notes ? 'Draft the notes again' : 'Draft notes from transcript'}
           </button>
-        </div>
-        <p className="muted">
-          Sends the transcript (not the audio) to Anthropic's Claude API to draft notes. Notes are a draft: check them against the
-          recording.
-        </p>
-        {error && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-300">
-            {error}
-          </p>
         )}
+        {transcript.trim().length < 20 && !interview.notes && <p>Add at least a few sentences of transcript first.</p>}
+        {drafting && (
+          <WorkingGrid onCancel={() => abort.current?.abort()}>Drafting notes from your transcript. This usually takes about 20 seconds.</WorkingGrid>
+        )}
+        {error && (
+          <ResolutionCard
+            status="stop"
+            title="We couldn't draft the notes just now"
+            role="alert"
+            actions={
+              <>
+                <button type="button" className="btn" onClick={draft}>
+                  Try again
+                </button>
+                <button type="button" className="btn" onClick={writeMyself}>
+                  Write notes myself
+                </button>
+              </>
+            }
+          >
+            <p>{error} Your transcript is safe.</p>
+          </ResolutionCard>
+        )}
+        {interview.notes && <NotesEditor notes={interview.notes} onChange={setNotes} />}
         {interview.notes && (
-          <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-            <p className="muted text-xs">Drafted {interview.notes_generated_at && formatDateTime(interview.notes_generated_at)}</p>
-            <p>{interview.notes.summary}</p>
-            {notesSections(interview.notes).map((s) => (
-              <div key={s.key}>
-                <h3 className="font-medium">{s.label}</h3>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {s.items.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            <button type="button" className="btn" onClick={saveToProviderNotes} disabled={savedToNotes}>
-              {savedToNotes ? 'Saved to provider notes' : 'Save to provider notes'}
-            </button>
-          </div>
+          <button type="button" className="btn btn-primary" onClick={saveToProviderNotes} disabled={savedToNotes}>
+            {savedToNotes ? (
+              <>
+                <Icon name="check" size={20} /> Saved to {provider.provider}'s notes
+              </>
+            ) : (
+              `Save to ${provider.provider}'s notes`
+            )}
+          </button>
         )}
       </section>
+
+      <ConfirmButton prompt="Delete this interview for everyone? Notes already saved to the provider are kept." confirmLabel="Delete interview" onConfirm={remove}>
+        <Icon name="octagon" size={20} /> Delete interview
+      </ConfirmButton>
     </section>
+  );
+}
+
+/** Every drafted item can be kept, edited or removed before saving (UI-SPEC §7.8). */
+function NotesEditor({ notes, onChange }: { notes: InterviewNotes; onChange: (n: InterviewNotes) => void }) {
+  const allKeys: { key: ListKey; label: string }[] = [
+    { key: 'strengths', label: 'Strengths' },
+    { key: 'concerns', label: 'Concerns' },
+    { key: 'commitments', label: 'Commitments made' },
+    { key: 'pricing_mentions', label: 'Prices and fees mentioned' },
+    { key: 'follow_up_questions', label: 'Follow up (including unanswered must-ask questions)' },
+  ];
+  const update = (key: ListKey, items: string[]) => onChange({ ...notes, [key]: items });
+  return (
+    <div className="space-y-4">
+      <div>
+        <label htmlFor="notes-summary" className="label">
+          Summary
+        </label>
+        <textarea id="notes-summary" className="input min-h-24" defaultValue={notes.summary} onBlur={(e) => e.target.value !== notes.summary && onChange({ ...notes, summary: e.target.value })} />
+      </div>
+      {allKeys.map(({ key, label }) => (
+        <section key={key} className="space-y-2" aria-label={label}>
+          <h3>{label}</h3>
+          {notes[key].length === 0 && <p className="muted">None.</p>}
+          <ul className="space-y-2">
+            {notes[key].map((item, i) => (
+              <NoteItemRow key={`${key}-${i}-${item}`} item={item} onSave={(v) => update(key, notes[key].map((x, j) => (j === i ? v : x)))} onRemove={() => update(key, notes[key].filter((_, j) => j !== i))} />
+            ))}
+          </ul>
+          <button type="button" className="btn-quiet" onClick={() => update(key, [...notes[key], ''])}>
+            <Icon name="plus" size={20} /> Add to {label.toLowerCase().split(' (')[0]}
+          </button>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function NoteItemRow({ item, onSave, onRemove }: { item: string; onSave: (v: string) => void; onRemove: () => void }) {
+  const [editing, setEditing] = useState(item === '');
+  const [text, setText] = useState(item);
+  if (editing) {
+    return (
+      <li className="well space-y-2">
+        <label className="sr-only" htmlFor={`edit-${item}`}>
+          Edit item
+        </label>
+        <textarea id={`edit-${item}`} className="input min-h-16" value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-sm" onClick={() => (text.trim() ? (onSave(text.trim()), setEditing(false)) : onRemove())}>
+            Keep
+          </button>
+          <button type="button" className="btn btn-sm" onClick={() => (item ? (setText(item), setEditing(false)) : onRemove())}>
+            Cancel
+          </button>
+        </div>
+      </li>
+    );
+  }
+  return (
+    <li className="well flex flex-wrap items-start justify-between gap-2">
+      <span className="min-w-0 flex-1">{item}</span>
+      <span className="flex gap-2">
+        <button type="button" className="btn btn-sm" onClick={() => setEditing(true)}>
+          Edit
+        </button>
+        <button type="button" className="btn btn-sm btn-danger" onClick={onRemove}>
+          Remove
+        </button>
+      </span>
+    </li>
   );
 }

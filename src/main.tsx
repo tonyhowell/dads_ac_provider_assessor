@@ -7,9 +7,9 @@ import { loadSeedData, SeedDataError, type SeedData } from './data/load';
 import { AuthProvider } from './auth/AuthContext';
 import { httpSync } from './state/sync';
 import { indexedDbAudioStore } from './storage/audioStore';
-import { applyStoredTheme } from './components/ThemeToggle';
+import { applyDisplay, loadDisplay } from './display';
 
-applyStoredTheme();
+applyDisplay(loadDisplay());
 const root = createRoot(document.getElementById('root')!);
 
 let seed: SeedData | undefined;

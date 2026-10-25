@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { InterviewList } from '../components/InterviewList';
 import { entriesAt } from '../state/reducer';
+import { ScreenHeader } from '../components/ui/Cards';
 
 export function InterviewsScreen() {
   const { providers, state } = useApp();
@@ -15,32 +16,33 @@ export function InterviewsScreen() {
   const byId = new Map(providers.map((p) => [p.id, p]));
 
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Interviews</h1>
-      <p className="muted mt-1">
-        Record each provider interview, then turn the transcript into draft notes. Transcripts and notes are shared with the family; recordings stay on the device that made them.
-      </p>
+    <section className="space-y-6">
+      <ScreenHeader
+        title="Record or note an interview"
+        purpose="Record an interview, then turn it into notes you can check and keep. Transcripts and notes are shared with your family; recordings stay on the device that made them."
+        helpTopic="interviews"
+      />
 
       {providerIds.length === 0 ? (
-        <div className="card mt-4">
+        <div className="card">
           <p>Advance providers to the interview shortlist (stage 3), then record your interviews with them here.</p>
           <p className="mt-2">
             <Link to="/selection">Go to provider selection</Link>
           </p>
         </div>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul className="space-y-3">
           {providerIds.map((id) => {
             const provider = byId.get(id);
             if (!provider) return null;
             return (
               <li key={id} className="card">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="font-semibold">
+                  <h2 className="text-[1.2rem]">
                     <Link to={`/providers/${id}`}>{provider.provider}</Link>
                     {!shortlisted.has(id) && <span className="muted font-normal"> (not on the interview shortlist)</span>}
                   </h2>
-                  <Link to={`/interviews/new/${id}`} className="btn btn-primary no-underline hover:no-underline">
+                  <Link to={`/interviews/new/${id}`} className="btn">
                     Record interview <span className="sr-only">with {provider.provider}</span>
                   </Link>
                 </div>

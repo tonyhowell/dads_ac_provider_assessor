@@ -32,7 +32,7 @@ export function ProviderFormScreen() {
   if (id && !existing) {
     return (
       <section>
-        <h1 className="text-2xl font-semibold">Provider not found</h1>
+        <h1>Provider not found</h1>
         <Link to="/providers">Back to providers</Link>
       </section>
     );
@@ -96,7 +96,7 @@ export function ProviderFormScreen() {
       <Link to={existing ? `/providers/${existing.id}` : '/providers'} className="muted">
         ← {existing ? existing.provider : 'All providers'}
       </Link>
-      <h1 className="text-2xl font-semibold">{existing ? `Edit ${existing.provider}` : 'Add a provider'}</h1>
+      <h1>{existing ? `Edit ${existing.provider}` : 'Add a provider'}</h1>
 
       <form onSubmit={save} className="card space-y-4" noValidate>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -133,7 +133,7 @@ export function ProviderFormScreen() {
         </div>
 
         {errors.length > 0 && (
-          <ul role="alert" className="list-disc space-y-1 pl-5 text-sm text-red-700 dark:text-red-300">
+          <ul role="alert" className="list-disc space-y-1 pl-5 text-[var(--stop)]">
             {errors.map((e) => (
               <li key={e}>{e}</li>
             ))}
@@ -143,7 +143,7 @@ export function ProviderFormScreen() {
           <button type="submit" className="btn btn-primary">
             {existing ? 'Save changes' : 'Add provider'}
           </button>
-          <Link to={existing ? `/providers/${existing.id}` : '/providers'} className="btn no-underline hover:no-underline">
+          <Link to={existing ? `/providers/${existing.id}` : '/providers'} className="btn">
             Cancel
           </Link>
         </div>

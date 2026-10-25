@@ -160,6 +160,17 @@ Every screen works at 360 px width, uses semantic HTML with labelled controls an
 
 ---
 
+## UI redesign (UI-SPEC.md, PR #1): built
+
+- Implemented on 25 Oct 2026: the tokens, journey bar, help system, resolution cards, new inputs, chart restyle, print layouts, decision summary, welcome screens, family notes, display settings and axe tests.
+- State is now v5: interview responses carry `rating` (yes/partly/no) and `in_writing`, and screen notes were added. v4 state migrates automatically.
+- Not yet done:
+  - self-hosted Archivo/Newsreader fonts (needs a font package);
+  - drag-and-drop on the selection board (buttons only for now);
+  - the "Who's using this now?" wording switch;
+  - a desktop scoring matrix (one provider at a time for now).
+- Needs a person to check: the phone numbers in `data/help.json` (`verified_on` is empty) and the help copy against Australian Consumer Law wording.
+
 ## Phase 6 — Hardening (non-functional, SPEC §9)
 
 - Accessibility pass: axe in component tests, keyboard-only walkthrough, focus management in the accordion and drag-and-drop, chart has a text alternative (the table already gives one).

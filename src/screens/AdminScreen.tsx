@@ -56,14 +56,14 @@ export function AdminScreen() {
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Administration</h1>
+        <h1>Manage family access</h1>
         <p className="muted mt-1">
           Add family members, issue the one-time links they use to set up a passkey, and remove access when needed.
         </p>
       </div>
 
       {error && (
-        <p role="alert" className="card border-red-300 text-sm text-red-700 dark:border-red-800 dark:text-red-300">
+        <p role="alert" className="card tone-stop border-l-4">
           {error}
         </p>
       )}
@@ -78,7 +78,7 @@ export function AdminScreen() {
       />
 
       <section aria-labelledby="users-heading" className="space-y-3">
-        <h2 id="users-heading" className="text-lg font-semibold">
+        <h2 id="users-heading">
           People with access
         </h2>
         {!users ? (
@@ -127,7 +127,7 @@ function AddUserForm({ onCreated, onError }: { onCreated: (username: string, url
 
   return (
     <form onSubmit={submit} className="card space-y-3" aria-labelledby="add-heading">
-      <h2 id="add-heading" className="text-lg font-semibold">
+      <h2 id="add-heading">
         Add a person
       </h2>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -173,7 +173,7 @@ function AddUserForm({ onCreated, onError }: { onCreated: (username: string, url
 function EnrolmentLink({ username, url, onDismiss }: { username: string; url: string; onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div role="status" className="card space-y-2 border-teal-600">
+    <div role="status" className="card tone-info space-y-2 border-l-4">
       <p className="font-medium">Enrolment link for {username}</p>
       <p className="muted">
         Send this to them privately. It works once, expires in 24 hours, and won't be shown again (you can issue a new one).
@@ -240,7 +240,7 @@ function UserCard({
           </p>
         </div>
         {user.disabled && (
-          <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-900 dark:bg-red-900 dark:text-red-100">Disabled</span>
+          <span className="chip chip-stop">Disabled</span>
         )}
       </div>
 
@@ -295,7 +295,7 @@ function UserCard({
       </div>
 
       {open && passkeys && (
-        <ul className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+        <ul className="space-y-2 border-t border-[var(--rule)] pt-3">
           {passkeys.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm">

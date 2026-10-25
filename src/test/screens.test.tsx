@@ -10,57 +10,60 @@ afterEach(() => {
 });
 
 describe('Provider selection', () => {
+  const add = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    const card = screen.getByRole('heading', { name }).closest('li')!;
+    await user.click(within(card).getByRole('button', { name: /add to my list/i }));
+    return card;
+  };
+
   it('adds providers to the initial scan from the full list', async () => {
     const user = userEvent.setup();
     const { server } = await renderApp('/providers');
 
-    const card = screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!;
-    await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
-
-    expect(within(card).getByText('Stage 1: Initial scan')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Selection (1)' })).toBeInTheDocument();
+    const card = await add(user, 'Bolton Clarke');
+    expect(within(card).getByText('Step 1: Initial scan')).toBeInTheDocument();
+    expect(screen.getByText(/1 on your list/)).toBeInTheDocument();
     expect(server.state.selection).toMatchObject([{ provider_id: 'bolton-clarke', stage: 'scan' }]);
   });
 
   it('filters by search and by stage', async () => {
     const user = userEvent.setup();
     await renderApp('/providers');
-    await user.type(screen.getByLabelText('Search'), 'anglicare');
-    expect(screen.getByText(/1 of 7 providers/)).toBeInTheDocument();
-    await user.clear(screen.getByLabelText('Search'));
+    await user.type(screen.getByLabelText('Search by name'), 'anglicare');
+    expect(screen.getByText(/Showing 1 of 7 providers/)).toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Search by name'));
 
-    const card = screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!;
-    await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
-    await user.selectOptions(screen.getByLabelText('Stage'), 'Not selected');
-    expect(screen.getByText(/6 of 7 providers/)).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText('Stage'), 'Initial scan');
-    expect(screen.getByText(/1 of 7 providers/)).toBeInTheDocument();
+    await add(user, 'Bolton Clarke');
+    await user.selectOptions(screen.getByLabelText('Step'), 'Not on my list');
+    expect(screen.getByText(/Showing 6 of 7 providers/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Step'), 'Initial scan');
+    expect(screen.getByText(/Showing 1 of 7 providers/)).toBeInTheDocument();
   });
 
-  it('moves providers through scan → refinement → interview shortlist', async () => {
+  it('moves providers through scan → refinement → interview list, with undo', async () => {
     const user = userEvent.setup();
     const { server } = await renderApp('/providers');
-    for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)', 'Anglicare Southern Queensland']) {
-      const card = screen.getByRole('heading', { name }).closest('li')!;
-      await user.click(within(card).getByRole('button', { name: /add to initial scan/i }));
-    }
-    await user.click(screen.getByRole('link', { name: 'Selection (3)' }));
-    expect(screen.getByRole('link', { name: 'Stage 1: Initial scan, 3 providers' })).toHaveAttribute('aria-current', 'page');
+    for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)', 'Anglicare Southern Queensland']) await add(user, name);
+    await user.click(screen.getByRole('link', { name: 'Continue to choose who to meet' }));
+    expect(await screen.findByRole('link', { name: 'Step 1: Initial scan, 3 providers' })).toHaveAttribute('aria-current', 'page');
 
-    // Drop one at the scan stage, advance the other two.
-    await user.click(screen.getByRole('button', { name: 'Drop Anglicare Southern Queensland' }));
-    await user.click(screen.getByRole('button', { name: 'Advance to Refinement : Bolton Clarke' }));
-    await user.click(screen.getByRole('button', { name: 'Advance to Refinement : BlueCare (UnitingCare QLD)' }));
-    expect(screen.getByText('No providers at this stage.')).toBeInTheDocument();
+    // Drop one at the scan stage (and undo it once), move the other two on.
+    await user.click(screen.getByRole('button', { name: /Drop\s*Anglicare Southern Queensland/ }));
+    expect(server.state.selection).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: /Undo/ }));
+    expect(server.state.selection.map((e) => e.provider_id)).toEqual(['bolton-clarke', 'bluecare-unitingcare-qld', 'anglicare-southern-queensland']);
+    await user.click(screen.getByRole('button', { name: /Drop\s*Anglicare Southern Queensland/ }));
+    await user.click(screen.getByRole('button', { name: /Move to Refinement\s*: Bolton Clarke/ }));
+    await user.click(screen.getByRole('button', { name: /Move to Refinement\s*: BlueCare/ }));
+    expect(screen.getByRole('link', { name: 'Step 2: Refinement, 2 providers' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('link', { name: 'Stage 2: Refinement, 2 providers' }));
-    await user.type(screen.getByLabelText('Reason for keeping it', { selector: '#why-bolton-clarke' }), 'Published prices');
-    await user.click(screen.getByRole('button', { name: 'Advance to Interview shortlist : Bolton Clarke' }));
-    await user.click(screen.getByRole('button', { name: 'Advance to Interview shortlist : BlueCare (UnitingCare QLD)' }));
+    await user.type(screen.getByLabelText('Why keep them', { selector: '#why-bolton-clarke' }), 'Published prices');
+    await user.click(screen.getByRole('button', { name: /Move to Providers to interview\s*: Bolton Clarke/ }));
+    await user.click(screen.getByRole('button', { name: /Move to Providers to interview\s*: BlueCare/ }));
 
-    await user.click(screen.getByRole('link', { name: 'Stage 3: Interview shortlist, 2 providers' }));
-    await user.click(screen.getByRole('button', { name: 'Move up BlueCare (UnitingCare QLD)' }));
-    await user.type(screen.getByLabelText('Probe at interview', { selector: '#watch-bolton-clarke' }), 'Worker turnover');
+    await user.click(screen.getByRole('link', { name: 'Step 3: Providers to interview, 2 providers' }));
+    await user.click(screen.getByRole('button', { name: /Move up\s*BlueCare/ }));
+    await user.type(screen.getByLabelText('Watch for', { selector: '#watch-bolton-clarke' }), 'Worker turnover');
     await user.tab(); // notes save when the field loses focus
     await waitFor(() => expect(server.state.selection[1]?.watch).toBe('Worker turnover'));
 
@@ -71,13 +74,13 @@ describe('Provider selection', () => {
     ]);
     expect(saved.selection[1]).toMatchObject({ why: 'Published prices', watch: 'Worker turnover' });
 
-    await user.click(screen.getByRole('button', { name: 'Back to Refinement : Bolton Clarke' }));
+    await user.click(screen.getByRole('button', { name: /Back to Refinement\s*: Bolton Clarke/ }));
     expect(server.state.selection.find((e) => e.provider_id === 'bolton-clarke')!.stage).toBe('refine');
   });
 
   it('redirects the old shortlist URL to the interview stage', async () => {
     await renderApp('/shortlist');
-    expect(await screen.findByRole('link', { name: /Stage 3: Interview shortlist/ })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('link', { name: /Step 3: Providers to interview/ })).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -99,7 +102,7 @@ describe('Provider notes', () => {
     expect(screen.getByText(/edited/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Keep' }));
     expect(screen.getByText('Call back Wednesday')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Delete' }));
     await user.click(within(screen.getByRole('group', { name: 'Delete this note?' })).getByRole('button', { name: 'Delete' }));
@@ -133,10 +136,10 @@ describe('Interview capture', () => {
   it('falls back to a transcript-only interview when the browser cannot record', async () => {
     const user = userEvent.setup();
     const { server } = await renderApp('/interviews/new/bolton-clarke');
-    await user.click(screen.getByRole('button', { name: 'Add interview without recording' }));
+    await user.click(screen.getByRole('button', { name: 'Type notes instead' }));
 
-    expect(await screen.findByRole('heading', { name: /Interview: Bolton Clarke/ })).toBeInTheDocument();
-    expect(screen.getByText(/No live transcript was captured/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Check your interview with Bolton Clarke' })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing was captured automatically/)).toBeInTheDocument();
     expect(server.state.interviews[0]).toMatchObject({ provider_id: 'bolton-clarke', audio_id: null });
   });
 
@@ -150,12 +153,15 @@ describe('Interview capture', () => {
     });
 
     const { audio, server } = await renderApp('/interviews/new/bolton-clarke');
-    const startBtn = screen.getByRole('button', { name: 'Start recording' });
-    expect(startBtn).toBeDisabled();
-
-    await user.click(screen.getByLabelText(/has been told it is being recorded/));
+    const startBtn = screen.getByRole('button', { name: 'Record' });
     await user.click(startBtn);
-    expect(await screen.findByText('Recording')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent("We can't start recording without it");
+    expect(server.state.interviews).toHaveLength(0);
+
+    await user.click(screen.getByLabelText(/Everyone on this call has agreed to be recorded/));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(startBtn);
+    expect(await screen.findByText(/Recording — stored on this device only/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Pause' }));
     await user.click(screen.getByRole('button', { name: 'Resume' }));
@@ -202,7 +208,7 @@ describe('Interview review', () => {
 
     const draft = screen.getByRole('button', { name: 'Draft notes from transcript' });
     expect(draft).toBeDisabled();
-    await user.type(screen.getByLabelText('Transcript', { selector: 'textarea' }), 'We have a dedicated veterans program and charge travel separately.');
+    await user.type(screen.getByLabelText('What was said'), 'We have a dedicated veterans program and charge travel separately.');
     await user.click(draft);
 
     expect(await screen.findByText('They run a dedicated veterans program.')).toBeInTheDocument();
@@ -210,7 +216,7 @@ describe('Interview review', () => {
     const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(sent).toMatchObject({ provider_name: 'Bolton Clarke', transcript: expect.stringContaining('veterans program') });
 
-    await user.click(screen.getByRole('button', { name: 'Save to provider notes' }));
+    await user.click(screen.getByRole('button', { name: "Save to Bolton Clarke's notes" }));
     const saved = server.state;
     expect(saved.interviews[0].transcript).toContain('veterans program');
     expect(saved.notes[0]).toMatchObject({ provider_id: 'bolton-clarke', source: 'interview', interview_id: 'int-1' });
@@ -224,7 +230,7 @@ describe('Interview review', () => {
       vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Notes generation is not configured' }), { status: 503 })),
     );
     await renderApp('/interviews/int-1', { server: seededServer() });
-    await user.type(screen.getByLabelText('Transcript', { selector: 'textarea' }), 'A transcript long enough to send.');
+    await user.type(screen.getByLabelText('What was said'), 'A transcript long enough to send.');
     await user.click(screen.getByRole('button', { name: 'Draft notes from transcript' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Notes generation is not configured'));
   });

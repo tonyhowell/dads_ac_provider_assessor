@@ -3,7 +3,9 @@ import type {
   BenchmarkSchema,
   BoundingAnswerSchema,
   CustomQuestionSchema,
+  HelpDataSchema,
   InterviewResponseSchema,
+  ScreenNoteSchema,
   BoundingGroupSchema,
   CategorySchema,
   ContributionRateSchema,
@@ -50,3 +52,8 @@ export interface Budget {
 export type BoundingAnswer = z.infer<typeof BoundingAnswerSchema>;
 export type CustomQuestion = z.infer<typeof CustomQuestionSchema>;
 export type InterviewResponse = z.infer<typeof InterviewResponseSchema>;
+export type ScreenNote = z.infer<typeof ScreenNoteSchema>;
+
+export type HelpData = z.infer<typeof HelpDataSchema>;
+export type HelpTopic = HelpData['topics'][number];
+export type GlossaryTerm = HelpData['glossary'][number];

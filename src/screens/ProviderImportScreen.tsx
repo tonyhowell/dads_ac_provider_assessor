@@ -25,7 +25,7 @@ export function ProviderImportScreen() {
         ← All providers
       </Link>
       <div>
-        <h1 className="text-2xl font-semibold">Import providers from CSV</h1>
+        <h1>Import providers from CSV</h1>
         <p className="muted mt-1">
           Add providers or update prices in bulk, for example from a spreadsheet of My Aged Care listings. Rows that match an existing provider by name
           update it.
@@ -65,14 +65,14 @@ export function ProviderImportScreen() {
             <ul className="space-y-1 text-sm">
               {good.map((r) => (
                 <li key={r.line}>
-                  <span className="rounded bg-slate-100 px-1.5 text-xs dark:bg-slate-800">{r.updates ? 'Update' : 'New'}</span> {r.provider!.provider}
+                  <span className="chip chip-neutral">{r.updates ? 'Update' : 'New'}</span> {r.provider!.provider}
                   <span className="muted"> · {RATE_KEYS.filter((k) => r.provider![k] !== null).length} rates · prices as at {r.provider!.prices_as_at}</span>
                 </li>
               ))}
             </ul>
           )}
           {bad.length > 0 && (
-            <ul className="space-y-1 text-sm text-red-700 dark:text-red-300" aria-label="Rows that can't be imported">
+            <ul className="space-y-1 text-[var(--stop)]" aria-label="Rows that can't be imported">
               {bad.map((r) => (
                 <li key={r.line}>
                   Line {r.line}: {r.errors.join(' ')}

@@ -24,7 +24,6 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4",
-    "recharts": "^3.10.1",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
@@ -38,6 +37,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "axe-core": "^4.14.0",
     "concurrently": "^10.0.6",
     "fake-indexeddb": "^6.2.6",
     "jsdom": "^29.1.1",

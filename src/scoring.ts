@@ -54,7 +54,8 @@ export function rank<T extends { id: string }>(providers: T[], scores: Record<st
 
 /**
  * SPEC §7: a provider that fails to answer any "must" question in writing is flagged "disqualify?".
- * A must question counts as failed when it has no written response or the family marked the answer unsatisfactory.
+ * A must question counts as failed unless it has an answer, the family ticked "got it in writing",
+ * and the answer wasn't marked as not answered well.
  */
 export function failedMustQuestions(providerId: string, sections: InterviewSection[], responses: Record<string, InterviewResponse>): string[] {
   return sections
@@ -62,7 +63,7 @@ export function failedMustQuestions(providerId: string, sections: InterviewSecti
     .filter((q) => q.priority === 'must')
     .filter((q) => {
       const r = responses[responseKey(providerId, q.id)];
-      return !r || !r.text.trim() || r.satisfactory === false;
+      return !r || !r.text.trim() || !r.in_writing || r.rating === 'no';
     })
     .map((q) => q.id);
 }

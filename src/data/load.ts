@@ -7,6 +7,7 @@ import samplePlanJson from '../../data/sample_plan.json';
 import shortlistJson from '../../data/shortlist.json';
 import boundingJson from '../../data/bounding_questions.json';
 import interviewJson from '../../data/interview_questions.json';
+import helpJson from '../../data/help.json';
 import {
   BenchmarkSchema,
   BoundingGroupSchema,
@@ -15,6 +16,7 @@ import {
   InterviewSectionSchema,
   PlanItemSchema,
   CategorySchema,
+  HelpDataSchema,
   ProviderSeedSchema,
   RATE_KEYS,
   ShortlistSeedSchema,
@@ -26,6 +28,7 @@ import type {
   BoundingGroup,
   Budget,
   ContributionRate,
+  HelpData,
   InterviewSection,
   PlanItem,
   Provider,
@@ -41,6 +44,7 @@ export interface SeedData {
   shortlist: ShortlistSeed[];
   boundingGroups: BoundingGroup[];
   interviewSections: InterviewSection[];
+  help: HelpData;
 }
 
 export class SeedDataError extends Error {
@@ -112,6 +116,7 @@ export function parseSeedData(raw: Record<string, unknown>): SeedData {
     shortlist: parse('shortlist.json', z.array(ShortlistSeedSchema), raw.shortlist),
     boundingGroups: parse('bounding_questions.json', z.array(BoundingGroupSchema), raw.boundingGroups),
     interviewSections: parse('interview_questions.json', z.array(InterviewSectionSchema), raw.interviewSections),
+    help: raw.help === undefined ? { topics: [], glossary: [], fields: [], contacts: [] } : parse('help.json', HelpDataSchema, raw.help),
   };
 }
 
@@ -125,6 +130,7 @@ export function loadSeedData(): SeedData {
     shortlist: shortlistJson,
     boundingGroups: boundingJson,
     interviewSections: interviewJson,
+    help: helpJson,
   });
 }
 

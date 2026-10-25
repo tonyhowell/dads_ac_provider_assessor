@@ -15,6 +15,9 @@ interface AppContextValue {
   audio: AudioStore;
   /** Last save error, shown in a banner until the next successful save. */
   syncError: string | null;
+  /** Save state for the "Saved" indicator. */
+  saving: boolean;
+  savedAt: Date | null;
   /** Seed providers with the family's edits, plus providers they added. Use this, not seed.providers. */
   providers: Provider[];
   /** The family's plan, or the sample plan until they edit it. */
@@ -34,6 +37,8 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
   const [state, setState] = useState<AppState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const version = useRef(-1);
   const pending = useRef(0);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -69,17 +74,22 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
     (action: Action) => {
       setState((s) => (s ? reducer(s, action) : s));
       pending.current += 1;
+      setSaving(true);
       queue.current = queue.current.then(async () => {
         try {
           const result = await sync.send(action);
           pending.current -= 1;
+          if (pending.current === 0) setSaving(false);
           setSyncError(null);
+          setSavedAt(new Date());
+          if (pending.current === 0) setSaving(false);
           if (pending.current === 0) {
             version.current = result.version;
             setState(result.state);
           }
         } catch (err) {
           pending.current -= 1;
+          if (pending.current === 0) setSaving(false);
           setSyncError(`Your last change wasn't saved: ${err instanceof Error ? err.message : 'unknown error'}`);
           version.current = -1;
           await refresh();
@@ -98,12 +108,14 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
             dispatch,
             audio,
             syncError,
+            saving,
+            savedAt,
             providers: effectiveProviders(seed.providers, state.providerEdits),
             plan: state.plan ?? seed.samplePlan,
             serviceDate: state.serviceDate ?? toIsoDate(new Date()),
           }
         : null,
-    [seed, state, dispatch, audio, syncError],
+    [seed, state, dispatch, audio, syncError, saving, savedAt],
   );
 
   if (!value) {

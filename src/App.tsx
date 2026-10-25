@@ -9,6 +9,7 @@ import { BoundingScreen } from './screens/BoundingScreen';
 import { InterviewPackScreen } from './screens/InterviewPackScreen';
 import { ScoringScreen } from './screens/ScoringScreen';
 import { PrintPackScreen } from './screens/PrintPackScreen';
+import { SummaryScreen } from './screens/SummaryScreen';
 import { ProvidersScreen } from './screens/ProvidersScreen';
 import { ProviderDetailScreen } from './screens/ProviderDetailScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
@@ -20,6 +21,8 @@ import { EnrolScreen } from './screens/EnrolScreen';
 import { AdminScreen } from './screens/AdminScreen';
 import { useAuth } from './auth/AuthContext';
 import { AppProvider } from './state/AppContext';
+import { HelpProvider } from './components/ui/HelpPanel';
+import { AboutScreen } from './screens/AboutScreen';
 import type { SeedData } from './data/load';
 import type { StateSync } from './state/sync';
 import type { AudioStore } from './storage/audioStore';
@@ -34,7 +37,9 @@ export function App({ seed, sync, audio }: { seed: SeedData; sync: StateSync; au
         element={
           user ? (
             <AppProvider key={user.id} seed={seed} sync={sync} audio={audio}>
-              <SignedInRoutes isAdmin={user.role === 'admin'} />
+              <HelpProvider help={seed.help}>
+                <SignedInRoutes isAdmin={user.role === 'admin'} />
+              </HelpProvider>
             </AppProvider>
           ) : (
             <SignInScreen />
@@ -67,6 +72,8 @@ function SignedInRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="interviews/new/:providerId" element={<InterviewCaptureScreen />} />
         <Route path="interviews/:id" element={<InterviewReviewScreen />} />
         <Route path="scoring" element={<ScoringScreen />} />
+        <Route path="summary" element={<SummaryScreen />} />
+        <Route path="about" element={<AboutScreen />} />
         {isAdmin && <Route path="admin" element={<AdminScreen />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

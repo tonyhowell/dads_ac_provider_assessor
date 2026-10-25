@@ -26,6 +26,8 @@ export function stampAction(action: Action, user: User, now: Date): Action {
   switch (action.type) {
     case 'note/add':
       return { ...action, note: { ...action.note, created_at: at, author: user.display_name } };
+    case 'screenNote/add':
+      return { ...action, note: { ...action.note, created_at: at, author: user.display_name } };
     case 'note/edit':
     case 'selection/add':
     case 'selection/stage':

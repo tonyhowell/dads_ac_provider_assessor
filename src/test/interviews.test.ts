@@ -57,6 +57,6 @@ describe('requestInterviewNotes', () => {
 
   it('explains a network failure', async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-    await expect(requestInterviewNotes(body, fetchImpl)).rejects.toThrow(/local app server/);
+    await expect(requestInterviewNotes(body, fetchImpl)).rejects.toThrow(/couldn't reach the server/);
   });
 });

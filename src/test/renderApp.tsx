@@ -51,8 +51,13 @@ export async function renderApp(
     audio = memoryAudioStore(),
     user = testUser,
     waitForNav = true,
-  }: { seed?: SeedData; server?: MemoryServer; audio?: AudioStore; user?: SessionUser | null; waitForNav?: boolean } = {},
+    firstRun = false,
+  }: { seed?: SeedData; server?: MemoryServer; audio?: AudioStore; user?: SessionUser | null; waitForNav?: boolean; firstRun?: boolean } = {},
 ) {
+  // Skip the one-time welcome screen unless a test is about it.
+  if (!firstRun) localStorage.setItem('sah-assessor:welcomed', '1');
+  // Don't show "Welcome back" in tests.
+  sessionStorage.setItem('sah-assessor:return-shown', '1');
   const result = {
     server,
     audio,
@@ -64,7 +69,7 @@ export async function renderApp(
       </MemoryRouter>,
     ),
   };
-  if (user && waitForNav) await screen.findByRole('navigation', { name: 'Main' });
+  if (user && waitForNav) await screen.findByRole('navigation', { name: 'Steps' });
   else if (user) await screen.findByRole('heading', { level: 1 });
   return result;
 }

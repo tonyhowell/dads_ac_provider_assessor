@@ -70,9 +70,11 @@ describe('scoring (SPEC §7)', () => {
   it('flags providers that leave a must question unanswered or unsatisfactory', () => {
     const musts = seed.interviewSections.flatMap((s) => s.questions).filter((q) => q.priority === 'must').map((q) => q.id);
     expect(failedMustQuestions('a', seed.interviewSections, {})).toEqual(musts);
-    const allAnswered = Object.fromEntries(musts.map((id) => [`a::${id}`, { text: 'Answered in writing', satisfactory: true }]));
+    const allAnswered = Object.fromEntries(musts.map((id) => [`a::${id}`, { text: 'Answered in writing', rating: 'yes' as const, in_writing: true }]));
     expect(failedMustQuestions('a', seed.interviewSections, allAnswered)).toEqual([]);
-    expect(failedMustQuestions('a', seed.interviewSections, { ...allAnswered, 'a::G2': { text: 'Travel is extra', satisfactory: false } })).toEqual(['G2']);
+    expect(failedMustQuestions('a', seed.interviewSections, { ...allAnswered, 'a::G2': { text: 'Travel is extra', rating: 'no', in_writing: true } })).toEqual(['G2']);
+    expect(failedMustQuestions('a', seed.interviewSections, { ...allAnswered, 'a::G2': { text: 'Said no travel fees', rating: 'yes', in_writing: false } })).toEqual(['G2']);
+    expect(failedMustQuestions('a', seed.interviewSections, { ...allAnswered, 'a::G2': { text: 'Mostly', rating: 'partly', in_writing: true } })).toEqual([]);
   });
 
   it('suggests a price score from the plan cost against the benchmark', () => {

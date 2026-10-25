@@ -64,23 +64,23 @@ export function EnrolScreen() {
           <p>
             Welcome, <strong>{info.display_name}</strong>. Your username is <strong>{info.username}</strong>.
           </p>
-          <p className="muted">
+          <p>
             A passkey lets you sign in with your fingerprint, face or device PIN. There's no password to remember. This link works once
             and expires {formatDateTime(info.expires_at)}.
           </p>
           <div>
-            <label htmlFor="nickname" className="muted block">
+            <label htmlFor="nickname" className="label">
               Name this device (optional)
             </label>
             <input id="nickname" className="input" placeholder="e.g. Tony's iPhone" value={nickname} onChange={(e) => setNickname(e.target.value)} />
           </div>
-          <button type="submit" className="btn btn-primary w-full justify-center" disabled={busy}>
+          <button type="submit" className="btn btn-primary w-full" disabled={busy}>
             {busy ? 'Waiting for your device…' : 'Create passkey'}
           </button>
         </form>
       )}
       {error && (
-        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">
+        <p role="alert" className="field-error mt-3">
           {error}
         </p>
       )}

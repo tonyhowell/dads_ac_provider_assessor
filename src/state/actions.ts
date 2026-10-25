@@ -8,6 +8,8 @@ import {
   PlanItemSchema,
   ProviderNoteSchema,
   ProviderSchema,
+  ScreenNoteSchema,
+  SelectionEntrySchema,
   SelectionStageSchema,
 } from '../schemas';
 import { CRITERION_IDS } from '../scoring';
@@ -25,6 +27,8 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('note/delete'), id }),
   z.object({ type: z.literal('selection/add'), providerId: id, at }),
   z.object({ type: z.literal('selection/remove'), providerId: id }),
+  /** Undo of a drop: puts the entry back at its old position. */
+  z.object({ type: z.literal('selection/restore'), entry: SelectionEntrySchema, index: z.number().int().min(0).max(10_000) }),
   z.object({ type: z.literal('selection/stage'), providerId: id, stage: SelectionStageSchema, at }),
   z.object({ type: z.literal('selection/move'), providerId: id, toIndex: z.number().int().min(0).max(10_000) }),
   z.object({ type: z.literal('selection/update'), providerId: id, why: text.optional(), watch: text.optional() }),
@@ -40,7 +44,17 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bounding/answer'), questionId: id, answer: BoundingAnswerSchema }),
   z.object({ type: z.literal('question/add'), question: CustomQuestionSchema }),
   z.object({ type: z.literal('question/delete'), id }),
-  z.object({ type: z.literal('response/set'), providerId: id, questionId: id, text: text.optional(), satisfactory: z.boolean().nullable().optional() }),
+  z.object({
+    type: z.literal('response/set'),
+    providerId: id,
+    questionId: id,
+    text: text.optional(),
+    rating: z.enum(['yes', 'partly', 'no']).nullable().optional(),
+    in_writing: z.boolean().optional(),
+  }),
+  z.object({ type: z.literal('screenNote/add'), note: ScreenNoteSchema }),
+  z.object({ type: z.literal('screenNote/done'), id, done: z.boolean() }),
+  z.object({ type: z.literal('screenNote/delete'), id }),
   z.object({ type: z.literal('score/set'), providerId: id, criterion: z.enum(CRITERION_IDS), score: z.number().int().min(1).max(5).nullable() }),
   z.object({ type: z.literal('weight/set'), criterion: z.enum(CRITERION_IDS), weight: z.number().min(0).max(10) }),
   z.object({ type: z.literal('decision/set'), text }),

@@ -5,6 +5,8 @@ import { newId } from '../state/reducer';
 import { recorderSupport, useRecorder, type RecordingResult } from '../components/useRecorder';
 import { formatDuration } from '../format';
 import type { Interview } from '../types';
+import { ResolutionCard, ScreenHeader } from '../components/ui/Cards';
+import { Icon } from '../components/ui/Icon';
 
 export function InterviewCaptureScreen() {
   const { providerId } = useParams();
@@ -14,6 +16,7 @@ export function InterviewCaptureScreen() {
   const support = recorderSupport();
 
   const [consent, setConsent] = useState(false);
+  const [needConsent, setNeedConsent] = useState(false);
   const [interviewer, setInterviewer] = useState('');
   const [liveTranscription, setLiveTranscription] = useState(support.transcription);
   const [startedAt, setStartedAt] = useState<string | null>(null);
@@ -22,10 +25,7 @@ export function InterviewCaptureScreen() {
 
   if (!provider) {
     return (
-      <section>
-        <h1 className="text-2xl font-semibold">Provider not found</h1>
-        <Link to="/interviews">Back to interviews</Link>
-      </section>
+      <ResolutionCard status="caution" title="We couldn't find that provider" actions={<Link to="/interviews" className="btn btn-primary">Back to interviews</Link>} />
     );
   }
 
@@ -38,7 +38,7 @@ export function InterviewCaptureScreen() {
         await audio.put(audioId, result.blob);
       } catch {
         audioId = null;
-        setSaveError('The recording could not be saved on this device (storage may be full). The transcript was kept.');
+        setSaveError("The recording couldn't be saved on this device (storage may be full). The transcript was kept.");
       }
     }
     const interview: Interview = {
@@ -59,87 +59,90 @@ export function InterviewCaptureScreen() {
   };
 
   const start = async () => {
+    if (!consent) {
+      setNeedConsent(true);
+      return;
+    }
     setStartedAt(new Date().toISOString());
     await rec.start();
   };
-
-  const stop = async () => {
-    const result = await rec.stop();
-    await saveInterview(result, startedAt ?? new Date().toISOString());
-  };
-
+  const stop = async () => saveInterview(await rec.stop(), startedAt ?? new Date().toISOString());
   const active = rec.status === 'recording' || rec.status === 'paused';
 
   return (
-    <section className="space-y-4">
-      <Link to="/interviews" className="muted">
-        ← All interviews
-      </Link>
-      <h1 className="text-2xl font-semibold">Interview: {provider.provider}</h1>
+    <section className="space-y-6">
+      <ScreenHeader title={`Record your interview with ${provider.provider}`} purpose="Record or note an interview, then turn it into notes you can check and keep." helpTopic="interviews" />
+
+      {rec.status === 'recording' && (
+        <div role="status" className="card tone-stop sticky top-2 z-10 flex items-center gap-3 border-l-4 font-semibold">
+          <span className="h-3 w-3 rounded-full bg-[var(--stop)]" aria-hidden /> Recording — stored on this device only
+        </div>
+      )}
 
       {!support.recording ? (
-        <div className="card space-y-3">
-          <p>This browser can't record audio. You can still type or paste notes or a transcript from another recorder.</p>
-          <button type="button" className="btn btn-primary" onClick={() => saveInterview(null, new Date().toISOString())}>
-            Add interview without recording
-          </button>
-        </div>
+        <ResolutionCard
+          status="info"
+          title="This browser can't record audio"
+          actions={
+            <button type="button" className="btn btn-primary" onClick={() => saveInterview(null, new Date().toISOString())}>
+              Type notes instead
+            </button>
+          }
+        >
+          <p>You can still type notes, or paste a transcript from another recorder.</p>
+        </ResolutionCard>
       ) : (
         <>
-          <fieldset className="card space-y-3" disabled={active}>
+          <fieldset className="card space-y-4" disabled={active}>
             <legend className="sr-only">Before you start</legend>
-            <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+            <h2>Before you start</h2>
+            <label className={`flex min-h-[var(--target-min)] items-start gap-3 rounded-[var(--radius-control)] border p-3 ${consent ? 'border-2 border-[var(--charcoal)] bg-[var(--amber-tint)]' : 'border-[var(--line)]'}`}>
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={consent}
+                onChange={(e) => {
+                  setConsent(e.target.checked);
+                  setNeedConsent(false);
+                }}
+              />
               <span>
-                Everyone in the interview has been told it is being recorded and has agreed.
-                <span className="muted block">Ask at the start, and keep their agreement on the recording.</span>
+                <span className="block font-medium">Everyone on this call has agreed to be recorded</span>
+                <span className="block">Ask at the start, so their agreement is on the recording.</span>
               </span>
             </label>
+            {needConsent && (
+              <p role="alert" className="field-error">
+                <Icon name="octagon" size={20} /> Tick the box above once everyone has agreed. We can't start recording without it.
+              </p>
+            )}
             <div>
-              <label htmlFor="interviewer" className="muted block">
-                Interviewed by (optional)
+              <label htmlFor="interviewer" className="label">
+                Who's doing the interview (optional)
               </label>
-              <input id="interviewer" className="input max-w-sm" value={interviewer} onChange={(e) => setInterviewer(e.target.value)} />
+              <input id="interviewer" className="input max-w-md" value={interviewer} onChange={(e) => setInterviewer(e.target.value)} />
             </div>
             {support.transcription ? (
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={liveTranscription}
-                  onChange={(e) => setLiveTranscription(e.target.checked)}
-                />
+              <label className="flex min-h-[var(--target-min)] items-start gap-3">
+                <input type="checkbox" className="mt-0.5" checked={liveTranscription} onChange={(e) => setLiveTranscription(e.target.checked)} />
                 <span>
-                  Transcribe live
-                  <span className="muted block">
-                    Uses your browser's speech recognition, which may send audio to the browser maker (for example Google or Apple) to
-                    convert it to text. Turn this off to keep audio on this device; you can type or paste a transcript later.
-                  </span>
+                  <span className="block font-medium">Turn speech into text as we go</span>
+                  <span className="block">Your browser's speech service turns speech into text. On some browsers this sends audio to Google or Apple. Turn it off to keep audio on this device; you can type the notes afterwards.</span>
                 </span>
               </label>
             ) : (
-              <p className="muted">
-                Live transcription isn't available in this browser. The audio will still be recorded; add a transcript afterwards.
-              </p>
+              <p>This browser can't turn speech into text. The audio is still recorded; add notes afterwards.</p>
             )}
           </fieldset>
 
-          <div className="card space-y-3">
+          <section className="card space-y-4" aria-label="Recorder">
+            <p className="figure" aria-label={`Recording time ${formatDuration(rec.elapsed)}`}>
+              {formatDuration(rec.elapsed)}
+            </p>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="font-mono text-2xl tabular-nums" aria-label="Recording time">
-                {formatDuration(rec.elapsed)}
-              </p>
-              {rec.status === 'recording' && (
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-red-700 dark:text-red-300">
-                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" aria-hidden /> Recording
-                </span>
-              )}
-              {rec.status === 'paused' && <span className="text-sm font-medium">Paused</span>}
-            </div>
-            <div className="flex flex-wrap gap-2">
               {!active && (
-                <button type="button" className="btn btn-primary" onClick={start} disabled={!consent || rec.status === 'stopped'}>
-                  Start recording
+                <button type="button" onClick={start} disabled={rec.status === 'stopped'} className="btn h-[72px] min-w-[72px] gap-3 rounded-full px-6 text-lg">
+                  <span className="h-5 w-5 rounded-full bg-[var(--stop)]" aria-hidden /> Record
                 </button>
               )}
               {rec.status === 'recording' && (
@@ -153,33 +156,33 @@ export function InterviewCaptureScreen() {
                 </button>
               )}
               {active && (
-                <button type="button" className="btn btn-danger" onClick={stop}>
+                <button type="button" className="btn btn-primary" onClick={stop}>
                   Stop and save
                 </button>
               )}
+              {rec.status === 'paused' && <span className="font-semibold">Paused</span>}
             </div>
-            {!consent && !active && <p className="muted">Confirm consent to start recording.</p>}
+            {!active && (
+              <button type="button" className="btn-quiet" onClick={() => saveInterview(null, new Date().toISOString())}>
+                Type notes instead of recording
+              </button>
+            )}
             {rec.error && (
-              <p role="alert" className="text-sm text-red-700 dark:text-red-300">
-                {rec.error}
-              </p>
+              <ResolutionCard status="stop" title="We can't reach your microphone" role="alert" actions={<button type="button" className="btn" onClick={() => saveInterview(null, new Date().toISOString())}>Type notes instead</button>}>
+                <p>{rec.error}</p>
+                <p>To allow it: click the padlock or settings icon next to the web address, find Microphone, and choose Allow. Then reload the page.</p>
+              </ResolutionCard>
             )}
-            {saveError && (
-              <p role="alert" className="text-sm text-red-700 dark:text-red-300">
-                {saveError}
-              </p>
-            )}
-          </div>
+            {saveError && <ResolutionCard status="caution" title="Recording not kept" role="alert"><p>{saveError}</p></ResolutionCard>}
+          </section>
 
           {liveTranscription && support.transcription && active && (
-            <section aria-labelledby="live-heading" className="card">
-              <h2 id="live-heading" className="font-semibold">
-                Live transcript
-              </h2>
-              <p className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap" aria-live="off">
+            <section aria-labelledby="live-heading" className="card space-y-2">
+              <h2 id="live-heading">What we've heard so far</h2>
+              <p className="max-h-80 overflow-y-auto whitespace-pre-wrap" aria-live="off">
                 {rec.transcript}
-                <span className="text-slate-500">{rec.interimText}</span>
-                {!rec.transcript && !rec.interimText && <span className="muted">Listening…</span>}
+                <span className="text-[var(--grey)]">{rec.interimText}</span>
+                {!rec.transcript && !rec.interimText && 'Listening…'}
               </p>
             </section>
           )}

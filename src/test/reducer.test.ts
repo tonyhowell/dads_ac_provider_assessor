@@ -41,7 +41,7 @@ describe('migrate', () => {
     });
   });
 
-  it('remaps placeholder provider ids and adds the v4 fields when upgrading v2 state', () => {
+  it('remaps placeholder provider ids and adds the v4/v5 fields when upgrading v2 state', () => {
     const v2 = {
       version: 2,
       notes: [{ id: 'n1', provider_id: 'anglicare-sq', text: 'x', created_at: AT, source: 'manual' }],
@@ -49,11 +49,21 @@ describe('migrate', () => {
       interviews: [{ ...{ id: 'i', started_at: AT, duration_seconds: 0, consent_confirmed: true, interviewer: '', audio_id: null, audio_mime: null, transcript: '', notes: null, notes_generated_at: null }, provider_id: 'right-at-home-bayside-south' }],
     };
     const v3 = migrate(v2)!;
-    expect(v3.version).toBe(4);
+    expect(v3.version).toBe(5);
+    expect(v3.screenNotes).toEqual([]);
     expect(v3.answers).toEqual({});
     expect(v3.notes[0].provider_id).toBe('anglicare-southern-queensland');
     expect(v3.selection[0].provider_id).toBe('bluecare-unitingcare-qld');
     expect(v3.interviews[0].provider_id).toBe('right-at-home-brisbane-bayside-south');
+  });
+
+  it('turns v4 satisfactory flags into ratings when upgrading to v5', () => {
+    const v4 = { ...emptyState(), version: 4, screenNotes: undefined, responses: { 'a::A1': { text: 'Yes, in writing', satisfactory: true }, 'a::A2': { text: '', satisfactory: false } } };
+    const v5 = migrate(v4)!;
+    expect(v5.version).toBe(5);
+    expect(v5.screenNotes).toEqual([]);
+    expect(v5.responses['a::A1']).toEqual({ text: 'Yes, in writing', rating: 'yes', in_writing: true });
+    expect(v5.responses['a::A2']).toEqual({ text: '', rating: 'no', in_writing: false });
   });
 
   it('keeps current state and ignores anything unknown', () => {
@@ -183,8 +193,10 @@ describe('assessment state (v4)', () => {
     let s = reducer(base(), { type: 'bounding/answer', questionId: 'B1.1', answer: { answer: 'Yes, classification 5', not_relevant: false } });
     s = reducer(s, { type: 'question/add', question: { id: 'cq1', section: 'C', text: 'Can we meet the workers first?' } });
     s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', text: 'Yes' });
-    s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', satisfactory: true });
-    expect(s.responses['a::cq1']).toEqual({ text: 'Yes', satisfactory: true });
+    s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', rating: 'yes', in_writing: true });
+    expect(s.responses['a::cq1']).toEqual({ text: 'Yes', rating: 'yes', in_writing: true });
+    s = reducer(s, { type: 'response/set', providerId: 'a', questionId: 'cq1', rating: null });
+    expect(s.responses['a::cq1'].rating).toBeNull();
     expect(s.answers['B1.1'].answer).toBe('Yes, classification 5');
     s = reducer(s, { type: 'question/delete', id: 'cq1' });
     expect(s.customQuestions).toEqual([]);

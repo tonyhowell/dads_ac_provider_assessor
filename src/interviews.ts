@@ -9,16 +9,18 @@ export interface NotesRequestBody {
 }
 
 /** Calls the local API server, which holds the Claude API key. */
-export async function requestInterviewNotes(body: NotesRequestBody, fetchImpl: typeof fetch = fetch): Promise<InterviewNotes> {
+export async function requestInterviewNotes(body: NotesRequestBody, fetchImpl: typeof fetch = fetch, signal?: AbortSignal): Promise<InterviewNotes> {
   let res: Response;
   try {
     res = await fetchImpl('/api/interview-notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
-  } catch {
-    throw new Error('Could not reach the local app server. Is `npm run dev` running?');
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    throw new Error("We couldn't reach the server. Check your internet connection.");
   }
   const json = (await res.json().catch(() => ({}))) as { notes?: unknown; error?: string };
   if (!res.ok) throw new Error(json.error ?? `Notes request failed (${res.status}).`);

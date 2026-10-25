@@ -1,88 +1,352 @@
 @import 'tailwindcss';
+@import '../design/tokens.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Header and chart tokens the spec names but tokens.css leaves to the app (UI-SPEC §2.3, §6.7). */
+:root {
+  --header-bg: #2e3236;
+  --on-dark: #f4f1ea;
+  --on-dark-quiet: rgba(244, 241, 234, 0.35);
+  --chart-bar: var(--charcoal);
+  --chart-benchmark: var(--grey);
+  --chart-grid: var(--rule);
+}
+.dark {
+  --header-bg: #17191c;
+}
+.hc {
+  --header-bg: #000000;
+}
+
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  /* Fieldsets default to min-content width, which pushes long choice labels past a phone screen. */
+  fieldset {
+    min-width: 0;
+  }
   body {
-    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    background: var(--paper);
+    color: var(--charcoal);
+    font-family: var(--font-ui);
+    line-height: var(--leading-ui);
+    font-size: 1rem;
+  }
+  h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  p,
+  li,
+  dd {
+    max-width: var(--measure);
   }
   a {
-    @apply text-teal-700 underline-offset-2 hover:underline dark:text-teal-300;
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
   }
+  a:hover {
+    text-decoration-thickness: 2px;
+  }
+  /* Amber outer ring + charcoal inner ring: amber alone is 1.91:1 on paper (UI-SPEC §2.1). */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-teal-600;
+    outline: 3px solid var(--amber);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--charcoal);
+    border-radius: 4px;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 1.4rem;
+    height: 1.4rem;
+    accent-color: var(--charcoal);
+    flex-shrink: 0;
+  }
+  ::placeholder {
+    color: var(--grey);
+    opacity: 1;
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  .hc a {
+    text-decoration-thickness: 2px;
+  }
+  html[data-motion='reduce'] *,
+  html[data-motion='reduce'] *::before,
+  html[data-motion='reduce'] *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+  html[data-hints='off'] .hint {
+    display: none;
   }
 }
 
 @layer components {
+  /* Buttons (UI-SPEC §6.1). Secondary by default; one .btn-primary per screen. */
   .btn {
-    @apply inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: var(--target-min);
+    padding: 0.5rem 1.1rem;
+    border-radius: var(--radius-control);
+    border: var(--border-control) solid var(--line);
+    background: var(--surface);
+    color: var(--charcoal);
+    font: inherit;
+    font-weight: 500;
+    line-height: 1.25;
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color var(--duration) var(--ease);
+  }
+  .btn:hover {
+    background: var(--sunken);
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
   .btn-primary {
-    @apply border-teal-700 bg-teal-700 text-white hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-600 dark:hover:bg-teal-500;
+    background: var(--amber);
+    border-color: var(--amber);
+    color: var(--on-amber);
+  }
+  .btn-primary:hover {
+    background: var(--amber-press);
+    border-color: var(--amber-press);
+  }
+  .btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: var(--target-min);
+    padding: 0 0.25rem;
+    background: none;
+    border: 0;
+    color: var(--charcoal);
+    font: inherit;
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .btn-quiet:hover {
+    text-decoration-thickness: 2px;
   }
   .btn-danger {
-    @apply border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950;
+    border-color: var(--stop);
+    color: var(--stop);
+  }
+  .btn-sm {
+    min-height: 40px;
+    padding: 0.25rem 0.75rem;
+  }
+  /* Selected toggle (provider switcher, segmented choices) */
+  .btn[aria-pressed='true'],
+  .btn-selected {
+    border: 2px solid var(--charcoal);
+    background: var(--amber-tint);
   }
   .card {
-    @apply rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-panel);
+    padding: var(--s3);
   }
+  .hc .card {
+    border: 2px solid var(--charcoal);
+  }
+  .well {
+    background: var(--sunken);
+    border-radius: var(--radius-control);
+    padding: var(--s2);
+  }
+
+  /* Inputs (UI-SPEC §6.2) */
   .input {
-    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800;
+    display: block;
+    width: 100%;
+    min-height: var(--control-height);
+    padding: 0.6rem 0.85rem;
+    border: var(--border-control) solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+    color: var(--charcoal);
+    font: inherit;
   }
+  textarea.input {
+    min-height: 6rem;
+    line-height: var(--leading-ui);
+  }
+  .input:focus-visible {
+    border-width: 2px;
+    border-color: var(--charcoal);
+  }
+  .input[aria-invalid='true'] {
+    border-width: 2px;
+    border-color: var(--stop);
+  }
+  .label {
+    display: block;
+    font-weight: 500;
+  }
+  /* Hint text sits between label and control, at full contrast (UI-SPEC §5.1). */
+  .hint {
+    display: block;
+    color: var(--charcoal);
+    font-weight: 400;
+    margin-top: 0.15rem;
+    margin-bottom: 0.35rem;
+  }
+  .field-error {
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-start;
+    color: var(--stop);
+    margin-top: 0.35rem;
+  }
+
+  /* Secondary text: timestamps, "as at", sources. Never instructions (UI-SPEC §2.2). */
   .muted {
-    @apply text-sm text-slate-600 dark:text-slate-400;
+    color: var(--grey);
+    font-size: 0.875rem;
   }
-}
+  .small {
+    font-size: 0.875rem;
+  }
+  .figure {
+    font-size: 2.25rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
 
-/* Chart colours. Single-series bars use the accent; over-budget uses the warning status colour (always with a text label). */
-:root {
-  --chart-bar: #0f766e;
-  --chart-benchmark: #94a3b8;
-  --chart-over: #c2410c;
-  --chart-line: #334155;
-  --chart-grid: #e2e8f0;
-}
-.dark {
-  --chart-bar: #2dd4bf;
-  --chart-benchmark: #64748b;
-  --chart-over: #fb923c;
-  --chart-line: #cbd5e1;
-  --chart-grid: #1e293b;
-}
+  /* Status chips and notes: always icon + word + colour (UI-SPEC §3.1). */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 500;
+  }
+  .status-good {
+    color: var(--good);
+  }
+  .status-caution {
+    color: var(--caution);
+  }
+  .status-stop {
+    color: var(--stop);
+  }
+  .status-info {
+    color: var(--info);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    max-width: 100%;
+  }
+  .chip-good {
+    background: var(--good-tint);
+    color: var(--good);
+  }
+  .chip-caution {
+    background: var(--caution-tint);
+    color: var(--caution);
+  }
+  .chip-stop {
+    background: var(--stop-tint);
+    color: var(--stop);
+  }
+  .chip-info {
+    background: var(--info-tint);
+    color: var(--info);
+  }
+  .chip-neutral {
+    background: var(--sunken);
+    color: var(--charcoal);
+  }
+  .chip-outline {
+    border-color: var(--charcoal);
+    color: var(--charcoal);
+  }
+  .tone-good {
+    background: var(--good-tint);
+    border-color: var(--good);
+  }
+  .tone-caution {
+    background: var(--caution-tint);
+    border-color: var(--caution);
+  }
+  .tone-stop {
+    background: var(--stop-tint);
+    border-color: var(--stop);
+  }
+  .tone-info {
+    background: var(--info-tint);
+    border-color: var(--info);
+  }
 
-/* Printable interview pack */
-@media print {
-  @page {
-    size: A4 landscape;
-    margin: 12mm 10mm 16mm;
+  /* Tables (UI-SPEC §6.8) */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
   }
-  html,
-  body {
-    background: white !important;
-    color: black !important;
+  .data-table th,
+  .data-table td {
+    padding: 0.7rem 0.6rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
   }
-  .no-print {
-    display: none !important;
+  .data-table thead th {
+    background: var(--sunken);
+    font-weight: 600;
+    text-align: left;
   }
-  .print-pack {
-    max-width: none;
+  .data-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Glossary term (UI-SPEC §5.4) */
+  .term {
+    background: none;
+    border: 0;
     padding: 0;
-  }
-  .print-table thead {
-    display: table-header-group;
-  }
-  .print-table tr {
-    break-inside: avoid;
-  }
-  /* Repeated on every printed page. */
-  .print-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    margin: 0;
-    background: white;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline dotted;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+    cursor: help;
   }
 }
 
@@ -90,4 +354,135 @@
    placed relative to the page and widen it at phone width, so make scrollers their containing block. */
 .overflow-x-auto {
   position: relative;
+}
+
+/* Hatched fill for over-budget bars (UI-SPEC §6.7): colour and pattern, never colour alone. */
+.hatch-stop {
+  fill: url(#hatch-stop);
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 18mm;
+    @bottom-right {
+      content: 'Page ' counter(page) ' of ' counter(pages);
+      font-family: Arial, sans-serif;
+      font-size: 9pt;
+    }
+  }
+  html,
+  body,
+  main,
+  .print-pack {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+  .no-print,
+  header[data-app-header],
+  nav[data-journey],
+  [data-help-panel] {
+    display: none !important;
+  }
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+  .print-pack {
+    max-width: none;
+    padding: 0;
+    font-family: var(--font-read);
+  }
+  .print-pack h1,
+  .print-pack h2,
+  .print-pack h3 {
+    font-family: var(--font-ui);
+  }
+  .print-break {
+    break-before: page;
+  }
+  .print-keep {
+    break-inside: avoid;
+  }
+  .print-table thead {
+    display: table-header-group;
+  }
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    background: white;
+    font-size: 9pt;
+  }
+}
+
+/* "Working…" grid: cells fade in at 70ms steps, the amber cell last (UI-SPEC §6.14). */
+@keyframes cell-in {
+  0%,
+  20% {
+    opacity: 0.15;
+  }
+  60%,
+  100% {
+    opacity: 1;
+  }
+}
+.grid-working rect {
+  animation: cell-in 1.4s var(--ease) infinite alternate;
+}
+html[data-motion='reduce'] .grid-working rect {
+  animation: none;
+}
+
+/* Header buttons sit on charcoal: light outline, light text. */
+@layer components {
+  .header-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: var(--target-min);
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--radius-control);
+    border: 1.5px solid var(--on-dark-quiet);
+    background: transparent;
+    color: var(--on-dark);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .header-btn:hover {
+    border-color: var(--on-dark);
+  }
+}
+
+/* Diagonal hatch for "taken off" or "over" areas, so they read without colour. */
+.hatch-bg {
+  background-image: repeating-linear-gradient(135deg, var(--sunken) 0 6px, var(--line) 6px 8px);
+}
+.hatch-stop-bg {
+  background-color: var(--stop-tint);
+  background-image: repeating-linear-gradient(135deg, var(--stop) 0 3px, transparent 3px 9px);
+  border: 2px solid var(--stop);
+}
+
+/* Outside the layers so it beats the tint utilities on the same elements. */
+/* High contrast has no tint, so mark the selected or current item with an inverted fill. */
+.hc .btn[aria-pressed='true'],
+.hc .btn-selected,
+.hc a[aria-current='step'],
+.hc nav[aria-label='Steps in choosing'] a[aria-current='page'] {
+  background: var(--charcoal);
+  color: var(--surface);
+}
+.hc a[aria-current='step'] span,
+.hc nav[aria-label='Steps in choosing'] a[aria-current='page'] span {
+  border-color: var(--surface);
+}
+.hc a[aria-current='step'] span.bg-\[var\(--charcoal\)\] {
+  background: var(--surface);
+  color: var(--charcoal);
 }

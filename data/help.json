@@ -1,0 +1,504 @@
+{
+  "topics": [
+    {
+      "id": "about-you",
+      "screen_route": "/",
+      "title": "About you",
+      "purpose": "This screen collects the few details that decide your budget and what you'll pay for services.",
+      "steps": [
+        "Enter your suburb and postcode.",
+        "Choose your level from your My Aged Care approval letter.",
+        "Choose your pension status from your DVA or Services Australia letter.",
+        "If you're a part pensioner, enter the two rates from your contribution letter, or use a range until it arrives.",
+        "Say whether you hold a DVA card.",
+        "Save your details."
+      ],
+      "outcome": "Your contribution rates and budget appear in the summary, and the other screens can work out costs.",
+      "faqs": [
+        {
+          "q": "Why do you need my postcode?",
+          "a": "To match providers that service your area. Nothing else."
+        },
+        {
+          "q": "I don't have my contribution letter yet.",
+          "a": "Leave the rates blank. The app shows costs as a range from the lowest to highest rate for your pension status until you enter them."
+        },
+        {
+          "q": "Who can see these details?",
+          "a": "Only the family members your administrator has given access to this assessment."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "The save button doesn't work",
+          "cause": "A field needs fixing",
+          "fix": "Look for the messages under the fields marked in red."
+        }
+      ],
+      "glossary_ids": [
+        "classification",
+        "pension-status",
+        "no-worse-off",
+        "dva-card",
+        "vhc"
+      ]
+    },
+    {
+      "id": "budget",
+      "screen_route": "/overview",
+      "title": "Your budget and the rules",
+      "purpose": "This screen shows your budget, how much is left for services, what you pay, and the rules behind those numbers.",
+      "steps": [
+        "Check the money for your services each quarter.",
+        "Look at what you'd pay for each kind of service.",
+        "Read the rules that changed recently."
+      ],
+      "outcome": "You know how much you have to spend on services and roughly what you'll pay yourself.",
+      "faqs": [
+        {
+          "q": "Why is 10% taken off?",
+          "a": "Your provider keeps 10% of each quarterly budget for care management: organising and reviewing your care."
+        },
+        {
+          "q": "What happens if I don't spend it all?",
+          "a": "Up to $1,000 or 10% of your quarterly budget (whichever is more) carries into the next quarter."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "No budget is shown",
+          "cause": "Your level isn't set",
+          "fix": "Choose your level on the About you screen.",
+          "action_route": "/"
+        }
+      ],
+      "glossary_ids": [
+        "quarterly-budget",
+        "care-management",
+        "contribution",
+        "categories",
+        "lifetime-cap",
+        "carry-over",
+        "at-hm"
+      ]
+    },
+    {
+      "id": "what-matters",
+      "screen_route": "/bounding",
+      "title": "What matters to you",
+      "purpose": "These questions decide which interview questions you need, so the interview pack fits your situation.",
+      "steps": [
+        "Open each group and answer Yes, No or Not sure.",
+        "Add a note if something needs explaining.",
+        "Mark a question \"Not relevant to me\" to drop the interview questions it covers."
+      ],
+      "outcome": "Your interview pack contains only the questions that matter to you, plus every must-ask question.",
+      "faqs": [
+        {
+          "q": "Do I have to answer them all?",
+          "a": "No. Unanswered questions keep their interview questions in, just in case."
+        },
+        {
+          "q": "What does Not relevant to me do?",
+          "a": "It drops the interview sections that question covers, but only when every question covering that section is not relevant. Must-ask questions always stay."
+        }
+      ],
+      "troubleshooting": [],
+      "glossary_ids": [
+        "what-matters",
+        "must-question"
+      ]
+    },
+    {
+      "id": "costs",
+      "screen_route": "/costs",
+      "title": "Compare the cost of your care plan",
+      "purpose": "This screen works out what your weekly care plan would cost each quarter at each provider, and what you'd pay yourself.",
+      "steps": [
+        "Check the care plan: services and hours each week.",
+        "Look at the chart to see which providers fit your services budget.",
+        "Check what you'd pay at each provider.",
+        "Compare each provider's prices with the guide price."
+      ],
+      "outcome": "You know which providers are cheapest for your plan and whether any fit your budget.",
+      "faqs": [
+        {
+          "q": "Why 13 weeks?",
+          "a": "A quarter is 13 weeks. Budgets are set per quarter, so costs are too."
+        },
+        {
+          "q": "What does filled from benchmark mean?",
+          "a": "The provider hasn't published a price for that service, so the guide price is used instead. Ask them at interview."
+        },
+        {
+          "q": "Why is what I pay a range?",
+          "a": "Until your exact contribution rates are entered, the app shows the lowest and highest you could pay."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "Every provider is over budget",
+          "cause": "The plan needs more hours than your budget pays for",
+          "fix": "Reduce hours, ask DVA about services it could fund, or check any carried-over funds."
+        },
+        {
+          "symptom": "A provider isn't in the chart",
+          "cause": "They haven't published prices for the services in your plan",
+          "fix": "Ask them to cost your plan (interview question G7)."
+        }
+      ],
+      "glossary_ids": [
+        "benchmark",
+        "care-management",
+        "contribution",
+        "categories"
+      ]
+    },
+    {
+      "id": "providers",
+      "screen_route": "/providers",
+      "title": "Providers near you",
+      "purpose": "Look up providers that service your area, check their prices and keep notes.",
+      "steps": [
+        "Search or filter the list.",
+        "Open a provider to see their prices, flags and notes.",
+        "Add the ones worth a look to your list."
+      ],
+      "outcome": "A first list of providers worth a closer look.",
+      "faqs": [
+        {
+          "q": "Where do the prices come from?",
+          "a": "Each provider's published price list, linked as the source. Check the date: prices older than 60 days may have changed."
+        },
+        {
+          "q": "A price is wrong.",
+          "a": "Open the provider and choose Edit details and prices. Everyone in the family sees the change."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "A provider is missing",
+          "cause": "They weren't in the starting data",
+          "fix": "Add them with Add provider, or import a spreadsheet.",
+          "action_route": "/providers/new"
+        }
+      ],
+      "glossary_ids": [
+        "as-at",
+        "benchmark",
+        "single-provider"
+      ]
+    },
+    {
+      "id": "selection",
+      "screen_route": "/selection",
+      "title": "Choose who to meet",
+      "purpose": "Narrow down from all providers to the few you'll interview, in three steps.",
+      "steps": [
+        "Initial scan: keep anyone worth a second look.",
+        "Refinement: compare costs and flags, and aim for 3 to 5.",
+        "Providers to interview: put them in order and note why, and what to watch for."
+      ],
+      "outcome": "A short, ordered list of providers to interview, with your reasons.",
+      "faqs": [
+        {
+          "q": "Can I change my mind?",
+          "a": "Yes. Move providers back a step, or drop them and use Undo."
+        },
+        {
+          "q": "How many should I interview?",
+          "a": "At least two, so you can compare. Three is common."
+        }
+      ],
+      "troubleshooting": [],
+      "glossary_ids": [
+        "single-provider"
+      ]
+    },
+    {
+      "id": "interview-pack",
+      "screen_route": "/interview-pack",
+      "title": "Your interview questions",
+      "purpose": "Your questions for each provider, ready to use during interviews or to print.",
+      "steps": [
+        "Choose the provider you're interviewing.",
+        "Ask each question and write down the answer.",
+        "Mark whether it was answered well and whether you got it in writing.",
+        "Print the pack if you prefer paper."
+      ],
+      "outcome": "Each provider's answers recorded in one place, ready for scoring.",
+      "faqs": [
+        {
+          "q": "What if a provider won't answer a must-ask question?",
+          "a": "Write that down. The scoring screen flags any provider that leaves a must-ask question without a written answer."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "No providers to choose from",
+          "cause": "No one is on the interview list yet",
+          "fix": "Move providers to Providers to interview.",
+          "action_route": "/selection/interview"
+        }
+      ],
+      "glossary_ids": [
+        "must-question",
+        "what-matters"
+      ]
+    },
+    {
+      "id": "interviews",
+      "screen_route": "/interviews",
+      "title": "Record an interview",
+      "purpose": "Record or note an interview, then turn it into notes you can check and keep.",
+      "steps": [
+        "Confirm everyone agrees to the recording.",
+        "Record, or type notes instead.",
+        "Check and correct the transcript.",
+        "Draft notes, check them, and save the ones you want."
+      ],
+      "outcome": "Checked notes saved against the provider.",
+      "faqs": [
+        {
+          "q": "Where is the recording kept?",
+          "a": "Only on the device that made it. The transcript and notes are shared with your family."
+        },
+        {
+          "q": "Who drafts the notes?",
+          "a": "Claude, an AI model, from the transcript only. Check them before saving."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "symptom": "The microphone doesn't work",
+          "cause": "The browser blocked it",
+          "fix": "Allow microphone access in the browser's site settings, or type notes instead."
+        }
+      ],
+      "glossary_ids": []
+    },
+    {
+      "id": "scoring",
+      "screen_route": "/scoring",
+      "title": "Score and decide",
+      "purpose": "Score each provider you met and see how they compare.",
+      "steps": [
+        "Score each provider from 1 (poor) to 5 (excellent) on each criterion.",
+        "Change what counts most if you need to.",
+        "Check the ranking and any disqualify warnings.",
+        "Write down your decision and make the summary."
+      ],
+      "outcome": "A ranked list and a written decision you can share with family.",
+      "faqs": [
+        {
+          "q": "Does the top score decide for me?",
+          "a": "No. It's a guide. The decision is yours."
+        },
+        {
+          "q": "What does Disqualify? mean?",
+          "a": "The provider left a must-ask question without a satisfactory written answer."
+        }
+      ],
+      "troubleshooting": [],
+      "glossary_ids": [
+        "overall-score",
+        "must-question"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "id": "support-at-home",
+      "term": "Support at Home",
+      "plain": "The Australian Government program that pays for care at home for older people. It replaced Home Care Packages on 1 November 2025.",
+      "source_url": "https://www.myagedcare.gov.au/support-at-home"
+    },
+    {
+      "id": "classification",
+      "term": "Classification (your level)",
+      "plain": "The level of support you were approved for, from 1 to 8, shown on your My Aged Care approval letter. Higher levels come with a bigger budget. People who moved over from a Home Care Package keep their package level instead.",
+      "more_topic_id": "about-you"
+    },
+    {
+      "id": "quarterly-budget",
+      "term": "Quarterly budget",
+      "plain": "The amount the government sets aside for your care each three months (a quarter). Budgets are indexed each 1 July.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "care-management",
+      "term": "Care management (10%)",
+      "plain": "Your provider keeps 10% of each quarterly budget to organise your care: planning, check-ins and coordination. The rest is money for your services.",
+      "example": "Of a $10,808 quarterly budget, $1,081 goes to care management and $9,727 is left for services.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "contribution",
+      "term": "Contribution (what you pay)",
+      "plain": "The share of each service's price you pay yourself. It depends on the type of service and your pension status. Clinical care is always free.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "categories",
+      "term": "Clinical, Independence and Everyday living",
+      "plain": "The three kinds of service. Clinical care (nursing, and personal care from 1 October 2026) costs you nothing. Independence services (like social support) and Everyday living services (like cleaning and gardening) have a contribution that depends on your pension.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "pension-status",
+      "term": "Full pensioner, part pensioner, self-funded",
+      "plain": "How the government assessed your income and assets. Full pensioners pay the lowest contribution rates. Part pensioners pay a rate set in their letter. Self-funded retirees, and people who don't disclose their means, pay the highest rates.",
+      "more_topic_id": "about-you"
+    },
+    {
+      "id": "no-worse-off",
+      "term": "No-worse-off principle",
+      "plain": "If you were approved for a Home Care Package on or before 12 September 2024, you pay no more than you would have under the old rules: lower contribution rates and a lower lifetime cap.",
+      "more_topic_id": "about-you"
+    },
+    {
+      "id": "lifetime-cap",
+      "term": "Lifetime cap",
+      "plain": "Once your non-clinical contributions reach the cap, you stop paying them. The cap is $140,652.80 (or $88,934.57 under no-worse-off) as at 20 September 2026, and it is shared with residential care.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "carry-over",
+      "term": "Carry-over",
+      "plain": "Money you don't spend in a quarter can carry into the next, up to $1,000 or 10% of your quarterly budget, whichever is more.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "benchmark",
+      "term": "Guide price (IHACPA benchmark)",
+      "plain": "The price the Independent Health and Aged Care Pricing Authority advises for each service in 2026-27. It is advice, not a cap: providers set their own prices.",
+      "source_url": "https://www.ihacpa.gov.au/resources/support-home-pricing-advice-2026-27-0",
+      "more_topic_id": "costs"
+    },
+    {
+      "id": "single-provider",
+      "term": "Single provider rule",
+      "plain": "You get all your Support at Home services from one registered provider. That provider can subcontract some services to others.",
+      "more_topic_id": "selection"
+    },
+    {
+      "id": "vhc",
+      "term": "Veterans' Home Care",
+      "plain": "A DVA program for Gold and some White Card holders: help with cleaning, garden, personal care and respite. Using it can save your Support at Home budget. DVA decides who is eligible.",
+      "more_topic_id": "about-you"
+    },
+    {
+      "id": "dva-card",
+      "term": "Gold Card / White Card",
+      "plain": "DVA health cards. A Gold Card covers all health care needs; a White Card covers care for specific accepted conditions.",
+      "more_topic_id": "about-you"
+    },
+    {
+      "id": "at-hm",
+      "term": "AT-HM",
+      "plain": "Assistive technology and home modifications: equipment like rails and ramps, and changes to your home. They have a separate budget and aren't costed in this app.",
+      "more_topic_id": "budget"
+    },
+    {
+      "id": "as-at",
+      "term": "Price \"as at\"",
+      "plain": "The date a provider's price list was collected. Providers must review prices at least every two months, so prices older than 60 days may be out of date.",
+      "more_topic_id": "providers"
+    },
+    {
+      "id": "must-question",
+      "term": "Must ask",
+      "plain": "A question every provider must answer in writing. If a provider won't, treat that as a warning sign.",
+      "more_topic_id": "interview-pack"
+    },
+    {
+      "id": "what-matters",
+      "term": "What matters to you questions",
+      "plain": "Questions about your situation that decide which interview questions you need. In the program documents they're called bounding questions.",
+      "more_topic_id": "what-matters"
+    },
+    {
+      "id": "overall-score",
+      "term": "Overall score",
+      "plain": "The average of the scores you gave a provider, with the criteria that matter most counted more. It helps rank providers; the decision is still yours.",
+      "more_topic_id": "scoring"
+    }
+  ],
+  "fields": [
+    {
+      "field_id": "suburb",
+      "label": "Suburb",
+      "hint": "Where you live, so we can match providers that service your area."
+    },
+    {
+      "field_id": "postcode",
+      "label": "Postcode",
+      "hint": "Four digits."
+    },
+    {
+      "field_id": "classification",
+      "label": "Your level",
+      "hint": "The level on your My Aged Care approval letter, from 1 to 8. If you moved over from a Home Care Package, choose your package level under Transitioned Home Care Package.",
+      "example_template": "Level {classification} gives {quarterly} a quarter. After 10% care management, {for_services} is left for services."
+    },
+    {
+      "field_id": "pension_status",
+      "label": "Your pension",
+      "hint": "As shown on your DVA or Services Australia income and assets letter."
+    },
+    {
+      "field_id": "assessed_rates",
+      "label": "Your contribution rates",
+      "hint": "Part pensioners: the two percentages on your Support at Home contribution letter. DVA assesses DVA pensioners."
+    },
+    {
+      "field_id": "nwop",
+      "label": "Approved for a Home Care Package on or before 12 September 2024?",
+      "hint": "If yes, the no-worse-off principle gives lower rates and a lower lifetime cap."
+    },
+    {
+      "field_id": "dva_card",
+      "label": "DVA card",
+      "hint": "The health card DVA issued, if any."
+    },
+    {
+      "field_id": "paid",
+      "label": "Contributions paid so far",
+      "hint": "Non-clinical aged care contributions you've already paid, over your lifetime. Enter 0 if you're new to aged care."
+    },
+    {
+      "field_id": "hours",
+      "label": "Hours a week",
+      "hint": "In quarter hours: 0.25 is 15 minutes, 0.5 is half an hour."
+    }
+  ],
+  "contacts": [
+    {
+      "id": "mac",
+      "name": "My Aged Care",
+      "phone": "1800 200 422",
+      "hours": "Weekdays 8am–8pm, Saturday 10am–2pm",
+      "url": "https://www.myagedcare.gov.au/contact-us",
+      "purpose": "Questions about your approval, level, budget and providers.",
+      "verified_on": null
+    },
+    {
+      "id": "dva",
+      "name": "DVA",
+      "phone": "1800 VETERAN (1800 838 372)",
+      "hours": "Weekdays 8:30am–5pm",
+      "url": "https://www.dva.gov.au/contact",
+      "purpose": "Veterans' Home Care, DVA cards and your contribution assessment.",
+      "verified_on": null
+    },
+    {
+      "id": "opan",
+      "name": "Older Persons Advocacy Network",
+      "phone": "1800 700 600",
+      "hours": "Weekdays 8am–8pm, Saturday 10am–4pm",
+      "url": "https://opan.org.au/",
+      "purpose": "Free, independent advice if you have a problem with a provider.",
+      "verified_on": null
+    }
+  ]
+}

@@ -11,13 +11,14 @@ import type {
   Provider,
   ProviderNote,
   SelectionEntry,
+  ScreenNote,
   SelectionStage,
   ShortlistSeed,
 } from '../types';
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 4;
+  version: 5;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -39,6 +40,8 @@ export interface AppState {
   /** Criterion weights the family changed from the SPEC defaults. */
   weights: Record<string, number>;
   decisionNotes: string;
+  /** Notes left on screens for the family. */
+  screenNotes: ScreenNote[];
 }
 
 /** Fields added in v4, at their starting values. */
@@ -53,6 +56,7 @@ const V4_DEFAULTS = {
   scores: {},
   weights: {},
   decisionNotes: '',
+  screenNotes: [],
 } satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews'>;
 
 export type { Action };
@@ -60,7 +64,7 @@ export type { Action };
 export const STAGE_LABELS: Record<SelectionStage, string> = {
   scan: 'Initial scan',
   refine: 'Refinement',
-  interview: 'Interview shortlist',
+  interview: 'Providers to interview',
 };
 
 export const nextStage = (s: SelectionStage): SelectionStage | undefined => SELECTION_STAGES[SELECTION_STAGES.indexOf(s) + 1];
@@ -70,7 +74,7 @@ export const prevStage = (s: SelectionStage): SelectionStage | undefined => SELE
 export const entriesAt = (state: AppState, stage: SelectionStage) => state.selection.filter((e) => e.stage === stage);
 
 /** State with nothing in it yet. */
-export const emptyState = (): AppState => ({ version: 4, notes: [], selection: [], interviews: [], ...V4_DEFAULTS });
+export const emptyState = (): AppState => ({ version: 5, notes: [], selection: [], interviews: [], ...V4_DEFAULTS });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -81,7 +85,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 4, notes: [], selection, interviews: [], ...V4_DEFAULTS };
+  return { version: 5, notes: [], selection, interviews: [], ...V4_DEFAULTS };
 }
 
 interface StateV1 {
@@ -112,11 +116,20 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * Upgrades saved state to the current version.
  * v1 → v2: the single shortlist becomes the interview stage. v2 → v3: placeholder provider ids are remapped.
  * v3 → v4: participant, plan, provider edits, questions, responses and scoring are added, empty.
+ * v4 → v5: responses get "answered well?" (yes/partly/no) and "in writing"; screen notes are added.
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 4) return s as AppState;
-  if (s?.version === 3) return { ...V4_DEFAULTS, ...(s as object), version: 4 } as unknown as AppState;
+  if (s?.version === 5) return s as AppState;
+  if (s?.version === 4) {
+    // v4 → v5: responses gain "answered well?" and "in writing"; screen notes start empty.
+    const v4 = s as unknown as Omit<AppState, 'version' | 'responses' | 'screenNotes'> & { responses: Record<string, { text: string; satisfactory: boolean | null }> };
+    const responses = Object.fromEntries(
+      Object.entries(v4.responses).map(([k, r]) => [k, { text: r.text, rating: r.satisfactory === null ? null : r.satisfactory ? 'yes' : 'no', in_writing: r.text.trim() !== '' } as InterviewResponse]),
+    );
+    return { ...v4, responses, screenNotes: [], version: 5 };
+  }
+  if (s?.version === 3) return migrate({ ...V4_DEFAULTS, ...(s as object), screenNotes: undefined, version: 4 });
   if (s?.version === 2) return migrate({ ...remapProviderIds(s as unknown as AppState), version: 3 });
   if (s?.version === 1) {
     const v1 = s as StateV1;
@@ -153,6 +166,12 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case 'selection/remove':
       return { ...state, selection: state.selection.filter((e) => e.provider_id !== action.providerId) };
+    case 'selection/restore': {
+      if (state.selection.some((e) => e.provider_id === action.entry.provider_id)) return state;
+      const selection = [...state.selection];
+      selection.splice(Math.min(action.index, selection.length), 0, action.entry);
+      return { ...state, selection };
+    }
     case 'selection/stage': {
       const entry = state.selection.find((e) => e.provider_id === action.providerId);
       if (!entry || entry.stage === action.stage) return state;
@@ -236,8 +255,12 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case 'response/set': {
       const key = responseKey(action.providerId, action.questionId);
-      const prev = state.responses[key] ?? { text: '', satisfactory: null };
-      const next = { text: action.text ?? prev.text, satisfactory: action.satisfactory === undefined ? prev.satisfactory : action.satisfactory };
+      const prev = state.responses[key] ?? { text: '', rating: null, in_writing: false };
+      const next: InterviewResponse = {
+        text: action.text ?? prev.text,
+        rating: action.rating === undefined ? prev.rating : action.rating,
+        in_writing: action.in_writing ?? prev.in_writing,
+      };
       return { ...state, responses: { ...state.responses, [key]: next } };
     }
     case 'score/set': {
@@ -251,6 +274,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, weights: { ...state.weights, [action.criterion]: action.weight } };
     case 'decision/set':
       return { ...state, decisionNotes: action.text };
+    case 'screenNote/add':
+      return { ...state, screenNotes: [...state.screenNotes.filter((n) => n.id !== action.note.id), action.note] };
+    case 'screenNote/done':
+      return { ...state, screenNotes: state.screenNotes.map((n) => (n.id === action.id ? { ...n, done: action.done } : n)) };
+    case 'screenNote/delete':
+      return { ...state, screenNotes: state.screenNotes.filter((n) => n.id !== action.id) };
   }
 }
 

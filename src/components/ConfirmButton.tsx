@@ -7,12 +7,15 @@ export function ConfirmButton({
   prompt,
   onConfirm,
   className = 'btn btn-danger',
+  keepLabel = 'Keep',
 }: {
   children: ReactNode;
   confirmLabel: string;
   prompt: string;
   onConfirm: () => void | Promise<void>;
   className?: string;
+  /** The safe choice, e.g. "Keep note". */
+  keepLabel?: string;
 }) {
   const [asking, setAsking] = useState(false);
   if (!asking) {
@@ -24,7 +27,7 @@ export function ConfirmButton({
   }
   return (
     <span role="group" aria-label={prompt} className="inline-flex flex-wrap items-center gap-2">
-      <span className="text-sm">{prompt}</span>
+      <span className="font-medium">{prompt}</span>
       <button
         type="button"
         className="btn btn-danger"
@@ -37,7 +40,7 @@ export function ConfirmButton({
         {confirmLabel}
       </button>
       <button type="button" className="btn" onClick={() => setAsking(false)}>
-        Cancel
+        {keepLabel}
       </button>
     </span>
   );

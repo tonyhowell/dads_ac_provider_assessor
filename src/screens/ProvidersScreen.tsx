@@ -1,22 +1,31 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
-import { PriceProvenance } from '../components/Price';
+import { PriceProvenance, isStale } from '../components/Price';
 import { StageControls } from '../components/StageControls';
 import { mentionsDisallowedFees } from '../flags';
 import { STAGE_LABELS } from '../state/reducer';
 import { SELECTION_STAGES } from '../schemas';
-import type { SelectionStage } from '../types';
+import type { Provider, SelectionStage } from '../types';
+import { NextStepCard, ScreenHeader } from '../components/ui/Cards';
+import { StatusText } from '../components/ui/Status';
+import { Icon } from '../components/ui/Icon';
 
 type SortKey = 'name' | 'notes';
 type StageFilter = 'all' | 'none' | SelectionStage;
+type Chip = 'veteran' | 'current' | 'noflags';
+
+const hasVeteranExperience = (p: Provider) => /^strong|veteran/i.test(p.veteran_fit ?? '');
+const hasFlags = (p: Provider) => p.flags.length > 0;
 
 export function ProvidersScreen() {
   const { providers, state } = useApp();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [stageFilter, setStageFilter] = useState<StageFilter>('all');
+  const [chips, setChips] = useState<Set<Chip>>(new Set());
   const stageOf = useMemo(() => new Map(state.selection.map((e) => [e.provider_id, e.stage])), [state.selection]);
+  const toggleChip = (c: Chip) => setChips((s) => (s.has(c) ? new Set([...s].filter((x) => x !== c)) : new Set([...s, c])));
 
   const noteCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -29,105 +38,118 @@ export function ProvidersScreen() {
     const filtered = providers.filter(
       (p) =>
         (!q || [p.provider, p.outlet, p.type, ...p.flags].some((v) => v?.toLowerCase().includes(q))) &&
-        (stageFilter === 'all' || (stageOf.get(p.id) ?? 'none') === stageFilter),
+        (stageFilter === 'all' || (stageOf.get(p.id) ?? 'none') === stageFilter) &&
+        (!chips.has('veteran') || hasVeteranExperience(p)) &&
+        (!chips.has('current') || !isStale(p.prices_as_at_date)) &&
+        (!chips.has('noflags') || !hasFlags(p)),
     );
     return filtered.sort((a, b) =>
-      sort === 'notes'
-        ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider)
-        : a.provider.localeCompare(b.provider),
+      sort === 'notes' ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider) : a.provider.localeCompare(b.provider),
     );
-  }, [providers, query, sort, noteCounts, stageFilter, stageOf]);
+  }, [providers, query, sort, noteCounts, stageFilter, stageOf, chips]);
 
   return (
-    <section>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Providers</h1>
-        <div className="flex gap-2">
-          <Link to="/providers/new" className="btn no-underline hover:no-underline">
-            Add provider
-          </Link>
-          <Link to="/providers/import" className="btn no-underline hover:no-underline">
-            Import CSV
-          </Link>
-        </div>
-      </div>
-      <p className="muted mt-1">
-        All providers that service the area. Add the ones worth a first look to the initial scan, then narrow them down on the{' '}
-        <Link to="/selection">Selection</Link> page. Keep notes on each provider as you assess them.
-      </p>
+    <section className="space-y-6">
+      <ScreenHeader title="Look up providers near you" purpose="Check each provider's prices and notes, and add the ones worth a closer look to your list." helpTopic="providers">
+        <Link to="/providers/new" className="btn">
+          <Icon name="plus" size={20} /> Add provider
+        </Link>
+        <Link to="/providers/import" className="btn">
+          Import a spreadsheet
+        </Link>
+      </ScreenHeader>
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-56 flex-1">
-          <label htmlFor="provider-search" className="muted block">
-            Search
-          </label>
-          <input
-            id="provider-search"
-            type="search"
-            className="input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Name, outlet or flag"
-          />
+      <div className="card space-y-4">
+        <div className="grid gap-4 md:grid-cols-[2fr_1fr_1fr]">
+          <div>
+            <label htmlFor="provider-search" className="label">
+              Search by name
+            </label>
+            <input id="provider-search" type="search" className="input" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="provider-stage" className="label">
+              Step
+            </label>
+            <select id="provider-stage" className="input" value={stageFilter} onChange={(e) => setStageFilter(e.target.value as StageFilter)}>
+              <option value="all">All</option>
+              <option value="none">Not on my list</option>
+              {SELECTION_STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {STAGE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="provider-sort" className="label">
+              Sort by
+            </label>
+            <select id="provider-sort" className="input" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+              <option value="name">Name</option>
+              <option value="notes">Most notes</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label htmlFor="provider-stage" className="muted block">
-            Stage
-          </label>
-          <select id="provider-stage" className="input" value={stageFilter} onChange={(e) => setStageFilter(e.target.value as StageFilter)}>
-            <option value="all">All</option>
-            <option value="none">Not selected</option>
-            {SELECTION_STAGES.map((s) => (
-              <option key={s} value={s}>
-                {STAGE_LABELS[s]}
-              </option>
+        <fieldset>
+          <legend className="label">Only show providers that</legend>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {(
+              [
+                ['veteran', 'Have veteran experience'],
+                ['current', 'Have up-to-date prices'],
+                ['noflags', 'Have no flags'],
+              ] as [Chip, string][]
+            ).map(([c, label]) => (
+              <button key={c} type="button" aria-pressed={chips.has(c)} className="btn" onClick={() => toggleChip(c)}>
+                {chips.has(c) && <Icon name="check" size={18} />} {label}
+              </button>
             ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="provider-sort" className="muted block">
-            Sort by
-          </label>
-          <select id="provider-sort" className="input" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            <option value="name">Name</option>
-            <option value="notes">Most notes</option>
-          </select>
-        </div>
+          </div>
+        </fieldset>
+        <p aria-live="polite">
+          Showing {rows.length} of {providers.length} providers · {state.selection.length} on your list
+        </p>
       </div>
 
-      <p className="muted mt-3" aria-live="polite">
-        {rows.length} of {providers.length} providers · {state.selection.length} selected
-      </p>
+      {rows.length === 0 && (
+        <p className="card">
+          No providers match. <button type="button" className="btn-quiet" onClick={() => (setQuery(''), setChips(new Set()), setStageFilter('all'))}>Clear the search and filters</button>
+        </p>
+      )}
 
-      <ul className="mt-3 space-y-3">
-        {rows.map((p) => (
-          <li key={p.id} className="card flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="font-semibold">
-                <Link to={`/providers/${p.id}`}>{p.provider}</Link>
-              </h2>
-              {(p.outlet || p.type) && <p className="muted">{[p.type, p.outlet].filter(Boolean).join(' · ')}</p>}
-              <PriceProvenance provider={p} />
-              {mentionsDisallowedFees(...p.flags) && (
-                <p className="mt-1 text-sm font-medium text-orange-800 dark:text-orange-200">Check fees: mentions travel or admin charges</p>
-              )}
-              {p.flags.length > 0 && (
-                <ul className="mt-2 flex flex-wrap gap-1" aria-label="Flags">
-                  {p.flags.map((f) => (
-                    <li key={f} className="rounded bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="muted mt-1">
-                {noteCounts.get(p.id) ?? 0} note{noteCounts.get(p.id) === 1 ? '' : 's'}
-              </p>
-            </div>
-            <StageControls provider={p} compact />
-          </li>
-        ))}
+      <ul className="space-y-3">
+        {rows.map((p) => {
+          const notes = noteCounts.get(p.id) ?? 0;
+          return (
+            <li key={p.id} className="card flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <h2 className="text-[1.2rem]">
+                  <Link to={`/providers/${p.id}`}>{p.provider}</Link>
+                </h2>
+                {(p.outlet || p.type) && <p>{[p.type, p.outlet].filter(Boolean).join(' · ')}</p>}
+                <PriceProvenance provider={p} />
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {mentionsDisallowedFees(...p.flags) && <StatusText status="caution">Possible extra fee</StatusText>}
+                  {hasFlags(p) && <span>{p.flags.length} flag{p.flags.length === 1 ? '' : 's'}</span>}
+                  <span>
+                    {notes} note{notes === 1 ? '' : 's'}
+                  </span>
+                  {hasVeteranExperience(p) && <StatusText status="good">Veteran experience</StatusText>}
+                </div>
+              </div>
+              <StageControls provider={p} compact />
+            </li>
+          );
+        })}
       </ul>
+
+      <NextStepCard
+        done={`${state.selection.length} provider${state.selection.length === 1 ? ' is' : 's are'} on your list.`}
+        next="narrow your list down to the ones you'll interview"
+        back={{ to: '/costs', label: 'Compare costs' }}
+        forward={{ to: '/selection', label: 'Continue to choose who to meet' }}
+      />
     </section>
   );
 }

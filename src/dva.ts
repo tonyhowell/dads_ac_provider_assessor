@@ -37,7 +37,7 @@ export function dvaPrompts(participant: Pick<Participant, 'dva_card'> | null, pl
   if (NURSING.some((k) => keys.has(k))) {
     prompts.push({
       id: 'nursing',
-      text: `DVA community nursing sits outside the Support at Home budget. Ask DVA and the GP whether the nursing in this plan could be funded on his ${card}.`,
+      text: `DVA community nursing sits outside the Support at Home budget. Ask DVA and the GP whether the nursing in this plan could be funded on your ${card}.`,
     });
   }
   prompts.push({

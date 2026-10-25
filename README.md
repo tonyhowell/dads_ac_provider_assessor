@@ -20,7 +20,7 @@ npm start              # production server (serves the built app and the API)
 
 The first time the server starts with an empty database, it creates the `BOOTSTRAP_ADMIN_USERNAME` admin and prints a one-time enrolment link. Open it to create your passkey. Locally the database is embedded (PGlite in `.data/`); in production it's Postgres. Deployment steps are in `docs/DEPLOY.md`.
 
-**Seed data:** `data/` currently holds placeholders. See `data/README.md`.
+**Seed data:** the starter pack in `data/` (see `data/README.md`). Help text, the glossary and contact numbers are in `data/help.json`.
 
 ## What works so far
 
@@ -40,20 +40,36 @@ The full v1 build plan (SPEC §8 screens, calculations, question filtering, scor
   - flags for travel or admin fees;
   - add or edit providers (with undo back to the starter-pack data) and import from CSV;
   - assessment notes on each provider.
-- **Selection in three stages:** initial scan → refinement → interview shortlist (ranked, with why and probe notes).
+- **Selection in three stages:** initial scan → refinement → providers to interview (ranked, with why and what to watch for). Dropping a provider can be undone.
 - **Bounding questions:** 8 groups and 29 questions, answered Yes/No/Unsure with notes and a "not relevant" toggle, plus a live count of interview questions included.
 - **Interview pack:**
   - sections A–Q filtered by the bounding answers, with "must" questions always kept;
   - your own questions added per section;
-  - answers and a "satisfactory?" mark per shortlisted provider;
-  - a printable landscape pack (Print or Save as PDF).
+  - answers per provider, marked "Answered well?" (Yes/Partly/No) and "Got it in writing";
+  - a printable A4 pack, one section per provider with ruled answer lines (Print or Save as PDF).
 - **Interviews:** in-browser recording with optional live transcription; drafting structured notes with Claude.
 - **Scoring and decision:**
   - 8 weighted criteria (weights editable) with a ranking;
-  - a "disqualify?" flag when a must question lacks a satisfactory written answer;
+  - scores in words (1 Poor … 5 Excellent);
+  - a "disqualify?" flag when a must-ask question has no written answer, or was answered poorly;
   - a suggested price score from the plan cost against the benchmark;
-  - shared decision notes.
+  - shared decision notes and a printable decision summary.
 - **Admin:** passkey users, enrolment links and roles.
+
+### Interface (docs/UI-SPEC.md)
+- Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
+- A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.
+- Layered help:
+  - a "What is this screen for?" link and field hints;
+  - "Why?" breakdowns for every figure;
+  - glossary terms;
+  - a searchable help panel (press `?`) with contact numbers.
+- Problems show as cards that say how to fix them (missing prices, over budget, no microphone, sync errors).
+- Inputs: choice cards, hours steppers (15-minute steps) and scores in words.
+- Other screens: a first-run welcome and a "welcome back" card, notes for the family on any screen, and an About page.
+- Display settings: text size 18–24px, theme, high contrast, motion and hints.
+- Accessibility: axe checks every screen in the test suite (`src/test/a11y.test.tsx`).
+- Fonts use the system fallback stack. The spec's Archivo and Newsreader fonts aren't bundled yet.
 
 ### Security and privacy
 - Passkeys are bound to the site's domain, so they can't be phished. The server stores only their public keys.

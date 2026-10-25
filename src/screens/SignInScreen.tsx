@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { AppMark } from '../components/ui/Feedback';
 
 export function SignInScreen() {
   const { signIn } = useAuth();
@@ -24,7 +25,7 @@ export function SignInScreen() {
     <AuthShell title="Sign in">
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label htmlFor="username" className="muted block">
+          <label htmlFor="username" className="label">
             Username
           </label>
           <input
@@ -38,16 +39,16 @@ export function SignInScreen() {
             required
           />
         </div>
-        <button type="submit" className="btn btn-primary w-full justify-center" disabled={busy || !username.trim()}>
+        <button type="submit" className="btn btn-primary w-full" disabled={busy || !username.trim()}>
           {busy ? 'Waiting for your passkey…' : 'Sign in with passkey'}
         </button>
         {error && (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          <p role="alert" className="field-error">
             {error}
           </p>
         )}
       </form>
-      <p className="muted mt-6">
+      <p className="mt-6">
         Access is by invitation. If you don't have an account, or you've lost the device with your passkey, ask your administrator for
         an enrolment link.
       </p>
@@ -58,13 +59,21 @@ export function SignInScreen() {
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
-      <main className="mx-auto w-full max-w-sm flex-1 px-4 py-12">
-        <p className="text-lg font-semibold">Support at Home Provider Assessor</p>
-        <h1 className="mt-6 text-2xl font-semibold">{title}</h1>
+      <header className="bg-[var(--header-bg)] text-[var(--on-dark)]">
+        <div className="mx-auto flex max-w-[var(--wrap)] items-center gap-3 px-4 py-3">
+          <AppMark onDark />
+          <span className="leading-tight">
+            <span className="block text-lg font-semibold">Provider Assessor</span>
+            <span className="block text-[0.875rem] opacity-80">from Quantivate</span>
+          </span>
+        </div>
+      </header>
+      <main id="main" className="mx-auto w-full max-w-md flex-1 px-4 py-10">
+        <h1>{title}</h1>
         <div className="card mt-4">{children}</div>
       </main>
-      <footer className="px-4 py-4 text-center text-xs text-slate-600 dark:text-slate-400">
-        General information only — not financial or legal advice.
+      <footer className="px-4 py-6">
+        <p className="mx-auto max-w-[var(--wrap)]">General information only — not financial or legal advice.</p>
       </footer>
     </div>
   );
