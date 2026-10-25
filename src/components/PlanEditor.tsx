@@ -4,7 +4,8 @@ import { categoryFor } from '../calc';
 import { RATE_KEYS } from '../schemas';
 import { RATE_LABELS } from '../labels';
 import type { Category, PlanItem, RateKey } from '../types';
-import { HoursStepper } from './ui/Form';
+import { HoursStepper, hoursText } from './ui/Form';
+import { Expander } from './ui/Expander';
 import { Term } from './ui/Help';
 import { Icon } from './ui/Icon';
 import { ResolutionCard } from './ui/Cards';
@@ -30,11 +31,13 @@ export function PlanEditor() {
   };
 
   return (
-    <section className="card space-y-4" aria-labelledby="plan-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="plan-heading">Your care plan</h2>
-        <span className="muted">{state.plan ? 'Your plan' : 'Sample plan to start from'}</span>
-      </div>
+    <Expander
+      icon="list"
+      title="Your care plan"
+      summary={rows.length ? `${rows.length} service${rows.length === 1 ? '' : 's'} · ${hoursText(rows.reduce((n, r) => n + r.hours_per_week, 0))} a week${state.plan ? '' : ' (sample plan)'}` : 'Empty — add services to cost'}
+      aside={<span className="no-print font-medium underline underline-offset-2">Change</span>}
+      defaultOpen={rows.length === 0}
+    >
       <p>The services you'd use each week. Change the hours to see how the cost changes.</p>
 
       {rows.length === 0 ? (
@@ -133,6 +136,6 @@ export function PlanEditor() {
       <p className="muted">
         Weekday prices. Hourly services are charged in 15-minute steps; providers may set minimum visit lengths. Sample plan: {seed.samplePlan.length} services.
       </p>
-    </section>
+    </Expander>
   );
 }

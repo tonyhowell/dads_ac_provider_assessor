@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react';
 import { Icon } from './Icon';
+import { MoreText } from './Expander';
 
 /** Label above, hint below the label, control, then error (UI-SPEC §6.2). Pass the control as a render prop to wire ids. */
 export function Field({
@@ -23,11 +24,14 @@ export function Field({
       <label htmlFor={id} className="label">
         {label}
       </label>
-      {hint && (
-        <span id={hintId} className="hint">
-          {hint}
-        </span>
-      )}
+      {hint &&
+        (typeof hint === 'string' ? (
+          <MoreText id={hintId} text={hint} className="hint" />
+        ) : (
+          <span id={hintId} className="hint">
+            {hint}
+          </span>
+        ))}
       {children({ id, describedBy: [hintId, errorId].filter(Boolean).join(' ') || undefined, invalid: !!error })}
       {error && (
         <p id={errorId} className="field-error">
@@ -72,11 +76,14 @@ export function ChoiceCards<T extends string>({
   return (
     <fieldset aria-describedby={hint ? hintId : undefined}>
       <legend className={legendHidden ? 'sr-only' : 'label'}>{legend}</legend>
-      {hint && (
-        <span id={hintId} className="hint">
-          {hint}
-        </span>
-      )}
+      {hint &&
+        (typeof hint === 'string' ? (
+          <MoreText id={hintId} text={hint} className="hint" />
+        ) : (
+          <span id={hintId} className="hint">
+            {hint}
+          </span>
+        ))}
       <div className={`mt-1 grid grid-cols-[minmax(0,1fr)] gap-2 ${grid}`}>
         {choices.map((c) => {
           const selected = value === c.value;

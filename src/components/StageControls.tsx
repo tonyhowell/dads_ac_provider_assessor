@@ -22,12 +22,15 @@ export function StageControls({
   provider,
   compact = false,
   primaryAdd = false,
+  small = false,
   onDrop,
 }: {
   provider: Provider;
   compact?: boolean;
   /** Show "Add to my list" as the screen's amber action. */
   primaryAdd?: boolean;
+  /** Smaller buttons, for cards on the selection board. */
+  small?: boolean;
   onDrop?: (stage: SelectionStage) => void;
 }) {
   const { state, dispatch } = useApp();
@@ -50,23 +53,24 @@ export function StageControls({
     );
   }
 
+  const sm = small ? 'btn-sm' : '';
   const next = nextStage(entry.stage);
   const prev = prevStage(entry.stage);
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={`flex flex-wrap items-center gap-2 ${small ? 'contents' : ''}`}>
       {next && (
-        <button type="button" className="btn" onClick={() => dispatch({ type: 'selection/stage', providerId: provider.id, stage: next, at: at() })}>
+        <button type="button" className={`btn ${sm}`} onClick={() => dispatch({ type: 'selection/stage', providerId: provider.id, stage: next, at: at() })}>
           Move to {STAGE_LABELS[next]} <Icon name="arrowRight" size={20} /> <span className="sr-only">: {provider.provider}</span>
         </button>
       )}
       {prev && (
-        <button type="button" className="btn" onClick={() => dispatch({ type: 'selection/stage', providerId: provider.id, stage: prev, at: at() })}>
+        <button type="button" className={`btn ${sm}`} onClick={() => dispatch({ type: 'selection/stage', providerId: provider.id, stage: prev, at: at() })}>
           <Icon name="arrowLeft" size={20} /> Back to {STAGE_LABELS[prev]} <span className="sr-only">: {provider.provider}</span>
         </button>
       )}
       <button
         type="button"
-        className="btn btn-danger"
+        className={`btn btn-danger ${sm}`}
         onClick={() => {
           dispatch({ type: 'selection/remove', providerId: provider.id });
           onDrop?.(entry.stage);

@@ -7,6 +7,7 @@ import { formatDuration } from '../format';
 import type { Interview } from '../types';
 import { ResolutionCard, ScreenHeader } from '../components/ui/Cards';
 import { Icon } from '../components/ui/Icon';
+import { MoreText } from '../components/ui/Expander';
 
 export function InterviewCaptureScreen() {
   const { providerId } = useParams();
@@ -127,7 +128,7 @@ export function InterviewCaptureScreen() {
                 <input type="checkbox" className="mt-0.5" checked={liveTranscription} onChange={(e) => setLiveTranscription(e.target.checked)} />
                 <span>
                   <span className="block font-medium">Turn speech into text as we go</span>
-                  <span className="block">Your browser's speech service turns speech into text. On some browsers this sends audio to Google or Apple. Turn it off to keep audio on this device; you can type the notes afterwards.</span>
+                  <MoreText className="block" text="On some browsers this sends audio to Google or Apple. Your browser's speech service turns speech into text; turn it off to keep audio on this device and type the notes afterwards." />
                 </span>
               </label>
             ) : (

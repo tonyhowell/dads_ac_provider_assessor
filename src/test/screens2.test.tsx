@@ -44,9 +44,9 @@ describe('Relative costs', () => {
     await renderApp('/costs', { server });
     await userEvent.setup().selectOptions(screen.getByLabelText('Providers to compare'), 'all');
 
-    expect(screen.getByText(/Your plan costs between/)).toHaveTextContent(
-      'Your plan costs between $12,500 and $14,239 a quarter — a difference of 13.9%. The cheapest is Right at Home Brisbane Bayside South.',
-    );
+    expect(screen.getByText('Cheapest').parentElement).toHaveTextContent('Cheapest$12,500Right at Home Brisbane Bayside South');
+    expect(screen.getByText('Dearest').parentElement).toHaveTextContent('Dearest$14,239BlueCare (UnitingCare QLD)');
+    expect(screen.getByText('Difference').parentElement).toHaveTextContent('13.9%');
     const pay = screen.getByRole('region', { name: "What you'd pay" });
     const bolton = within(within(pay).getByRole('table')).getAllByRole('row').find((r) => r.textContent?.startsWith('Bolton Clarke'))!;
     expect(bolton).toHaveTextContent('$12,701');
@@ -57,6 +57,9 @@ describe('Relative costs', () => {
   it('saves plan edits for everyone', async () => {
     const user = userEvent.setup();
     const { server } = await renderApp('/costs');
+    const plan = screen.getByRole('button', { name: /Your care plan/ });
+    expect(plan).toHaveTextContent('5 services');
+    await user.click(plan);
     const hours = screen.getByLabelText('Hours a week for Domestic assistance');
     await user.clear(hours);
     await user.type(hours, '4');
@@ -93,7 +96,7 @@ describe('Providers: add, edit, import', () => {
     await user.type(pc, '130');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await screen.findByText('Edited by the family')).toBeInTheDocument();
-    expect(screen.getByText('Personal care', { selector: 'dt' }).nextElementSibling).toHaveTextContent('$130.00 /hr');
+    expect(screen.getByText('Personal care', { selector: 'dt' }).parentElement).toHaveTextContent('$130.00 /hr');
 
     await user.click(screen.getByRole('button', { name: 'Undo changes' }));
     await user.click(within(screen.getByRole('group')).getByRole('button', { name: 'Undo changes' }));
@@ -166,6 +169,7 @@ describe('Interview pack and scoring', () => {
     expect(document.getElementById('resp-A1')).toHaveAccessibleName("Anglicare Southern Queensland's answer to A1");
     expect(document.getElementById('resp-A1')).toHaveValue('');
 
+    await user.click(screen.getByText(/^C\. /, { selector: 'button span' }));
     await user.click(screen.getByText(/Add your own question to section C/));
     const add = document.getElementById('add-C')!;
     expect(add).toHaveAccessibleName('Your question for section C');

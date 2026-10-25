@@ -13,6 +13,9 @@ import { toIsoDate } from '../rules';
 import { NextStepCard, ResolutionCard } from '../components/ui/Cards';
 import { Term } from '../components/ui/Help';
 import { Icon } from '../components/ui/Icon';
+import { Expander } from '../components/ui/Expander';
+import { GuideScale } from '../components/ui/Visual';
+import { variance, varianceBand } from '../calc';
 
 export function ProviderDetailScreen() {
   const { id } = useParams();
@@ -35,6 +38,11 @@ export function ProviderDetailScreen() {
   const stale = isStale(provider.prices_as_at_date, today);
   const selected = state.selection.some((e) => e.provider_id === provider.id);
   const missing = RATE_KEYS.filter((k) => provider[k] === null);
+  const bands = { above: 0, near: 0, below: 0 };
+  for (const k of RATE_KEYS) {
+    const b = varianceBand(variance(provider[k], seed.benchmark[k]));
+    if (b) bands[b] += 1;
+  }
 
   return (
     <section className="space-y-6">
@@ -72,9 +80,9 @@ export function ProviderDetailScreen() {
               )}
             </button>
           }
-        >
-          <p>The notes for {provider.provider} mention a travel, admin or similar charge. Support at Home prices must be all-inclusive.</p>
-        </ResolutionCard>
+          more={<p>The notes for {provider.provider} mention a travel, admin or similar charge. Support at Home prices must be all-inclusive.</p>}
+          moreLabel="Why does this matter?"
+        />
       )}
 
       {stale && (
@@ -88,30 +96,38 @@ export function ProviderDetailScreen() {
               </Link>
             </>
           }
-        >
-          <p>
-            {provider.prices_as_at_date
-              ? `These were collected on ${provider.prices_as_at} (${daysBetween(provider.prices_as_at_date, today)} days ago).`
-              : `We don't have a date for these prices ("${provider.prices_as_at}").`}{' '}
-            Providers must review prices every two months.
-          </p>
-        </ResolutionCard>
+          moreLabel="Why?"
+          more={
+            <p>
+              {provider.prices_as_at_date
+                ? `These were collected on ${provider.prices_as_at} (${daysBetween(provider.prices_as_at_date, today)} days ago).`
+                : `We don't have a date for these prices ("${provider.prices_as_at}").`}{' '}
+              Providers must review prices every two months.
+            </p>
+          }
+        />
       )}
 
       <section aria-labelledby="rates-heading" className="card space-y-3">
         <h2 id="rates-heading">Prices per hour (weekdays)</h2>
         <p>
-          Compared with the <Term id="benchmark">guide price</Term>.
+          Compared with the <Term id="benchmark">guide price</Term>: {bands.above} above, {bands.near} close to it, {bands.below} below
+          {missing.length > 0 ? `, ${missing.length} not published` : ''}.
         </p>
-        <dl className="divide-y divide-[var(--rule)]">
-          {RATE_KEYS.map((k) => (
-            <div key={k} className="flex flex-wrap items-start justify-between gap-3 py-3">
-              <dt className="font-medium">{RATE_LABELS[k]}</dt>
-              <dd className="min-w-0 text-right">
-                <PriceCell rate={provider[k]} guide={seed.benchmark[k]} />
-              </dd>
-            </div>
-          ))}
+        <dl className="grid gap-x-8 md:grid-cols-2">
+          {RATE_KEYS.map((k) => {
+            const rate = provider[k];
+            const guide = seed.benchmark[k];
+            return (
+              <div key={k} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-[var(--rule)] py-2">
+                <dt className="min-w-0 flex-1 font-medium">{RATE_LABELS[k]}</dt>
+                {rate !== null && guide !== null && <GuideScale rate={rate} guide={guide} />}
+                <dd className="min-w-0 text-right">
+                  <PriceCell rate={rate} guide={guide} />
+                </dd>
+              </div>
+            );
+          })}
         </dl>
         {missing.length > 0 && (
           <p>
@@ -121,8 +137,11 @@ export function ProviderDetailScreen() {
       </section>
 
       {(provider.flags.length > 0 || provider.veteran_fit) && (
-        <section aria-labelledby="flags-heading" className="card space-y-3">
-          <h2 id="flags-heading">What we know</h2>
+        <Expander
+          icon="list"
+          title="What we know"
+          summary={[provider.veteran_fit && `Veteran experience: ${provider.veteran_fit.split(/[:;,.]/)[0]}`, provider.flags.length && `${provider.flags.length} thing${provider.flags.length === 1 ? '' : 's'} to check`].filter(Boolean).join(' · ')}
+        >
           {provider.veteran_fit && (
             <p>
               <strong>Veteran experience:</strong> {provider.veteran_fit}.
@@ -138,7 +157,7 @@ export function ProviderDetailScreen() {
               </ul>
             </>
           )}
-        </section>
+        </Expander>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

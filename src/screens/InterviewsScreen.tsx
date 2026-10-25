@@ -3,6 +3,7 @@ import { useApp } from '../state/AppContext';
 import { InterviewList } from '../components/InterviewList';
 import { entriesAt } from '../state/reducer';
 import { ScreenHeader } from '../components/ui/Cards';
+import { MoreText } from '../components/ui/Expander';
 
 export function InterviewsScreen() {
   const { providers, state } = useApp();
@@ -19,15 +20,20 @@ export function InterviewsScreen() {
     <section className="space-y-6">
       <ScreenHeader
         title="Record or note an interview"
-        purpose="Record an interview, then turn it into notes you can check and keep. Transcripts and notes are shared with your family; recordings stay on the device that made them."
+        purpose={
+          <>
+            Record an interview, then turn it into notes you can check and keep.{' '}
+            <MoreText text="Who sees what? Transcripts and notes are shared with your family; recordings stay on the device that made them." />
+          </>
+        }
         helpTopic="interviews"
       />
 
       {providerIds.length === 0 ? (
         <div className="card">
-          <p>Advance providers to the interview shortlist (stage 3), then record your interviews with them here.</p>
+          <p>Move providers to "Providers to interview" first, then record your interviews here.</p>
           <p className="mt-2">
-            <Link to="/selection">Go to provider selection</Link>
+            <Link to="/selection/interview">Choose who to meet</Link>
           </p>
         </div>
       ) : (

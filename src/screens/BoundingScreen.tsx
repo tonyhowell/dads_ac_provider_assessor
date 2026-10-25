@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { includedSections, interviewPack, packQuestionCount } from '../questions';
-import { CommitTextarea } from '../components/CommitTextarea';
+import { OptionalNote } from '../components/OptionalNote';
+import { Meter } from '../components/ui/Visual';
 import { NextStepCard, ScreenHeader } from '../components/ui/Cards';
 import { ChoiceCards } from '../components/ui/Form';
 import { Explain } from '../components/ui/Help';
@@ -55,7 +56,10 @@ export function BoundingScreen() {
               <h2 className="m-0">
                 <button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggle(g.group)} className="flex min-h-14 w-full items-center gap-3 p-4 text-left">
                   <Icon name={isOpen ? 'chevronDown' : 'chevronRight'} />
-                  <span className="min-w-0 flex-1 text-[1.2rem] font-semibold">{g.group}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[1.2rem] font-semibold">{g.group}</span>
+                    <Meter value={done} max={g.questions.length} className="mt-1 max-w-48" />
+                  </span>
                   <span className={`text-base font-normal ${done === g.questions.length ? 'status status-good' : ''}`}>
                     {done === g.questions.length && <Icon name="check" size={18} />}
                     {done} of {g.questions.length} answered
@@ -103,12 +107,7 @@ export function BoundingScreen() {
                             <p>{q.note ? `This helps ${q.note}.` : 'This is background for the family; it doesn\'t change the interview questions.'}</p>
                           )}
                         </Explain>
-                        <div>
-                          <label htmlFor={`notes-${q.id}`} className="label">
-                            Notes (optional)
-                          </label>
-                          <CommitTextarea id={`notes-${q.id}`} className="input min-h-16" value={a?.notes ?? ''} onCommit={(v) => save(q.id, { notes: v })} />
-                        </div>
+                        <OptionalNote id={`notes-${q.id}`} label="Your note" addLabel="Add a note" value={a?.notes ?? ''} onCommit={(v) => save(q.id, { notes: v })} />
                       </li>
                     );
                   })}

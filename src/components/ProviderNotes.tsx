@@ -4,11 +4,13 @@ import { useApp } from '../state/AppContext';
 import { newId } from '../state/reducer';
 import { formatDateTime } from '../format';
 import { ConfirmButton } from './ConfirmButton';
+import { Icon } from './ui/Icon';
 import type { ProviderNote } from '../types';
 
 export function ProviderNotes({ providerId }: { providerId: string }) {
   const { state, dispatch } = useApp();
   const [draft, setDraft] = useState('');
+  const [adding, setAdding] = useState(false);
   const notes = state.notes
     .filter((n) => n.provider_id === providerId)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -22,6 +24,7 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
       note: { id: newId(), provider_id: providerId, text, created_at: new Date().toISOString(), source: 'manual' },
     });
     setDraft('');
+    setAdding(false);
   };
 
   return (
@@ -29,15 +32,26 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
       <h2 id="notes-heading">
         Assessment notes
       </h2>
-      <form onSubmit={add} className="mt-3 space-y-2">
-        <label htmlFor="new-note" className="muted block">
-          Add a note (phone calls, impressions, things to check)
-        </label>
-        <textarea id="new-note" className="input min-h-24" value={draft} onChange={(e) => setDraft(e.target.value)} />
-        <button type="submit" className="btn btn-primary" disabled={!draft.trim()}>
-          Add note
+      {adding ? (
+        <form onSubmit={add} className="mt-3 space-y-2">
+          <label htmlFor="new-note" className="label">
+            Add a note (phone calls, impressions, things to check)
+          </label>
+          <textarea id="new-note" className="input min-h-24" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
+          <div className="flex gap-2">
+            <button type="submit" className="btn btn-primary" disabled={!draft.trim()}>
+              Add note
+            </button>
+            <button type="button" className="btn" onClick={() => (setAdding(false), setDraft(''))}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" className="btn mt-3" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={20} /> Add a note
         </button>
-      </form>
+      )}
 
       {notes.length === 0 ? (
         <p className="muted mt-4">No notes yet.</p>

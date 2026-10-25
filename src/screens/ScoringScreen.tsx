@@ -8,7 +8,8 @@ import { CommitTextarea } from '../components/CommitTextarea';
 import { DependencyCard, ResolutionCard, ScreenHeader } from '../components/ui/Cards';
 import { ScoreInput, scoreWord } from '../components/ui/Form';
 import { Explain, Term, WhyNumber } from '../components/ui/Help';
-import { StatusText } from '../components/ui/Status';
+import { Chip } from '../components/ui/Status';
+import { Meter } from '../components/ui/Visual';
 
 /** "What good looks like" for each criterion (UI-SPEC §6.11). */
 const GOOD_LOOKS_LIKE: Record<CriterionId, string> = {
@@ -75,6 +76,7 @@ export function ScoringScreen() {
             return (
               <li key={r.provider.id} className="well flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="text-2xl font-semibold tabular-nums">{r.total === null ? '–' : i + 1}</span>
+                {r.total !== null && <Meter value={r.total} max={5} className="order-last w-full" />}
                 <span className="min-w-0 flex-1">
                   <Link to={`/providers/${r.provider.id}`} className="font-semibold">
                     {r.provider.provider}
@@ -98,9 +100,9 @@ export function ScoringScreen() {
                 </span>
                 {failed.length > 0 && (
                   <Link to="/interview-pack" className="no-underline">
-                    <StatusText status="stop">
+                    <Chip status="stop">
                       Disqualify? {failed.length} must-ask question{failed.length === 1 ? '' : 's'} not answered in writing
-                    </StatusText>
+                    </Chip>
                   </Link>
                 )}
               </li>
@@ -128,10 +130,15 @@ export function ScoringScreen() {
               const hint = c.id === 'price' ? priceHint(current.id) : null;
               return (
                 <li key={c.id} className="space-y-2 border-t border-[var(--rule)] pt-4 first:border-t-0 first:pt-0">
-                  <h3>
-                    {c.label} <span className="text-base font-normal">({weightWords(weights[c.id])})</span>
-                  </h3>
-                  <p>Good looks like: {GOOD_LOOKS_LIKE[c.id]}</p>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <h3>
+                      {c.label} <span className="text-base font-normal">({weightWords(weights[c.id])})</span>
+                    </h3>
+                    {value !== undefined && <span className="font-semibold">{value} · {scoreWord(value)}</span>}
+                  </div>
+                  <Explain question="What good looks like">
+                    <p>{GOOD_LOOKS_LIKE[c.id]}</p>
+                  </Explain>
                   <ScoreInput label={`${c.label} score for ${current.provider}`} value={value} onChange={(score) => dispatch({ type: 'score/set', providerId: current.id, criterion: c.id, score })} />
                   {hint !== null && value === undefined && (
                     <button type="button" className="btn-quiet" onClick={() => dispatch({ type: 'score/set', providerId: current.id, criterion: 'price', score: hint })}>
@@ -176,12 +183,17 @@ export function ScoringScreen() {
         <CommitTextarea id="decision" className="input min-h-32" value={state.decisionNotes} onCommit={(text) => dispatch({ type: 'decision/set', text })} />
       </section>
 
-      <ResolutionCard status="info" title="Before you sign">
-        <p>
-          Ask for the service agreement in writing (question I1), check the exit and cancellation terms (I2, I3), and confirm prices are all-inclusive (G2).{' '}
-          <Link to="/interview-pack">See those questions</Link>.
-        </p>
-      </ResolutionCard>
+      <ResolutionCard
+        status="info"
+        title="Before you sign: 3 things to check"
+        moreLabel="What are they?"
+        more={
+          <p>
+            Ask for the service agreement in writing (question I1), check the exit and cancellation terms (I2, I3), and confirm prices are all-inclusive (G2).{' '}
+            <Link to="/interview-pack">See those questions</Link>.
+          </p>
+        }
+      />
     </section>
   );
 }

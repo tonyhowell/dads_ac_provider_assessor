@@ -13,6 +13,8 @@ import { DependencyCard, NextStepCard, ResolutionCard, ScreenHeader } from '../c
 import { Explain, Term, WhyNumber, type WhyLine } from '../components/ui/Help';
 import { StatusText } from '../components/ui/Status';
 import { hoursText } from '../components/ui/Form';
+import { Expander } from '../components/ui/Expander';
+import { StatRow, StatTile } from '../components/ui/Visual';
 
 type Scope = 'selected' | 'interview' | 'all';
 type Period = 'quarter' | 'year' | 'week';
@@ -53,10 +55,12 @@ export function CostsScreen() {
       )}
 
       {top && (
-        <p className="text-xl">
-          Your plan costs between <strong>{money(top.cheapest.quarterly_cost)}</strong> and <strong>{money(top.dearest.quarterly_cost)}</strong> {word} — a difference of{' '}
-          {formatPercent(top.spread)}. The cheapest is {top.cheapest.name}.
-        </p>
+        <StatRow>
+          <StatTile icon="arrowDown" label="Cheapest" value={money(top.cheapest.quarterly_cost)} sub={top.cheapest.name} highlight />
+          <StatTile icon="arrowUp" label="Dearest" value={money(top.dearest.quarterly_cost)} sub={top.dearest.name} />
+          <StatTile label="Difference" value={formatPercent(top.spread)} sub={`between cheapest and dearest, ${word}`} />
+          {budget && <StatTile icon="dollar" label="Your services budget" value={money(budget.for_services)} sub={word} />}
+        </StatRow>
       )}
 
       <div className="flex flex-wrap items-end gap-4">
@@ -97,34 +101,31 @@ export function CostsScreen() {
         <ResolutionCard
           status="stop"
           title="Your plan costs more than your budget at every provider"
-          actions={
-            <>
-              <a href="#plan-heading" className="btn">
-                Adjust plan hours
-              </a>
-            </>
-          }
-        >
-          <p>You could reduce hours, ask DVA about services it could fund instead, or check any unspent funds carried over from last quarter.</p>
-          <Explain question="What are my options?">
+          moreLabel="What are my options?"
+          more={
             <ul className="list-disc space-y-1 pl-6">
-              <li>Lower the hours of services you could do without, or that family could help with.</li>
+              <li>Lower the hours of services you could do without, or that family could help with (in "Your care plan" below).</li>
               <li>If you hold a DVA card, ask DVA whether Veterans' Home Care could cover cleaning, gardening or respite.</li>
               <li>Up to $1,000 or 10% of your budget can carry over each quarter. Ask your provider how much you have.</li>
               <li>If your needs have grown, ask My Aged Care about a reassessment.</li>
             </ul>
-          </Explain>
-        </ResolutionCard>
+          }
+        />
       )}
 
       <CostChart priced={priced} benchmark={benchmark} forServices={budget?.for_services ?? null} factor={factor} word={word} />
 
       {unpublished.length > 0 && (
-        <ResolutionCard status="caution" title="Some providers haven't published prices for your plan">
-          <p>
-            {unpublished.map((r) => r.provider.provider).join(', ')}. They're left out of the comparison. Ask them to cost your plan at interview (question G7).
-          </p>
-        </ResolutionCard>
+        <ResolutionCard
+          status="caution"
+          title={`${unpublished.length} provider${unpublished.length === 1 ? " hasn't" : "s haven't"} published prices for your plan`}
+          moreLabel="Which ones?"
+          more={
+            <p>
+              {unpublished.map((r) => r.provider.provider).join(', ')}. They're left out of the comparison. Ask them to cost your plan at interview (question G7).
+            </p>
+          }
+        />
       )}
 
       <PlanEditor />
@@ -179,10 +180,9 @@ export function CostsScreen() {
         <p className="muted">Costed for services from {formatDate(serviceDate)}. A quarter is 13 weeks.</p>
       </section>
 
-      <section className="card space-y-3" aria-labelledby="var-heading">
-        <h2 id="var-heading">Prices compared with the guide price</h2>
+      <Expander icon="dollar" title="Hourly prices compared with the guide price" summary={`${shown.length} provider${shown.length === 1 ? '' : 's'}: ▲ more than 5% above, ▼ more than 5% below`}>
         <p>
-          Each provider's hourly price compared with the <Term id="benchmark">guide price</Term>. More than 5% higher is marked ▲, more than 5% lower ▼.
+          Each provider's hourly price compared with the <Term id="benchmark">guide price</Term>.
         </p>
         <Explain question="What is the guide price?">
           <p>The price the Independent Health and Aged Care Pricing Authority (IHACPA) advises for 2026-27. It's advice, not a cap: providers set their own prices.</p>
@@ -250,7 +250,7 @@ export function CostsScreen() {
             </li>
           ))}
         </ul>
-      </section>
+      </Expander>
 
       <NextStepCard
         done={priced.length ? `You've compared ${priced.length} provider${priced.length === 1 ? '' : 's'} on cost.` : 'Look through the providers near you.'}

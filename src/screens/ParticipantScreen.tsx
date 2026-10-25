@@ -9,6 +9,8 @@ import { NextStepCard, ResolutionCard, ScreenHeader } from '../components/ui/Car
 import { ChoiceCards, Field } from '../components/ui/Form';
 import { Explain, Term } from '../components/ui/Help';
 import { Icon } from '../components/ui/Icon';
+import { Expander, MoreText } from '../components/ui/Expander';
+import { Meter, ShareRing } from '../components/ui/Visual';
 import { useFieldHelp } from '../components/ui/useFieldHelp';
 import { useFirstRun, WelcomeScreen } from '../components/Welcome';
 
@@ -127,9 +129,12 @@ function ParticipantForm() {
     <section className="space-y-6">
       <ScreenHeader title="Tell us about your situation" purpose="So we can work out your budget and what you'll pay." helpTopic="about-you" />
 
-      <ResolutionCard status="info" title="Shared only with your family">
-        <p>Your details are seen only by family members invited to this assessment. We ask only what's needed to work out costs. Your name is optional.</p>
-      </ResolutionCard>
+      <ResolutionCard
+        status="info"
+        title="Shared only with your family"
+        moreLabel="Who can see this?"
+        more={<p>Your details are seen only by family members invited to this assessment. We ask only what's needed to work out costs. Your name is optional.</p>}
+      />
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,var(--wrap-form))_minmax(0,1fr)]">
         <form onSubmit={save} className="space-y-6" noValidate>
@@ -150,7 +155,9 @@ function ParticipantForm() {
 
           <fieldset className="card space-y-4">
             <legend className="sr-only">Where you live</legend>
-            <h2>Where you live</h2>
+            <h2 className="flex items-center gap-2">
+              <Icon name="pin" size={26} /> Where you live
+            </h2>
             <Field label="Your first name (optional)" hint="So the app can use your name. Leave it blank if you prefer.">
               {({ id, describedBy }) => <input id={id} aria-describedby={describedBy} className="input" value={draft.name} onChange={(e) => set('name', e.target.value)} autoComplete="given-name" />}
             </Field>
@@ -183,7 +190,9 @@ function ParticipantForm() {
 
           <fieldset className="card space-y-4">
             <legend className="sr-only">Your approval</legend>
-            <h2>Your approval</h2>
+            <h2 className="flex items-center gap-2">
+              <Icon name="calendar" size={26} /> Your approval
+            </h2>
             <span id="field-classification" />
             <Field
               label={
@@ -238,7 +247,9 @@ function ParticipantForm() {
 
           <fieldset className="card space-y-4">
             <legend className="sr-only">Your pension</legend>
-            <h2>Your pension</h2>
+            <h2 className="flex items-center gap-2">
+              <Icon name="dollar" size={26} /> Your pension
+            </h2>
             <ChoiceCards<Status>
               legend={fh('pension_status').label}
               hint={fh('pension_status').hint}
@@ -255,7 +266,7 @@ function ParticipantForm() {
               <div className="well space-y-3">
                 <span id="field-rates" />
                 <p className="label">{fh('assessed_rates').label}</p>
-                <span className="hint">{fh('assessed_rates').hint}</span>
+                <MoreText text={fh('assessed_rates').hint ?? ''} className="hint" />
                 <label className="flex min-h-[var(--target-min)] items-center gap-3">
                   <input type="checkbox" checked={draft.noLetter} onChange={(e) => set('noLetter', e.target.checked)} />
                   I don't have my letter yet — use a range for now
@@ -276,7 +287,9 @@ function ParticipantForm() {
 
           <fieldset className="card space-y-4">
             <legend className="sr-only">DVA card</legend>
-            <h2>DVA card</h2>
+            <h2 className="flex items-center gap-2">
+              <Icon name="card" size={26} /> DVA card
+            </h2>
             <ChoiceCards<Participant['dva_card']>
               legend={
                 <>
@@ -298,7 +311,9 @@ function ParticipantForm() {
 
           <fieldset className="card space-y-4">
             <legend className="sr-only">Contributions paid so far</legend>
-            <h2>Contributions paid so far</h2>
+            <h2 className="flex items-center gap-2">
+              <Icon name="clock" size={26} /> Contributions paid so far
+            </h2>
             <span id="field-paid" />
             <Field label={fh('paid').label} hint={fh('paid').hint} error={shown('paid')}>
               {({ id, describedBy, invalid }) => (
@@ -328,14 +343,21 @@ function ParticipantForm() {
           <section className="card space-y-3">
             <h2>Your summary</h2>
             <h3>What you pay for each service</h3>
-            <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-              <dt>Clinical care</dt>
-              <dd className="text-right font-semibold tabular-nums">0%</dd>
-              <dt>Independence</dt>
-              <dd className="text-right font-semibold tabular-nums">{range(rates.ind_low, rates.ind_high)}</dd>
-              <dt>Everyday living</dt>
-              <dd className="text-right font-semibold tabular-nums">{range(rates.ev_low, rates.ev_high)}</dd>
-            </dl>
+            <ul className="space-y-2">
+              {(
+                [
+                  ['Clinical care', 0, 0],
+                  ['Independence', rates.ind_low, rates.ind_high],
+                  ['Everyday living', rates.ev_low, rates.ev_high],
+                ] as const
+              ).map(([label, lo, hi]) => (
+                <li key={label} className="flex items-center gap-3">
+                  <ShareRing share={hi} size={44} label={`${label}: you pay ${range(lo, hi)}`} />
+                  <span className="min-w-0 flex-1 leading-tight">{label}</span>
+                  {lo !== hi && <span className="text-[0.95rem] font-semibold tabular-nums">{range(lo, hi)}</span>}
+                </li>
+              ))}
+            </ul>
             <Explain question="Why these rates?">
               <p>
                 <Term id="categories">Clinical care</Term> (nursing, and personal care from 1 October 2026) is free. For the other two kinds of service you pay a share of
@@ -351,17 +373,22 @@ function ParticipantForm() {
               <>
                 <h3>Your budget</h3>
                 <p>
-                  <span className="figure block">{formatAud(budget.for_services)}</span> for your services each quarter, from a budget of {formatAud(budget.quarterly)} after 10% care
-                  management.
+                  <span className="figure block">{formatAud(budget.for_services)}</span> for your services each quarter
                 </p>
+                <Meter value={budget.for_services} max={budget.quarterly} label={`${formatAud(budget.for_services)} of ${formatAud(budget.quarterly)} goes to services; 10% goes to care management`} />
+                <p className="small">From {formatAud(budget.quarterly)}, after 10% care management.</p>
               </>
             )}
           </section>
-          {prompts.map((p) => (
-            <ResolutionCard key={p.id} status="info" title="Worth checking with DVA">
-              <p>{p.text}</p>
-            </ResolutionCard>
-          ))}
+          {prompts.length > 0 && (
+            <Expander icon="shield" title="Worth checking with DVA" summary={`${prompts.length} thing${prompts.length === 1 ? '' : 's'} to ask about`}>
+              <ul className="list-disc space-y-2 pl-5">
+                {prompts.map((p) => (
+                  <li key={p.id}>{p.text}</li>
+                ))}
+              </ul>
+            </Expander>
+          )}
         </aside>
       </div>
 

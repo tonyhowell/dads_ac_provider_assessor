@@ -379,6 +379,17 @@
     color: black !important;
     font-size: 12pt;
   }
+  /* Printing shows every expandable section open. */
+  [data-expander-body][hidden] {
+    display: block !important;
+  }
+  span[data-expander-body][hidden] {
+    display: inline !important;
+  }
+  .line-clamp-2 {
+    -webkit-line-clamp: unset !important;
+    overflow: visible !important;
+  }
   .no-print,
   header[data-app-header],
   nav[data-journey],

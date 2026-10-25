@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from './Icon';
 import { StatusIcon, type Status } from './Status';
@@ -14,13 +14,20 @@ export function ResolutionCard({
   children,
   actions,
   role,
+  more,
+  moreLabel = 'Tell me more',
 }: {
   status: Status;
   title: string;
   children?: ReactNode;
   actions?: ReactNode;
   role?: 'alert' | 'status';
+  /** Detail kept behind a "Tell me more" toggle so the card stays short. */
+  more?: ReactNode;
+  moreLabel?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const moreId = useId();
   return (
     <div className={`card tone-${status} border-l-4`} role={role}>
       <div className="flex gap-3">
@@ -30,6 +37,16 @@ export function ResolutionCard({
         <div className="min-w-0 flex-1 space-y-2">
           <p className="font-semibold">{title}</p>
           {children && <div className="space-y-2">{children}</div>}
+          {more && (
+            <>
+              <div id={moreId} hidden={!open} data-expander-body className="space-y-2">
+                {more}
+              </div>
+              <button type="button" className="btn-quiet no-print" aria-expanded={open} aria-controls={moreId} onClick={() => setOpen(!open)}>
+                <Icon name={open ? 'chevronDown' : 'chevronRight'} size={20} /> {open ? 'Show less' : moreLabel}
+              </button>
+            </>
+          )}
           {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
         </div>
       </div>

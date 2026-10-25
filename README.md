@@ -68,6 +68,7 @@ The full v1 build plan (SPEC §8 screens, calculations, question filtering, scor
 - Inputs: choice cards, hours steppers (15-minute steps) and scores in words.
 - Other screens: a first-run welcome and a "welcome back" card, notes for the family on any screen, and an About page.
 - Display settings: text size 18–24px, theme, high contrast, motion and hints.
+- Less text on screen: detail sits in expandable sections with a one-line summary (care plan, price comparison, rules, interview sections, "What we know"). Field hints show their first sentence with "More". Visual summaries: stat tiles, share rings for contributions, progress meters and a price-vs-guide scale. Printing opens every section.
 - Accessibility: axe checks every screen in the test suite (`src/test/a11y.test.tsx`).
 - Fonts use the system fallback stack. The spec's Archivo and Newsreader fonts aren't bundled yet.
 

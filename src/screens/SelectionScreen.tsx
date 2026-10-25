@@ -4,14 +4,14 @@ import { useApp } from '../state/AppContext';
 import { entriesAt, STAGE_LABELS } from '../state/reducer';
 import { SELECTION_STAGES } from '../schemas';
 import { StageControls } from '../components/StageControls';
-import { CommitTextarea } from '../components/CommitTextarea';
+import { OptionalNote } from '../components/OptionalNote';
 import { usePlanCosts } from '../components/usePlanCosts';
 import { mentionsDisallowedFees } from '../flags';
 import { formatAud, formatPercent } from '../format';
 import type { Provider, SelectionEntry, SelectionStage } from '../types';
 import { NextStepCard, ResolutionCard, ScreenHeader } from '../components/ui/Cards';
 import { UndoBar } from '../components/ui/Feedback';
-import { StatusText } from '../components/ui/Status';
+import { Chip } from '../components/ui/Status';
 import { Icon } from '../components/ui/Icon';
 
 const STAGE_HELP: Record<SelectionStage, string> = {
@@ -77,7 +77,7 @@ export function SelectionScreen() {
         </ol>
       </nav>
 
-      <div className="grid gap-4 min-[1120px]:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 min-[1120px]:grid-cols-3">
         {SELECTION_STAGES.map((s, i) => {
           const entries = entriesAt(state, s).flatMap((entry) => {
             const provider = byId.get(entry.provider_id);
@@ -170,80 +170,81 @@ function ProviderCard({
   const vsGuide = cost !== null && guide > 0 ? (cost - guide) / guide : null;
 
   return (
-    <li className="card space-y-3">
-      <h3>
+    <li className="card space-y-3 p-4">
+      <div className="flex items-start gap-3">
         {ranked && (
           <>
-            <span className="mr-2 inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-[var(--charcoal)] px-2 text-[var(--surface)]" aria-hidden>
+            <span className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-[var(--charcoal)] px-2 font-semibold text-[var(--surface)]" aria-hidden>
               {index + 1}
             </span>
-            <span className="sr-only">Number {index + 1}: </span>
           </>
         )}
-        <Link to={`/providers/${provider.id}`}>{provider.provider}</Link>
-      </h3>
-      <div className="space-y-1">
-        {cost === null ? (
-          <p>No published prices for your plan</p>
-        ) : (
-          <>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[1.1rem]">
+            {ranked && <span className="sr-only">Number {index + 1}: </span>}
+            <Link to={`/providers/${provider.id}`}>{provider.provider}</Link>
+          </h3>
+          {cost === null ? (
+            <p className="small">No published prices for your plan</p>
+          ) : (
             <p>
               <strong className="tabular-nums">{formatAud(cost)}</strong> a quarter
             </p>
-            {forServices !== null &&
-              (cost > forServices ? (
-                <StatusText status="stop">Over budget by {formatAud(cost - forServices)}</StatusText>
-              ) : (
-                <StatusText status="good">Under budget by {formatAud(forServices - cost)}</StatusText>
-              ))}
-            {vsGuide !== null && (
-              <p className="small">
-                {Math.abs(vsGuide) < 0.05 ? 'Within 5% of the guide price' : `${formatPercent(Math.abs(vsGuide))} ${vsGuide > 0 ? 'above' : 'below'} the guide price`}
-              </p>
-            )}
-          </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {cost !== null &&
+          forServices !== null &&
+          (cost > forServices ? <Chip status="stop">Over budget by {formatAud(cost - forServices)}</Chip> : <Chip status="good">Under budget by {formatAud(forServices - cost)}</Chip>)}
+        {vsGuide !== null && (
+          <span className="chip chip-neutral">{Math.abs(vsGuide) < 0.05 ? 'Within 5% of guide' : `${vsGuide > 0 ? '▲' : '▼'} ${formatPercent(Math.abs(vsGuide))} ${vsGuide > 0 ? 'above' : 'below'} guide`}</span>
         )}
-        <p className="flex flex-wrap gap-x-3">
-          {mentionsDisallowedFees(...provider.flags) && <StatusText status="caution">Possible extra fee</StatusText>}
-          <span>
+        {mentionsDisallowedFees(...provider.flags) && <Chip status="caution">Possible extra fee</Chip>}
+        {flags > 0 && (
+          <span className="chip chip-neutral">
             {flags} flag{flags === 1 ? '' : 's'}
           </span>
-          <span>
+        )}
+        {notes > 0 && (
+          <span className="chip chip-neutral">
             {notes} note{notes === 1 ? '' : 's'}
           </span>
-        </p>
-      </div>
-
-      <StageControls provider={provider} onDrop={onDrop} />
-
-      {ranked && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn" disabled={index === 0} onClick={() => dispatch({ type: 'selection/move', providerId: provider.id, toIndex: index - 1 })}>
-            <Icon name="arrowUp" size={20} /> Move up <span className="sr-only">{provider.provider}</span>
-          </button>
-          <button type="button" className="btn" disabled={index === count - 1} onClick={() => dispatch({ type: 'selection/move', providerId: provider.id, toIndex: index + 1 })}>
-            <Icon name="arrowDown" size={20} /> Move down <span className="sr-only">{provider.provider}</span>
-          </button>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div>
-          <label htmlFor={`why-${provider.id}`} className="label">
-            {ranked ? 'Why you chose them' : 'Why keep them'}
-          </label>
-          <CommitTextarea id={`why-${provider.id}`} className="input min-h-20" value={entry.why} onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, why: v })} />
-        </div>
-        {ranked && (
-          <div>
-            <label htmlFor={`watch-${provider.id}`} className="label">
-              Watch for
-            </label>
-            <span className="hint">These show up in your interview questions for {provider.provider}.</span>
-            <CommitTextarea id={`watch-${provider.id}`} className="input min-h-20" value={entry.watch} onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, watch: v })} />
-          </div>
         )}
       </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <StageControls provider={provider} onDrop={onDrop} small />
+        {ranked && (
+          <>
+            <button type="button" className="btn btn-sm w-11 px-0" disabled={index === 0} onClick={() => dispatch({ type: 'selection/move', providerId: provider.id, toIndex: index - 1 })}>
+              <Icon name="arrowUp" size={20} /> <span className="sr-only">Move up {provider.provider}</span>
+            </button>
+            <button type="button" className="btn btn-sm w-11 px-0" disabled={index === count - 1} onClick={() => dispatch({ type: 'selection/move', providerId: provider.id, toIndex: index + 1 })}>
+              <Icon name="arrowDown" size={20} /> <span className="sr-only">Move down {provider.provider}</span>
+            </button>
+          </>
+        )}
+      </div>
+
+      <OptionalNote
+        id={`why-${provider.id}`}
+        label={ranked ? 'Why you chose them' : 'Why keep them'}
+        addLabel={ranked ? 'Add why you chose them' : 'Add why to keep them'}
+        value={entry.why}
+        onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, why: v })}
+      />
+      {ranked && (
+        <OptionalNote
+          id={`watch-${provider.id}`}
+          label="Watch for"
+          addLabel="Add what to watch for"
+          hint={`These show up in your interview questions for ${provider.provider}.`}
+          value={entry.watch}
+          onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, watch: v })}
+        />
+      )}
     </li>
   );
 }

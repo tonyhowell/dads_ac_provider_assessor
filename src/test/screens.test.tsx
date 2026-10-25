@@ -57,12 +57,16 @@ describe('Provider selection', () => {
     await user.click(screen.getByRole('button', { name: /Move to Refinement\s*: BlueCare/ }));
     expect(screen.getByRole('link', { name: 'Step 2: Refinement, 2 providers' })).toBeInTheDocument();
 
+    const boltonCard = screen.getByRole('link', { name: 'Bolton Clarke' }).closest('li')!;
+    await user.click(within(boltonCard).getByRole('button', { name: 'Add why to keep them' }));
     await user.type(screen.getByLabelText('Why keep them', { selector: '#why-bolton-clarke' }), 'Published prices');
+    await user.tab();
     await user.click(screen.getByRole('button', { name: /Move to Providers to interview\s*: Bolton Clarke/ }));
     await user.click(screen.getByRole('button', { name: /Move to Providers to interview\s*: BlueCare/ }));
 
     await user.click(screen.getByRole('link', { name: 'Step 3: Providers to interview, 2 providers' }));
     await user.click(screen.getByRole('button', { name: /Move up\s*BlueCare/ }));
+    await user.click(within(screen.getByRole('link', { name: 'Bolton Clarke' }).closest('li')!).getByRole('button', { name: 'Add what to watch for' }));
     await user.type(screen.getByLabelText('Watch for', { selector: '#watch-bolton-clarke' }), 'Worker turnover');
     await user.tab(); // notes save when the field loses focus
     await waitFor(() => expect(server.state.selection[1]?.watch).toBe('Worker turnover'));
@@ -89,6 +93,7 @@ describe('Provider notes', () => {
     const user = userEvent.setup();
     await renderApp('/providers/anglicare-southern-queensland');
 
+    await user.click(screen.getByRole('button', { name: 'Add a note' }));
     await user.type(screen.getByLabelText(/add a note/i), 'Rang intake line, call back Tuesday');
     await user.click(screen.getByRole('button', { name: 'Add note' }));
     expect(screen.getByText('Rang intake line, call back Tuesday')).toBeInTheDocument();
