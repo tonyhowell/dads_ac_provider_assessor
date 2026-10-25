@@ -1,0 +1,147 @@
+/* Provider Assessor design tokens — derived from the Quantivate brand (quantivate-website
+   src/styles/tokens.css). See docs/UI-SPEC.md §3 for usage rules and measured contrast.
+   Components use these tokens; never hard-code a hex value or pixel size. */
+
+:root {
+  /* Surfaces */
+  --paper: #f4f1ea; /* page background (Quantivate paper) */
+  --surface: #fffdf8; /* cards, inputs, tables, dialogs */
+  --sunken: #eae5da; /* wells, table headers, help panel */
+
+  /* Text and lines */
+  --charcoal: #2e3236; /* body text, headings, hints — 11.45:1 on paper */
+  --grey: #676c71; /* secondary text on paper/surface only — 4.70:1 on paper */
+  --grey-strong: #5c6166; /* secondary text on sunken — 4.98:1 */
+  --line: #7a7f84; /* control borders, 3:1 non-text — 3.58:1 on paper */
+  --rule: rgba(46, 50, 54, 0.18); /* decorative dividers only */
+  --cell-mark: rgba(46, 50, 54, 0.25); /* resting cells in the grid mark */
+
+  /* Signal — one use per screen: the next action */
+  --amber: #e8a33d; /* charcoal text on amber 5.99:1; never amber text on light */
+  --amber-press: #d9942f;
+  --amber-tint: #fbefd9;
+  --on-amber: #2e3236;
+
+  /* Status — always paired with an icon shape and words */
+  --good: #2f6b4f;
+  --good-tint: #e6f0ea;
+  --caution: #8a5a12;
+  --caution-tint: #fbefd9;
+  --stop: #b3261e;
+  --stop-tint: #fbe9e7;
+  --info: #2f5d7c;
+  --info-tint: #e7eef3;
+
+  /* Type */
+  --font-ui: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-read: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --text-base: 18px; /* user setting: 18 / 20 / 22 / 24 */
+  --leading-ui: 1.55;
+  --leading-read: 1.65;
+  --measure: 66ch;
+
+  /* Space — 8px base */
+  --s1: 8px;
+  --s2: 16px;
+  --s3: 24px;
+  --s4: 32px;
+  --s5: 48px;
+  --s6: 72px;
+
+  /* Size and shape */
+  --target-min: 48px;
+  --target-gap: 8px;
+  --control-height: 52px;
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --border-control: 1.5px;
+  --wrap: 1120px;
+  --wrap-form: 760px;
+  --shadow-raised: 0 1px 2px rgba(46, 50, 54, 0.08), 0 4px 12px rgba(46, 50, 54, 0.06);
+
+  /* Motion */
+  --duration: 160ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+html {
+  font-size: var(--text-base);
+}
+html[data-text-size='20'] {
+  --text-base: 20px;
+}
+html[data-text-size='22'] {
+  --text-base: 22px;
+}
+html[data-text-size='24'] {
+  --text-base: 24px;
+}
+
+.dark {
+  --paper: #1e2124;
+  --surface: #2a2e32;
+  --sunken: #17191c;
+  --charcoal: #ece8e0; /* 13.24:1 on paper */
+  --grey: #adb2b8; /* 7.58:1 on paper */
+  --grey-strong: #adb2b8;
+  --line: #858b91; /* 4.70:1 on paper, 3.97:1 on surface */
+  --rule: rgba(236, 232, 224, 0.16);
+  --cell-mark: rgba(236, 232, 224, 0.25);
+  --amber-tint: rgba(232, 163, 61, 0.16);
+  --on-amber: #1e2124; /* 7.50:1 */
+  --good: #7fc4a0;
+  --caution: #f2c77a;
+  --stop: #ff9e99;
+  --info: #8fb8d6;
+  --good-tint: rgba(127, 196, 160, 0.14);
+  --caution-tint: rgba(242, 199, 122, 0.14);
+  --stop-tint: rgba(255, 158, 153, 0.14);
+  --info-tint: rgba(143, 184, 214, 0.14);
+  --shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hc {
+  --paper: #ffffff;
+  --surface: #ffffff;
+  --sunken: #ffffff;
+  --charcoal: #000000;
+  --grey: #000000;
+  --grey-strong: #000000;
+  --line: #000000;
+  --rule: #000000;
+  --amber-tint: #ffffff;
+  --border-control: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+  }
+}
+
+/* Tailwind v4: expose tokens as utilities (bg-paper, text-ink, border-line, bg-signal, text-stop …). */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--charcoal);
+  --color-ink-muted: var(--grey);
+  --color-line: var(--line);
+  --color-rule: var(--rule);
+  --color-signal: var(--amber);
+  --color-signal-press: var(--amber-press);
+  --color-signal-tint: var(--amber-tint);
+  --color-on-signal: var(--on-amber);
+  --color-good: var(--good);
+  --color-good-tint: var(--good-tint);
+  --color-caution: var(--caution);
+  --color-caution-tint: var(--caution-tint);
+  --color-stop: var(--stop);
+  --color-stop-tint: var(--stop-tint);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+  --font-sans: var(--font-ui);
+  --font-serif: var(--font-read);
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+}
