@@ -63,6 +63,18 @@ src/
 
 ---
 
+### Phase 1 additions (requested 25 Oct 2026): done in the skeleton build
+
+| Feature | Implementation |
+|---|---|
+| **Provider assessment notes** | `ProviderNote` records (manual or from an interview), with timestamps; add/edit/delete on the provider page. |
+| **Down-selected providers** | "Add to shortlist" on the full provider list feeds the SPEC §8 Shortlist screen. It's one ranked list, not two: the down-selection *is* the shortlist (reorder, why/watch notes, remove). |
+| **Interview capture → notes** | Consent check, then the browser `MediaRecorder` records the interview to IndexedDB on this device. Optional live transcription uses the Web Speech API (en-AU) and is disclosed in the UI. The user can edit or paste the transcript. `POST /api/interview-notes` (a Vite server plugin holding `ANTHROPIC_API_KEY`) sends it to the Claude API, which returns structured notes. The user reviews them and saves them to the provider's notes. "Must" interview questions are passed along so unanswered ones show up as follow-ups. |
+
+Later options for interviews: transcribe recorded audio on the server (needs a speech-to-text service; the Claude API doesn't take audio), show notes per question once the interview pack exists (Phase 3.7), and pre-fill scores from interview notes (Phase 3.8).
+
+---
+
 ## Phase 2 — Calculations (`calc.ts`)
 
 Pure functions, with no React or storage dependencies:

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "right-at-home-bayside-south",
+    "provider": "Right at Home Brisbane Bayside South",
+    "type": null, "outlet": null,
+    "rn": null, "en": null, "pc": null, "domestic": null, "social": null, "respite": null, "gardening": null, "care_mgmt": null,
+    "prices_as_at": "2026-10-25", "veteran_fit": null, "flags": [], "source_url": null
+  },
+  {
+    "id": "bolton-clarke",
+    "provider": "Bolton Clarke",
+    "type": null, "outlet": null,
+    "rn": null, "en": null, "pc": null, "domestic": null, "social": null, "respite": null, "gardening": null, "care_mgmt": null,
+    "prices_as_at": "2026-10-25", "veteran_fit": null, "flags": [],
+    "source_url": "https://www.boltonclarke.com.au/support-at-home/support-at-home-program/sah-pricing/"
+  },
+  {
+    "id": "anglicare-sq",
+    "provider": "Anglicare Southern Queensland",
+    "type": null, "outlet": null,
+    "rn": null, "en": null, "pc": null, "domestic": null, "social": null, "respite": null, "gardening": null, "care_mgmt": null,
+    "prices_as_at": "2026-10-25", "veteran_fit": null, "flags": [],
+    "source_url": "https://anglicaresq.org.au/hcp-fees"
+  },
+  {
+    "id": "bluecare",
+    "provider": "BlueCare (UnitingCare QLD)",
+    "type": null, "outlet": null,
+    "rn": null, "en": null, "pc": null, "domestic": null, "social": null, "respite": null, "gardening": null, "care_mgmt": null,
+    "prices_as_at": "2026-10-25", "veteran_fit": null, "flags": [], "source_url": null
+  }
+]

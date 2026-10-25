@@ -1,0 +1,42 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import './index.css';
+import { App } from './App';
+import { loadSeedData, SeedDataError, type SeedData } from './data/load';
+import { AppProvider } from './state/AppContext';
+import { LocalStorageAdapter } from './storage/storage';
+import { indexedDbAudioStore } from './storage/audioStore';
+import { applyStoredTheme } from './components/ThemeToggle';
+
+applyStoredTheme();
+const root = createRoot(document.getElementById('root')!);
+
+let seed: SeedData | undefined;
+try {
+  seed = loadSeedData();
+} catch (err) {
+  const issues = err instanceof SeedDataError ? err.issues : [String(err)];
+  const file = err instanceof SeedDataError ? err.file : 'seed data';
+  root.render(
+    <main className="mx-auto max-w-2xl p-6">
+      <h1 className="text-xl font-semibold">Seed data could not be loaded</h1>
+      <p className="mt-2">Fix <code>data/{file}</code> and reload.</p>
+      <ul className="mt-4 list-disc pl-6 font-mono text-sm">
+        {issues.map((i) => <li key={i}>{i}</li>)}
+      </ul>
+    </main>,
+  );
+}
+
+if (seed) {
+  root.render(
+    <StrictMode>
+      <BrowserRouter>
+        <AppProvider seed={seed} storage={new LocalStorageAdapter()} audio={indexedDbAudioStore}>
+          <App />
+        </AppProvider>
+      </BrowserRouter>
+    </StrictMode>,
+  );
+}

@@ -1,0 +1,7 @@
+[
+  { "status": "full_pensioner", "clinical": 0, "ind_low": 0.05, "ind_high": 0.05, "ev_low": 0.175, "ev_high": 0.175 },
+  { "status": "part_pensioner", "clinical": 0, "ind_low": 0.05, "ind_high": 0.5, "ev_low": 0.175, "ev_high": 0.8 },
+  { "status": "self_funded", "clinical": 0, "ind_low": 0.5, "ind_high": 0.5, "ev_low": 0.8, "ev_high": 0.8 },
+  { "status": "nwop_full_pensioner", "clinical": 0, "ind_low": 0, "ind_high": 0, "ev_low": 0, "ev_high": 0 },
+  { "status": "nwop_self_funded", "clinical": 0, "ind_low": 0, "ind_high": 0.25, "ev_low": 0, "ev_high": 0.25 }
+]
