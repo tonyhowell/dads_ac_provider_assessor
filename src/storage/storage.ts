@@ -23,11 +23,19 @@ export class LocalStorageAdapter implements Storage {
   }
 
   save<T>(key: string, value: T): void {
-    this.store.setItem(PREFIX + key, JSON.stringify(value));
+    try {
+      this.store.setItem(PREFIX + key, JSON.stringify(value));
+    } catch {
+      // Storage full or blocked (private window): keep working in memory.
+    }
   }
 
   remove(key: string): void {
-    this.store.removeItem(PREFIX + key);
+    try {
+      this.store.removeItem(PREFIX + key);
+    } catch {
+      /* storage blocked */
+    }
   }
 }
 

@@ -48,6 +48,15 @@ export function Layout() {
         </nav>
       </header>
 
+      {import.meta.env.MODE === 'static' && (
+        <div role="status" className="border-b border-sky-300 bg-sky-50 px-4 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
+          <div className="mx-auto max-w-6xl">
+            Review preview. Recording and drafting interview notes need the full app; everything else works and is saved in this
+            browser only.
+          </div>
+        </div>
+      )}
+
       {pricesMissing(seed.providers) && (
         <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <div className="mx-auto max-w-6xl">
