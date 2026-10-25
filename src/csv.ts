@@ -1,3 +1,4 @@
+import { parseAreas } from './area';
 import { ProviderSchema, RATE_KEYS } from './schemas';
 import { latestDateIn, slugify } from './data/normalise';
 import type { Provider } from './types';
@@ -44,12 +45,13 @@ export interface ImportRow {
   errors: string[];
 }
 
-const HEADER_ALIASES: Record<string, string> = { name: 'provider', provider_name: 'provider', url: 'source_url', source: 'source_url', as_at: 'prices_as_at' };
+const HEADER_ALIASES: Record<string, string> = { name: 'provider', provider_name: 'provider', url: 'source_url', source: 'source_url', as_at: 'prices_as_at', postcodes: 'postcodes_served', service_area: 'postcodes_served', areas: 'postcodes_served' };
 
 /**
  * Turns CSV rows into providers. The first row is the header; recognised columns are
  * provider (required), id, type, outlet, the rate columns (rn, en, pc, domestic, social, respite,
- * gardening, care_mgmt), prices_as_at, source_url, veteran_fit and flags (separated by semicolons).
+ * gardening, care_mgmt), prices_as_at, source_url, veteran_fit, flags (separated by semicolons) and
+ * postcodes_served (postcodes or ranges such as 4150-4169).
  */
 export function providersFromCsv(text: string, existing: Provider[]): { rows: ImportRow[]; unknownColumns: string[] } {
   const [header, ...body] = parseCsv(text);
@@ -58,7 +60,7 @@ export function providersFromCsv(text: string, existing: Provider[]): { rows: Im
     const k = h.trim().toLowerCase().replace(/[\s-]+/g, '_');
     return HEADER_ALIASES[k] ?? k;
   });
-  const known = new Set(['id', 'provider', 'type', 'outlet', 'prices_as_at', 'source_url', 'veteran_fit', 'flags', ...RATE_KEYS]);
+  const known = new Set(['id', 'provider', 'type', 'outlet', 'prices_as_at', 'source_url', 'veteran_fit', 'flags', 'postcodes_served', ...RATE_KEYS]);
   const byId = new Map(existing.map((p) => [p.id, p]));
   const byName = new Map(existing.map((p) => [p.provider.trim().toLowerCase(), p]));
 
@@ -98,6 +100,10 @@ export function providersFromCsv(text: string, existing: Provider[]): { rows: Im
       veteran_fit: get('veteran_fit') ?? match?.veteran_fit ?? null,
       flags: flags === undefined ? (match?.flags ?? []) : flags.split(';').map((f) => f.trim()).filter(Boolean),
       source_url: (get('source_url') ?? match?.source_url) || null,
+      postcodes_served: (() => {
+        const raw = get('postcodes_served');
+        return raw === undefined ? match?.postcodes_served : parseAreas(raw);
+      })(),
     };
     const parsed = ProviderSchema.safeParse(candidate);
     if (!parsed.success) errors.push(...parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`));

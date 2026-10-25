@@ -163,7 +163,7 @@ function ProviderCard({
   guide: number;
   onDrop: () => void;
 }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, canEdit } = useApp();
   const ranked = entry.stage === 'interview';
   const notes = state.notes.filter((n) => n.provider_id === provider.id).length;
   const flags = provider.flags.length;
@@ -216,7 +216,7 @@ function ProviderCard({
 
       <div className="flex flex-wrap items-center gap-2">
         <StageControls provider={provider} onDrop={onDrop} small />
-        {ranked && (
+        {ranked && canEdit && (
           <>
             <button type="button" className="btn btn-sm w-11 px-0" disabled={index === 0} onClick={() => dispatch({ type: 'selection/move', providerId: provider.id, toIndex: index - 1 })}>
               <Icon name="arrowUp" size={20} /> <span className="sr-only">Move up {provider.provider}</span>
@@ -233,6 +233,7 @@ function ProviderCard({
         label={ranked ? 'Why you chose them' : 'Why keep them'}
         addLabel={ranked ? 'Add why you chose them' : 'Add why to keep them'}
         value={entry.why}
+        readOnly={!canEdit}
         onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, why: v })}
       />
       {ranked && (
@@ -242,6 +243,7 @@ function ProviderCard({
           addLabel="Add what to watch for"
           hint={`These show up in your interview questions for ${provider.provider}.`}
           value={entry.watch}
+          readOnly={!canEdit}
           onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, watch: v })}
         />
       )}

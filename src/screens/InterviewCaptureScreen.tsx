@@ -12,7 +12,7 @@ import { MoreText } from '../components/ui/Expander';
 export function InterviewCaptureScreen() {
   const { providerId } = useParams();
   const provider = useProvider(providerId);
-  const { dispatch, audio } = useApp();
+  const { dispatch, audio, canEdit } = useApp();
   const navigate = useNavigate();
   const support = recorderSupport();
 
@@ -27,6 +27,14 @@ export function InterviewCaptureScreen() {
   if (!provider) {
     return (
       <ResolutionCard status="caution" title="We couldn't find that provider" actions={<Link to="/interviews" className="btn btn-primary">Back to interviews</Link>} />
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <ResolutionCard status="info" title="Only contributors can record interviews" actions={<Link to="/interviews" className="btn">Back to interviews</Link>}>
+        <p>Ask the coordinator to make you a contributor if you're doing the interview.</p>
+      </ResolutionCard>
     );
   }
 

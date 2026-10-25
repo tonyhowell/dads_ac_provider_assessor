@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useApp } from '../state/AppContext';
+import { useSession } from '../state/SessionContext';
 import { ScreenHeader } from '../components/ui/Cards';
 
 export function AboutScreen() {
-  const { seed } = useApp();
+  const { seed } = useSession();
   const { hash } = useLocation();
   useEffect(() => {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();

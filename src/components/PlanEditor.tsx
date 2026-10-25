@@ -15,7 +15,7 @@ export const CATEGORY_LABELS: Record<Category, string> = { clinical: 'Clinical',
 
 /** Weekly care plan (UI-SPEC §7.4 section A). Changes save for the whole family. */
 export function PlanEditor() {
-  const { state, seed, dispatch, plan, serviceDate } = useApp();
+  const { state, seed, dispatch, plan, serviceDate, canEdit } = useApp();
   const fh = useFieldHelp();
   const [rows, setRows] = useState<PlanItem[]>(plan);
   useEffect(() => setRows(plan), [plan]);
@@ -35,10 +35,11 @@ export function PlanEditor() {
       icon="list"
       title="Your care plan"
       summary={rows.length ? `${rows.length} service${rows.length === 1 ? '' : 's'} · ${hoursText(rows.reduce((n, r) => n + r.hours_per_week, 0))} a week${state.plan ? '' : ' (sample plan)'}` : 'Empty — add services to cost'}
-      aside={<span className="no-print font-medium underline underline-offset-2">Change</span>}
+      aside={<span className="no-print font-medium underline underline-offset-2">{canEdit ? 'Change' : 'See'}</span>}
       defaultOpen={rows.length === 0}
     >
       <p>The services you'd use each week. Change the hours to see how the cost changes.</p>
+      <fieldset disabled={!canEdit} className="min-w-0 space-y-4">
 
       {rows.length === 0 ? (
         <ResolutionCard
@@ -136,6 +137,7 @@ export function PlanEditor() {
       <p className="muted">
         Weekday prices. Hourly services are charged in 15-minute steps; providers may set minimum visit lengths. Sample plan: {seed.samplePlan.length} services.
       </p>
+      </fieldset>
     </Expander>
   );
 }

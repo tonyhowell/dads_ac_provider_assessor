@@ -5,7 +5,7 @@ import './index.css';
 import { App } from './App';
 import { loadSeedData, SeedDataError, type SeedData } from './data/load';
 import { AuthProvider } from './auth/AuthContext';
-import { httpSync } from './state/sync';
+import { httpBackend } from './backend';
 import { indexedDbAudioStore } from './storage/audioStore';
 import { applyDisplay, loadDisplay } from './display';
 
@@ -34,7 +34,7 @@ if (seed) {
     <StrictMode>
       <BrowserRouter>
         <AuthProvider>
-          <App seed={seed} sync={httpSync} audio={indexedDbAudioStore} />
+          <App seed={seed} backend={httpBackend} audio={indexedDbAudioStore} />
         </AuthProvider>
       </BrowserRouter>
     </StrictMode>,

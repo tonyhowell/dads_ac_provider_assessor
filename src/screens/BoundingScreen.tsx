@@ -12,7 +12,7 @@ import type { BoundingAnswer } from '../types';
 type Answer = 'yes' | 'no' | 'unsure';
 
 export function BoundingScreen() {
-  const { seed, state, dispatch } = useApp();
+  const { seed, state, dispatch, canEdit } = useApp();
   const included = includedSections(seed.boundingGroups, seed.interviewSections, state.answers);
   const pack = interviewPack(seed.interviewSections, included, state.customQuestions);
   const count = packQuestionCount(pack);
@@ -81,6 +81,7 @@ export function BoundingScreen() {
                           name={`ans-${q.id}`}
                           value={(a?.answer as Answer) || null}
                           onChange={(v) => save(q.id, { answer: v })}
+                          disabled={!canEdit}
                           columns={3}
                           choices={[
                             { value: 'yes', label: 'Yes' },
@@ -90,7 +91,7 @@ export function BoundingScreen() {
                         />
                         {a?.answer === 'unsure' && <p>We'll keep these interview questions in, just in case.</p>}
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                          {q.informs_sections.length > 0 && (
+                          {q.informs_sections.length > 0 && canEdit && (
                             <button type="button" className="btn-quiet" aria-pressed={!!a?.not_relevant} onClick={() => save(q.id, { not_relevant: !a?.not_relevant })}>
                               <Icon name={a?.not_relevant ? 'check' : 'close'} size={20} />
                               {a?.not_relevant ? 'Marked not relevant to me — undo' : 'Not relevant to me'}
@@ -107,7 +108,7 @@ export function BoundingScreen() {
                             <p>{q.note ? `This helps ${q.note}.` : 'This is background for the family; it doesn\'t change the interview questions.'}</p>
                           )}
                         </Explain>
-                        <OptionalNote id={`notes-${q.id}`} label="Your note" addLabel="Add a note" value={a?.notes ?? ''} onCommit={(v) => save(q.id, { notes: v })} />
+                        <OptionalNote id={`notes-${q.id}`} label="Your note" addLabel="Add a note" value={a?.notes ?? ''} readOnly={!canEdit} onCommit={(v) => save(q.id, { notes: v })} />
                       </li>
                     );
                   })}

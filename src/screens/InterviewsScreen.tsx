@@ -6,7 +6,7 @@ import { ScreenHeader } from '../components/ui/Cards';
 import { MoreText } from '../components/ui/Expander';
 
 export function InterviewsScreen() {
-  const { providers, state } = useApp();
+  const { providers, state, canEdit } = useApp();
   const shortlistIds = entriesAt(state, 'interview').map((e) => e.provider_id);
   const shortlisted = new Set(shortlistIds);
   // Interview shortlist first (in rank order), then any others that have interviews.
@@ -48,9 +48,11 @@ export function InterviewsScreen() {
                     <Link to={`/providers/${id}`}>{provider.provider}</Link>
                     {!shortlisted.has(id) && <span className="muted font-normal"> (not on the interview shortlist)</span>}
                   </h2>
-                  <Link to={`/interviews/new/${id}`} className="btn">
-                    Record interview <span className="sr-only">with {provider.provider}</span>
-                  </Link>
+                  {canEdit && (
+                    <Link to={`/interviews/new/${id}`} className="btn">
+                      Record interview <span className="sr-only">with {provider.provider}</span>
+                    </Link>
+                  )}
                 </div>
                 <InterviewList providerId={id} />
               </li>

@@ -1,12 +1,16 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useApp, useProvider } from '../state/AppContext';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useOptionalApp } from '../state/AppContext';
+import { useSession } from '../state/SessionContext';
+import { useAuth } from '../auth/AuthContext';
+import { areaText, parseAreas } from '../area';
+import { ResolutionCard } from '../components/ui/Cards';
 import { ProviderSchema, RATE_KEYS } from '../schemas';
 import { RATE_LABELS } from '../labels';
 import { latestDateIn, slugify } from '../data/normalise';
 import type { Provider, RateKey } from '../types';
 
-type Draft = Record<'provider' | 'type' | 'outlet' | 'prices_as_at' | 'source_url' | 'veteran_fit' | 'flags', string> & Record<RateKey, string>;
+type Draft = Record<'provider' | 'type' | 'outlet' | 'prices_as_at' | 'source_url' | 'veteran_fit' | 'flags' | 'areas' | 'note', string> & Record<RateKey, string>;
 
 const toDraft = (p?: Provider): Draft => ({
   provider: p?.provider ?? '',
@@ -16,29 +20,54 @@ const toDraft = (p?: Provider): Draft => ({
   source_url: p?.source_url ?? '',
   veteran_fit: p?.veteran_fit ?? '',
   flags: p?.flags.join('\n') ?? '',
+  areas: p ? areaText(p).replace(/–/g, '-') : '',
+  note: '',
   ...(Object.fromEntries(RATE_KEYS.map((k) => [k, p?.[k] == null ? '' : String(p[k])])) as Record<RateKey, string>),
 });
 
-/** Add a provider, or correct one (prices, source, flags). Changes are shared with the family. */
+/**
+ * Add or correct a provider in the common catalogue. Site admins change it directly; contributors send
+ * a suggested correction for an admin to review. Special rates for one applicant are recorded on the
+ * provider's page instead.
+ */
 export function ProviderFormScreen() {
   const { id } = useParams();
-  const existing = useProvider(id);
-  const { providers, dispatch } = useApp();
+  const { user } = useAuth();
+  const { catalogue: providers, backend, setCatalogue } = useSession();
+  const app = useOptionalApp();
+  const inAdmin = useLocation().pathname.startsWith('/admin');
+  const isAdmin = user?.role === 'admin';
+  const existing = providers.find((p) => p.id === id);
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Draft>(() => toDraft(existing));
   const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
   const set = (k: keyof Draft, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  const listPath = inAdmin ? '/admin/providers' : '/providers';
+  const backPath = existing && !inAdmin ? `/providers/${existing.id}` : listPath;
+  const suggesting = !isAdmin;
 
   if (id && !existing) {
     return (
       <section>
         <h1>Provider not found</h1>
-        <Link to="/providers">Back to providers</Link>
+        <Link to={listPath}>Back to providers</Link>
       </section>
     );
   }
+  if (suggesting && !app?.canEdit) {
+    return <ResolutionCard status="info" title="Only contributors can suggest changes" actions={<Link to={backPath} className="btn">Back</Link>} />;
+  }
+  if (sent) {
+    return (
+      <ResolutionCard status="good" title="Thanks — your suggestion has been sent for review" role="status" actions={<Link to={backPath} className="btn btn-primary">Back to {existing ? existing.provider : 'providers'}</Link>}>
+        <p>A site administrator will check it. Once approved, every application sees the change. You can see its progress on the provider's page.</p>
+      </ResolutionCard>
+    );
+  }
 
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault();
     const problems: string[] = [];
     const rates = Object.fromEntries(
@@ -66,6 +95,7 @@ export function ProviderFormScreen() {
       veteran_fit: draft.veteran_fit.trim() || null,
       flags: draft.flags.split(/\n|;/).map((f) => f.trim()).filter(Boolean),
       source_url: draft.source_url.trim() || null,
+      postcodes_served: parseAreas(draft.areas),
     };
     const parsed = ProviderSchema.safeParse(candidate);
     if (!draft.provider.trim()) problems.push('Enter the provider name.');
@@ -75,10 +105,24 @@ export function ProviderFormScreen() {
         else if (i.path[0] !== 'provider') problems.push(`${String(i.path[0])}: ${i.message}`);
       }
     }
+    if (draft.areas.trim() && parseAreas(draft.areas).length === 0) problems.push('Postcodes served: enter 4-digit postcodes or ranges, e.g. 4178, 4150-4169.');
+    if (suggesting && !draft.note.trim()) problems.push('Say where the new information comes from, so the administrator can check it.');
     setErrors(problems);
     if (problems.length || !parsed.success) return;
-    dispatch({ type: 'provider/upsert', provider: parsed.data });
-    navigate(`/providers/${parsed.data.id}`);
+    setBusy(true);
+    try {
+      if (suggesting) {
+        await backend.suggest(app!.application.id, parsed.data, draft.note);
+        setSent(true);
+      } else {
+        setCatalogue(await backend.saveProvider(parsed.data));
+        navigate(inAdmin ? listPath : `/providers/${parsed.data.id}`);
+      }
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : 'Could not save.']);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const text = (k: keyof Draft, label: string, hint?: string) => (
@@ -93,10 +137,15 @@ export function ProviderFormScreen() {
 
   return (
     <section className="space-y-4">
-      <Link to={existing ? `/providers/${existing.id}` : '/providers'} className="muted">
-        ← {existing ? existing.provider : 'All providers'}
+      <Link to={backPath} className="muted">
+        ← {existing && !inAdmin ? existing.provider : 'All providers'}
       </Link>
-      <h1>{existing ? `Edit ${existing.provider}` : 'Add a provider'}</h1>
+      <h1>{suggesting ? (existing ? `Suggest a correction to ${existing.provider}` : 'Suggest a provider') : existing ? `Edit ${existing.provider}` : 'Add a provider'}</h1>
+      <p>
+        {suggesting
+          ? 'Provider information is shared by every application. A site administrator checks suggestions before they change. If this provider offered you special rates, record them on its page instead.'
+          : 'Changes apply to every application straight away.'}
+      </p>
 
       <form onSubmit={save} className="card space-y-4" noValidate>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -125,12 +174,22 @@ export function ProviderFormScreen() {
           {text('prices_as_at', 'Prices as at', 'As written on the price list, e.g. "1 Oct 2026". Used for the 60-day staleness warning.')}
           {text('source_url', 'Price list link', 'Where the prices came from, e.g. the My Aged Care listing')}
         </div>
+        {text('areas', 'Postcodes served', 'Postcodes or ranges, e.g. 4178, 4150-4169. Leave blank if not confirmed; the provider then shows everywhere.')}
         <div>
           <label htmlFor="pf-flags" className="muted block">
             Flags (one per line)
           </label>
           <textarea id="pf-flags" className="input min-h-24" value={draft.flags} onChange={(e) => set('flags', e.target.value)} />
         </div>
+        {suggesting && (
+          <div>
+            <label htmlFor="pf-note" className="label">
+              Where does this come from?
+            </label>
+            <span className="hint">For example: their price list dated 1 November, or a phone call with their intake team.</span>
+            <textarea id="pf-note" className="input min-h-20" value={draft.note} onChange={(e) => set('note', e.target.value)} />
+          </div>
+        )}
 
         {errors.length > 0 && (
           <ul role="alert" className="list-disc space-y-1 pl-5 text-[var(--stop)]">
@@ -140,10 +199,10 @@ export function ProviderFormScreen() {
           </ul>
         )}
         <div className="flex gap-2">
-          <button type="submit" className="btn btn-primary">
-            {existing ? 'Save changes' : 'Add provider'}
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {suggesting ? 'Send for review' : existing ? 'Save changes' : 'Add provider'}
           </button>
-          <Link to={existing ? `/providers/${existing.id}` : '/providers'} className="btn">
+          <Link to={backPath} className="btn">
             Cancel
           </Link>
         </div>

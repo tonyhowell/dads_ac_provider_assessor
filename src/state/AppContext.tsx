@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SeedData } from '../data/load';
 import type { AudioStore } from '../storage/audioStore';
-import { effectiveProviders, reducer, type Action, type AppState } from './reducer';
+import { reducer, withSpecialRates, type Action, type AppState } from './reducer';
+import type { ApplicationInfo, MemberRole } from '../backend';
+import { useSession } from './SessionContext';
 import { toIsoDate } from '../rules';
 import type { PlanItem, Provider } from '../types';
 import type { StateSync } from './sync';
@@ -18,8 +20,14 @@ interface AppContextValue {
   /** Save state for the "Saved" indicator. */
   saving: boolean;
   savedAt: Date | null;
-  /** Seed providers with the family's edits, plus providers they added. Use this, not seed.providers. */
+  /** The common catalogue with this application's special rates applied. Use this, not seed.providers. */
   providers: Provider[];
+  application: ApplicationInfo;
+  role: MemberRole;
+  /** Contributors and coordinators can change things; viewers, and everyone on an archived application, can't. */
+  canEdit: boolean;
+  /** The applicant's postcode, for matching providers' service areas: from About you, else the application. */
+  areaPostcode: string | null;
   /** The family's plan, or the sample plan until they edit it. */
   plan: PlanItem[];
   /** Date services are costed at (YYYY-MM-DD). */
@@ -33,7 +41,21 @@ const AppContext = createContext<AppContextValue | null>(null);
  * order, and the server's result replaces local state once nothing else is waiting to be sent.
  * Other family members' changes arrive by polling and when the window regains focus.
  */
-export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; sync: StateSync; audio: AudioStore; children: ReactNode }) {
+export function AppProvider({
+  sync,
+  audio,
+  application,
+  role,
+  children,
+}: {
+  sync: StateSync;
+  audio: AudioStore;
+  application: ApplicationInfo;
+  role: MemberRole;
+  children: ReactNode;
+}) {
+  const { seed, catalogue } = useSession();
+  const canEdit = (role === 'coordinator' || role === 'contributor') && application.status !== 'archived';
   const [state, setState] = useState<AppState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -72,6 +94,8 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
 
   const dispatch = useCallback(
     (action: Action) => {
+      // The server refuses changes from viewers too; this just stops the screen showing a change that won't stick.
+      if (!canEdit) return;
       setState((s) => (s ? reducer(s, action) : s));
       pending.current += 1;
       setSaving(true);
@@ -96,7 +120,7 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
         }
       });
     },
-    [sync, refresh],
+    [sync, refresh, canEdit],
   );
 
   const value = useMemo(
@@ -110,12 +134,16 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
             syncError,
             saving,
             savedAt,
-            providers: effectiveProviders(seed.providers, state.providerEdits),
+            providers: withSpecialRates(catalogue, state.specialRates),
             plan: state.plan ?? seed.samplePlan,
             serviceDate: state.serviceDate ?? toIsoDate(new Date()),
+            application,
+            role,
+            canEdit,
+            areaPostcode: (state.participant?.postcode || application.postcode || '').trim() || null,
           }
         : null,
-    [seed, state, dispatch, audio, syncError, saving, savedAt],
+    [seed, catalogue, state, dispatch, audio, syncError, saving, savedAt, application, role, canEdit],
   );
 
   if (!value) {
@@ -126,6 +154,11 @@ export function AppProvider({ seed, sync, audio, children }: { seed: SeedData; s
     );
   }
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+/** The open application's context, or null outside one (site administration, the applications list). */
+export function useOptionalApp(): AppContextValue | null {
+  return useContext(AppContext);
 }
 
 export function useApp(): AppContextValue {

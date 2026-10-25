@@ -271,3 +271,14 @@ export const HelpDataSchema = z.object({
   fields: z.array(FieldHelpSchema),
   contacts: z.array(ContactSchema),
 });
+
+/**
+ * Special hourly rates a provider has offered this applicant (v2). Costed only in this application;
+ * the common catalogue is unchanged. A missing key means the catalogue price applies.
+ */
+export const SpecialRateSchema = z.object({
+  rates: z.partialRecord(RateKeySchema, z.number().nonnegative().max(10_000)),
+  note: z.string().max(2000),
+  recorded_at: z.string().max(40),
+  author: z.string().max(80).optional(),
+});

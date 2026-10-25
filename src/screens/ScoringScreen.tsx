@@ -26,7 +26,7 @@ const GOOD_LOOKS_LIKE: Record<CriterionId, string> = {
 const weightWords = (w: number) => (w === 0 ? "doesn't count" : w === 1 ? 'counts once' : w === 2 ? 'counts double' : `counts ${w} times`);
 
 export function ScoringScreen() {
-  const { seed, state, providers, dispatch } = useApp();
+  const { seed, state, providers, dispatch, canEdit } = useApp();
   const shortlist = entriesAt(state, 'interview').flatMap((e) => providers.filter((p) => p.id === e.provider_id));
   const weights = effectiveWeights(state.weights);
   const ranked = rank(shortlist, state.scores, weights);
@@ -139,8 +139,8 @@ export function ScoringScreen() {
                   <Explain question="What good looks like">
                     <p>{GOOD_LOOKS_LIKE[c.id]}</p>
                   </Explain>
-                  <ScoreInput label={`${c.label} score for ${current.provider}`} value={value} onChange={(score) => dispatch({ type: 'score/set', providerId: current.id, criterion: c.id, score })} />
-                  {hint !== null && value === undefined && (
+                  <ScoreInput label={`${c.label} score for ${current.provider}`} disabled={!canEdit} value={value} onChange={(score) => dispatch({ type: 'score/set', providerId: current.id, criterion: c.id, score })} />
+                  {hint !== null && value === undefined && canEdit && (
                     <button type="button" className="btn-quiet" onClick={() => dispatch({ type: 'score/set', providerId: current.id, criterion: 'price', score: hint })}>
                       Use the suggested score: {hint} ({scoreWord(hint)}), from your plan's cost compared with the guide price <span className="sr-only">for {current.provider}</span>
                     </button>
@@ -161,7 +161,7 @@ export function ScoringScreen() {
                 <label htmlFor={`w-${c.id}`} className="label">
                   {c.label}
                 </label>
-                <select id={`w-${c.id}`} className="input max-w-64" value={weights[c.id]} onChange={(e) => dispatch({ type: 'weight/set', criterion: c.id, weight: Number(e.target.value) })}>
+                <select id={`w-${c.id}`} className="input max-w-64" disabled={!canEdit} value={weights[c.id]} onChange={(e) => dispatch({ type: 'weight/set', criterion: c.id, weight: Number(e.target.value) })}>
                   {[0, 1, 2, 3].map((w) => (
                     <option key={w} value={w}>
                       {weightWords(w)[0].toUpperCase() + weightWords(w).slice(1)}
@@ -174,14 +174,14 @@ export function ScoringScreen() {
         </Explain>
       </section>
 
-      <section className="card space-y-2" aria-labelledby="decision-heading">
+      <fieldset disabled={!canEdit} className="card min-w-0 space-y-2" aria-labelledby="decision-heading">
         <h2 id="decision-heading">Your decision</h2>
         <label htmlFor="decision" className="label">
           Decision notes
         </label>
         <span className="hint">Who you've chosen and why, and anything still to check. Shared with your family; saved when you leave the box.</span>
         <CommitTextarea id="decision" className="input min-h-32" value={state.decisionNotes} onCommit={(text) => dispatch({ type: 'decision/set', text })} />
-      </section>
+      </fieldset>
 
       <ResolutionCard
         status="info"

@@ -8,12 +8,10 @@ import { Icon } from './ui/Icon';
 import type { ProviderNote } from '../types';
 
 export function ProviderNotes({ providerId }: { providerId: string }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, canEdit } = useApp();
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
-  const notes = state.notes
-    .filter((n) => n.provider_id === providerId)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const notes = state.notes.filter((n) => n.provider_id === providerId).sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const add = (e: FormEvent) => {
     e.preventDefault();
@@ -29,9 +27,7 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
 
   return (
     <section aria-labelledby="notes-heading" className="card">
-      <h2 id="notes-heading">
-        Assessment notes
-      </h2>
+      <h2 id="notes-heading">Assessment notes</h2>
       {adding ? (
         <form onSubmit={add} className="mt-3 space-y-2">
           <label htmlFor="new-note" className="label">
@@ -48,9 +44,11 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
           </div>
         </form>
       ) : (
-        <button type="button" className="btn mt-3" onClick={() => setAdding(true)}>
-          <Icon name="plus" size={20} /> Add a note
-        </button>
+        canEdit && (
+          <button type="button" className="btn mt-3" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={20} /> Add a note
+          </button>
+        )
       )}
 
       {notes.length === 0 ? (
@@ -67,7 +65,7 @@ export function ProviderNotes({ providerId }: { providerId: string }) {
 }
 
 function NoteItem({ note }: { note: ProviderNote }) {
-  const { dispatch } = useApp();
+  const { dispatch, canEdit } = useApp();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(note.text);
 
@@ -116,14 +114,16 @@ function NoteItem({ note }: { note: ProviderNote }) {
       ) : (
         <>
           <p className="mt-1 whitespace-pre-wrap">{note.text}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="btn" onClick={() => setEditing(true)}>
-              Edit
-            </button>
-            <ConfirmButton prompt="Delete this note?" confirmLabel="Delete" onConfirm={() => dispatch({ type: 'note/delete', id: note.id })}>
-              Delete
-            </ConfirmButton>
-          </div>
+          {canEdit && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="btn" onClick={() => setEditing(true)}>
+                Edit
+              </button>
+              <ConfirmButton prompt="Delete this note?" confirmLabel="Delete" onConfirm={() => dispatch({ type: 'note/delete', id: note.id })}>
+                Delete
+              </ConfirmButton>
+            </div>
+          )}
         </>
       )}
     </li>

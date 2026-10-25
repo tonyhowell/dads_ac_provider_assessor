@@ -8,7 +8,7 @@ import { Icon } from './ui/Icon';
 
 /** Family notes on any screen (UI-SPEC §5.9): shown at the top of that screen until marked done. */
 export function ScreenNotes() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, canEdit } = useApp();
   const { pathname } = useLocation();
   const route = locate(pathname)?.screen.to ?? pathname;
   const notes = state.screenNotes.filter((n) => n.route === route && !n.done);
@@ -36,9 +36,11 @@ export function ScreenNotes() {
             <p className="whitespace-pre-wrap">{n.text}</p>
             <p className="muted">{formatDateTime(n.created_at)}</p>
           </div>
-          <button type="button" className="btn btn-sm" onClick={() => dispatch({ type: 'screenNote/done', id: n.id, done: true })}>
-            <Icon name="check" size={18} /> Mark done
-          </button>
+          {canEdit && (
+            <button type="button" className="btn btn-sm" onClick={() => dispatch({ type: 'screenNote/done', id: n.id, done: true })}>
+              <Icon name="check" size={18} /> Mark done
+            </button>
+          )}
         </div>
       ))}
       {writing ? (
@@ -59,9 +61,11 @@ export function ScreenNotes() {
         </form>
       ) : (
         <p className="flex flex-wrap items-center gap-3">
-          <button type="button" className="btn-quiet" onClick={() => setWriting(true)}>
-            <Icon name="note" size={20} /> Leave a note for the family
-          </button>
+          {canEdit && (
+            <button type="button" className="btn-quiet" onClick={() => setWriting(true)}>
+              <Icon name="note" size={20} /> Leave a note for the family
+            </button>
+          )}
           {doneCount > 0 && <span className="muted">{doneCount} done</span>}
         </p>
       )}

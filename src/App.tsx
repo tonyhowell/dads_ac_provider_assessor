@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ParticipantScreen } from './screens/ParticipantScreen';
@@ -24,10 +25,15 @@ import { AppProvider } from './state/AppContext';
 import { HelpProvider } from './components/ui/HelpPanel';
 import { AboutScreen } from './screens/AboutScreen';
 import type { SeedData } from './data/load';
-import type { StateSync } from './state/sync';
+import type { ApplicationInfo, Backend, MemberRole } from './backend';
+import { SessionProvider, useSession } from './state/SessionContext';
+import { PlainLayout } from './components/Shell';
+import { ApplicationsScreen } from './screens/ApplicationsScreen';
+import { PeopleScreen } from './screens/PeopleScreen';
+import { AdminLayout, AdminApplicationsScreen, AdminSuggestionsScreen, AdminProvidersScreen } from './screens/admin';
 import type { AudioStore } from './storage/audioStore';
 
-export function App({ seed, sync, audio }: { seed: SeedData; sync: StateSync; audio: AudioStore }) {
+export function App({ seed, backend, audio }: { seed: SeedData; backend: Backend; audio: AudioStore }) {
   const { user } = useAuth();
   return (
     <Routes>
@@ -36,11 +42,11 @@ export function App({ seed, sync, audio }: { seed: SeedData; sync: StateSync; au
         path="*"
         element={
           user ? (
-            <AppProvider key={user.id} seed={seed} sync={sync} audio={audio}>
+            <SessionProvider key={user.id} backend={backend} seed={seed}>
               <HelpProvider help={seed.help}>
-                <SignedInRoutes isAdmin={user.role === 'admin'} />
+                <SignedIn isAdmin={user.role === 'admin'} audio={audio} />
               </HelpProvider>
-            </AppProvider>
+            </SessionProvider>
           ) : (
             <SignInScreen />
           )
@@ -50,7 +56,61 @@ export function App({ seed, sync, audio }: { seed: SeedData; sync: StateSync; au
   );
 }
 
-function SignedInRoutes({ isAdmin }: { isAdmin: boolean }) {
+function SignedIn({ isAdmin, audio }: { isAdmin: boolean; audio: AudioStore }) {
+  return (
+    <Routes>
+      <Route element={<PlainLayout />}>
+        <Route path="applications" element={<ApplicationsScreen />} />
+        <Route path="about" element={<AboutScreen />} />
+        {isAdmin && (
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminScreen />} />
+            <Route path="applications" element={<AdminApplicationsScreen />} />
+            <Route path="suggestions" element={<AdminSuggestionsScreen />} />
+            <Route path="providers" element={<AdminProvidersScreen />} />
+            <Route path="providers/new" element={<ProviderFormScreen />} />
+            <Route path="providers/import" element={<ProviderImportScreen />} />
+            <Route path="providers/:id/edit" element={<ProviderFormScreen />} />
+          </Route>
+        )}
+      </Route>
+      <Route path="*" element={<ApplicationGate audio={audio} />} />
+    </Routes>
+  );
+}
+
+/** Opens the current application, or sends the person to choose one. */
+function ApplicationGate({ audio }: { audio: AudioStore }) {
+  const { backend, applications, applicationsError, currentId } = useSession();
+  const [opened, setOpened] = useState<{ application: ApplicationInfo; role: MemberRole } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentId) return;
+    let live = true;
+    setOpened(null);
+    backend
+      .getApplication(currentId)
+      .then((r) => live && (setOpened(r), setError(null)))
+      .catch((err) => live && setError(err instanceof Error ? err.message : 'Could not open the application.'));
+    return () => {
+      live = false;
+    };
+  }, [backend, currentId]);
+  const sync = useMemo(() => (currentId ? backend.sync(currentId) : null), [backend, currentId]);
+
+  if (applicationsError) return <div className="p-6 text-center" role="alert">{applicationsError}</div>;
+  if (!applications) return <div className="p-6 text-center" role="status">Loading your applications…</div>;
+  if (!currentId) return <Navigate to="/applications" replace />;
+  if (error) return <div className="p-6 text-center" role="alert">{error}</div>;
+  if (!opened || opened.application.id !== currentId || !sync) return <div className="p-6 text-center" role="status">Opening the application…</div>;
+  return (
+    <AppProvider key={currentId} sync={sync} audio={audio} application={opened.application} role={opened.role}>
+      <ApplicationRoutes />
+    </AppProvider>
+  );
+}
+
+function ApplicationRoutes() {
   return (
     <Routes>
       <Route path="interview-pack/print" element={<PrintPackScreen />} />
@@ -60,7 +120,6 @@ function SignedInRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="costs" element={<CostsScreen />} />
         <Route path="providers" element={<ProvidersScreen />} />
         <Route path="providers/new" element={<ProviderFormScreen />} />
-        <Route path="providers/import" element={<ProviderImportScreen />} />
         <Route path="providers/:id" element={<ProviderDetailScreen />} />
         <Route path="providers/:id/edit" element={<ProviderFormScreen />} />
         <Route path="selection" element={<Navigate to="/selection/scan" replace />} />
@@ -73,8 +132,7 @@ function SignedInRoutes({ isAdmin }: { isAdmin: boolean }) {
         <Route path="interviews/:id" element={<InterviewReviewScreen />} />
         <Route path="scoring" element={<ScoringScreen />} />
         <Route path="summary" element={<SummaryScreen />} />
-        <Route path="about" element={<AboutScreen />} />
-        {isAdmin && <Route path="admin" element={<AdminScreen />} />}
+        <Route path="people" element={<PeopleScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

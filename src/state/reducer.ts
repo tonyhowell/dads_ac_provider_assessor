@@ -13,12 +13,14 @@ import type {
   SelectionEntry,
   ScreenNote,
   SelectionStage,
+  SpecialRate,
   ShortlistSeed,
+  RateKey,
 } from '../types';
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 5;
+  version: 6;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -28,8 +30,8 @@ export interface AppState {
   plan: PlanItem[] | null;
   /** Date services are costed at (decides the personal-care category). Null = today. */
   serviceDate: string | null;
-  /** Providers added by the family, or seed providers they corrected. Replaces the seed record with the same id. */
-  providerEdits: Provider[];
+  /** Special rates providers have offered this applicant, by provider id. Applied over the common catalogue. */
+  specialRates: Record<string, SpecialRate>;
   /** Bounding answers by question id. */
   answers: Record<string, BoundingAnswer>;
   customQuestions: CustomQuestion[];
@@ -49,7 +51,6 @@ const V4_DEFAULTS = {
   participant: null,
   plan: null,
   serviceDate: null,
-  providerEdits: [],
   answers: {},
   customQuestions: [],
   responses: {},
@@ -57,7 +58,7 @@ const V4_DEFAULTS = {
   weights: {},
   decisionNotes: '',
   screenNotes: [],
-} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews'>;
+} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates'>;
 
 export type { Action };
 
@@ -74,7 +75,7 @@ export const prevStage = (s: SelectionStage): SelectionStage | undefined => SELE
 export const entriesAt = (state: AppState, stage: SelectionStage) => state.selection.filter((e) => e.stage === stage);
 
 /** State with nothing in it yet. */
-export const emptyState = (): AppState => ({ version: 5, notes: [], selection: [], interviews: [], ...V4_DEFAULTS });
+export const emptyState = (): AppState => ({ version: 6, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {} });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -85,7 +86,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 5, notes: [], selection, interviews: [], ...V4_DEFAULTS };
+  return { version: 6, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {} };
 }
 
 interface StateV1 {
@@ -117,17 +118,23 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * v1 → v2: the single shortlist becomes the interview stage. v2 → v3: placeholder provider ids are remapped.
  * v3 → v4: participant, plan, provider edits, questions, responses and scoring are added, empty.
  * v4 → v5: responses get "answered well?" (yes/partly/no) and "in writing"; screen notes are added.
+ * v5 → v6: provider edits leave the family's state for the common catalogue (the server moves them first;
+ * see `legacyProviderEdits`), and special rates are added.
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 5) return s as AppState;
+  if (s?.version === 6) return s as AppState;
+  if (s?.version === 5) {
+    const { providerEdits: _moved, ...rest } = s as unknown as Omit<AppState, 'version' | 'specialRates'> & { providerEdits?: Provider[] };
+    return { ...rest, specialRates: {}, version: 6 };
+  }
   if (s?.version === 4) {
     // v4 → v5: responses gain "answered well?" and "in writing"; screen notes start empty.
     const v4 = s as unknown as Omit<AppState, 'version' | 'responses' | 'screenNotes'> & { responses: Record<string, { text: string; satisfactory: boolean | null }> };
     const responses = Object.fromEntries(
       Object.entries(v4.responses).map(([k, r]) => [k, { text: r.text, rating: r.satisfactory === null ? null : r.satisfactory ? 'yes' : 'no', in_writing: r.text.trim() !== '' } as InterviewResponse]),
     );
-    return { ...v4, responses, screenNotes: [], version: 5 };
+    return migrate({ ...v4, responses, screenNotes: [], version: 5 });
   }
   if (s?.version === 3) return migrate({ ...V4_DEFAULTS, ...(s as object), screenNotes: undefined, version: 4 });
   if (s?.version === 2) return migrate({ ...remapProviderIds(s as unknown as AppState), version: 3 });
@@ -237,14 +244,13 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, plan: action.plan };
     case 'settings/serviceDate':
       return { ...state, serviceDate: action.date };
-    case 'provider/upsert':
-      return { ...state, providerEdits: [...state.providerEdits.filter((p) => p.id !== action.provider.id), action.provider] };
-    case 'provider/import': {
-      const ids = new Set(action.providers.map((p) => p.id));
-      return { ...state, providerEdits: [...state.providerEdits.filter((p) => !ids.has(p.id)), ...action.providers] };
+    case 'specialRate/set':
+      return { ...state, specialRates: { ...state.specialRates, [action.providerId]: action.rate } };
+    case 'specialRate/clear': {
+      const specialRates = { ...state.specialRates };
+      delete specialRates[action.providerId];
+      return { ...state, specialRates };
     }
-    case 'provider/revert':
-      return { ...state, providerEdits: state.providerEdits.filter((p) => p.id !== action.id) };
     case 'bounding/answer':
       return { ...state, answers: { ...state.answers, [action.questionId]: action.answer } };
     case 'question/add':
@@ -283,7 +289,24 @@ export function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-/** Seed providers with the family's edits applied, plus providers they added. */
+/** Provider edits held in saved state before v6, for the server to move into the common catalogue. */
+export function legacyProviderEdits(saved: unknown): Provider[] {
+  const edits = (saved as { providerEdits?: unknown } | undefined)?.providerEdits;
+  return Array.isArray(edits) ? (edits as Provider[]) : [];
+}
+
+/** Applies an application's special rates over the catalogue, marking which rates were replaced. */
+export function withSpecialRates(providers: Provider[], special: Record<string, SpecialRate>): Provider[] {
+  return providers.map((p) => {
+    const sr = special[p.id];
+    if (!sr) return p;
+    const keys = (Object.keys(sr.rates) as RateKey[]).filter((k) => sr.rates[k] !== undefined);
+    if (!keys.length) return p;
+    return { ...p, ...Object.fromEntries(keys.map((k) => [k, sr.rates[k]])), special_rates: keys };
+  });
+}
+
+/** Starter-pack providers with the catalogue's edits applied, plus providers added to the catalogue. */
 export function effectiveProviders(seed: Provider[], edits: Provider[]): Provider[] {
   const byId = new Map(edits.map((p) => [p.id, p]));
   const merged = seed.map((p) => byId.get(p.id) ?? p);

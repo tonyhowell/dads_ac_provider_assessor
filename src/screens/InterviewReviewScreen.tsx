@@ -14,7 +14,7 @@ type ListKey = Exclude<keyof InterviewNotes, 'summary'>;
 
 export function InterviewReviewScreen() {
   const { id } = useParams();
-  const { state, seed, dispatch, audio } = useApp();
+  const { state, seed, dispatch, audio, canEdit } = useApp();
   const navigate = useNavigate();
   const interview = state.interviews.find((i) => i.id === id);
   const provider = useProvider(interview?.provider_id);
@@ -47,7 +47,17 @@ export function InterviewReviewScreen() {
   }, [interview?.audio_id, audio]);
 
   if (!interview || !provider) {
-    return <ResolutionCard status="caution" title="We couldn't find that interview" actions={<Link to="/interviews" className="btn btn-primary">Back to interviews</Link>} />;
+    return (
+      <ResolutionCard
+        status="caution"
+        title="We couldn't find that interview"
+        actions={
+          <Link to="/interviews" className="btn btn-primary">
+            Back to interviews
+          </Link>
+        }
+      />
+    );
   }
 
   const transcriptDirty = transcript !== interview.transcript;
@@ -82,7 +92,14 @@ export function InterviewReviewScreen() {
     if (!interview.notes) return;
     dispatch({
       type: 'note/add',
-      note: { id: newId(), provider_id: provider.id, text: notesToText(interview.notes, `Interview ${formatDateTime(interview.started_at)}`), created_at: new Date().toISOString(), source: 'interview', interview_id: interview.id },
+      note: {
+        id: newId(),
+        provider_id: provider.id,
+        text: notesToText(interview.notes, `Interview ${formatDateTime(interview.started_at)}`),
+        created_at: new Date().toISOString(),
+        source: 'interview',
+        interview_id: interview.id,
+      },
     });
     setSavedToNotes(true);
   };
@@ -126,73 +143,83 @@ export function InterviewReviewScreen() {
         </section>
       )}
 
-      <section aria-labelledby="transcript-heading" className="card space-y-3">
-        <h2 id="transcript-heading">Transcript</h2>
-        <label htmlFor="transcript" className="label">
-          What was said
-        </label>
-        <span className="hint">
-          Fix any misheard words and remove anything you don't want kept before drafting notes.
-          {!interview.transcript && ' Nothing was captured automatically — type or paste what was said.'}
-        </span>
-        <textarea id="transcript" className="input min-h-64" value={transcript} onChange={(e) => setTranscript(e.target.value)} />
-        <button type="button" className="btn" onClick={saveTranscript} disabled={!transcriptDirty}>
-          {transcriptDirty ? 'Save transcript' : (
-            <>
-              <Icon name="check" size={20} /> Transcript saved
-            </>
-          )}
-        </button>
-      </section>
-
-      <section aria-labelledby="notes-heading" className="card space-y-4">
-        <h2 id="notes-heading">Notes</h2>
-        <p>Notes drafted by Claude from your transcript (not the audio). Check them, keep what's right, then save them to {provider.provider}'s notes.</p>
-        {!drafting && (
-          <button type="button" className={`btn ${interview.notes ? '' : 'btn-primary'}`} onClick={draft} disabled={transcript.trim().length < 20}>
-            {interview.notes ? 'Draft the notes again' : 'Draft notes from transcript'}
-          </button>
-        )}
-        {transcript.trim().length < 20 && !interview.notes && <p>Add at least a few sentences of transcript first.</p>}
-        {drafting && (
-          <WorkingGrid onCancel={() => abort.current?.abort()}>Drafting notes from your transcript. This usually takes about 20 seconds.</WorkingGrid>
-        )}
-        {error && (
-          <ResolutionCard
-            status="stop"
-            title="We couldn't draft the notes just now"
-            role="alert"
-            actions={
-              <>
-                <button type="button" className="btn" onClick={draft}>
-                  Try again
-                </button>
-                <button type="button" className="btn" onClick={writeMyself}>
-                  Write notes myself
-                </button>
-              </>
-            }
-          >
-            <p>{error} Your transcript is safe.</p>
-          </ResolutionCard>
-        )}
-        {interview.notes && <NotesEditor notes={interview.notes} onChange={setNotes} />}
-        {interview.notes && (
-          <button type="button" className="btn btn-primary" onClick={saveToProviderNotes} disabled={savedToNotes}>
-            {savedToNotes ? (
-              <>
-                <Icon name="check" size={20} /> Saved to {provider.provider}'s notes
-              </>
+      <fieldset disabled={!canEdit} className="min-w-0 space-y-6">
+        <section aria-labelledby="transcript-heading" className="card space-y-3">
+          <h2 id="transcript-heading">Transcript</h2>
+          <label htmlFor="transcript" className="label">
+            What was said
+          </label>
+          <span className="hint">
+            Fix any misheard words and remove anything you don't want kept before drafting notes.
+            {!interview.transcript && ' Nothing was captured automatically — type or paste what was said.'}
+          </span>
+          <textarea id="transcript" className="input min-h-64" value={transcript} onChange={(e) => setTranscript(e.target.value)} />
+          <button type="button" className="btn" onClick={saveTranscript} disabled={!transcriptDirty}>
+            {transcriptDirty ? (
+              'Save transcript'
             ) : (
-              `Save to ${provider.provider}'s notes`
+              <>
+                <Icon name="check" size={20} /> Transcript saved
+              </>
             )}
           </button>
-        )}
-      </section>
+        </section>
 
-      <ConfirmButton prompt="Delete this interview for everyone? Notes already saved to the provider are kept." confirmLabel="Delete interview" onConfirm={remove}>
-        <Icon name="octagon" size={20} /> Delete interview
-      </ConfirmButton>
+        <section aria-labelledby="notes-heading" className="card space-y-4">
+          <h2 id="notes-heading">Notes</h2>
+          <p>Notes drafted by Claude from your transcript (not the audio). Check them, keep what's right, then save them to {provider.provider}'s notes.</p>
+          {!drafting && (
+            <button type="button" className={`btn ${interview.notes ? '' : 'btn-primary'}`} onClick={draft} disabled={transcript.trim().length < 20}>
+              {interview.notes ? 'Draft the notes again' : 'Draft notes from transcript'}
+            </button>
+          )}
+          {transcript.trim().length < 20 && !interview.notes && <p>Add at least a few sentences of transcript first.</p>}
+          {drafting && (
+            <WorkingGrid onCancel={() => abort.current?.abort()}>Drafting notes from your transcript. This usually takes about 20 seconds.</WorkingGrid>
+          )}
+          {error && (
+            <ResolutionCard
+              status="stop"
+              title="We couldn't draft the notes just now"
+              role="alert"
+              actions={
+                <>
+                  <button type="button" className="btn" onClick={draft}>
+                    Try again
+                  </button>
+                  <button type="button" className="btn" onClick={writeMyself}>
+                    Write notes myself
+                  </button>
+                </>
+              }
+            >
+              <p>{error} Your transcript is safe.</p>
+            </ResolutionCard>
+          )}
+          {interview.notes && <NotesEditor notes={interview.notes} onChange={setNotes} />}
+          {interview.notes && (
+            <button type="button" className="btn btn-primary" onClick={saveToProviderNotes} disabled={savedToNotes}>
+              {savedToNotes ? (
+                <>
+                  <Icon name="check" size={20} /> Saved to {provider.provider}'s notes
+                </>
+              ) : (
+                `Save to ${provider.provider}'s notes`
+              )}
+            </button>
+          )}
+        </section>
+      </fieldset>
+
+      {canEdit && (
+        <ConfirmButton
+          prompt="Delete this interview for everyone? Notes already saved to the provider are kept."
+          confirmLabel="Delete interview"
+          onConfirm={remove}
+        >
+          <Icon name="octagon" size={20} /> Delete interview
+        </ConfirmButton>
+      )}
     </section>
   );
 }
@@ -213,7 +240,12 @@ function NotesEditor({ notes, onChange }: { notes: InterviewNotes; onChange: (n:
         <label htmlFor="notes-summary" className="label">
           Summary
         </label>
-        <textarea id="notes-summary" className="input min-h-24" defaultValue={notes.summary} onBlur={(e) => e.target.value !== notes.summary && onChange({ ...notes, summary: e.target.value })} />
+        <textarea
+          id="notes-summary"
+          className="input min-h-24"
+          defaultValue={notes.summary}
+          onBlur={(e) => e.target.value !== notes.summary && onChange({ ...notes, summary: e.target.value })}
+        />
       </div>
       {allKeys.map(({ key, label }) => (
         <section key={key} className="space-y-2" aria-label={label}>
@@ -221,7 +253,22 @@ function NotesEditor({ notes, onChange }: { notes: InterviewNotes; onChange: (n:
           {notes[key].length === 0 && <p className="muted">None.</p>}
           <ul className="space-y-2">
             {notes[key].map((item, i) => (
-              <NoteItemRow key={`${key}-${i}-${item}`} item={item} onSave={(v) => update(key, notes[key].map((x, j) => (j === i ? v : x)))} onRemove={() => update(key, notes[key].filter((_, j) => j !== i))} />
+              <NoteItemRow
+                key={`${key}-${i}-${item}`}
+                item={item}
+                onSave={(v) =>
+                  update(
+                    key,
+                    notes[key].map((x, j) => (j === i ? v : x)),
+                  )
+                }
+                onRemove={() =>
+                  update(
+                    key,
+                    notes[key].filter((_, j) => j !== i),
+                  )
+                }
+              />
             ))}
           </ul>
           <button type="button" className="btn-quiet" onClick={() => update(key, [...notes[key], ''])}>

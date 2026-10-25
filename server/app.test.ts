@@ -6,6 +6,7 @@ import { createPgliteDb, migrate, type Db } from './db.ts';
 import { createUser, issueEnrolment, type Role } from './users.ts';
 import { Agent, fakeWebAuthn, testConfig } from './testing.ts';
 import { NotesError } from './interviewNotes.ts';
+import { moveLegacyState } from './state.ts';
 
 let db: Db;
 let getAnthropic: (() => Anthropic) | undefined;
@@ -18,7 +19,9 @@ beforeAll(async () => {
 afterAll(() => db.close());
 beforeEach(async () => {
   getAnthropic = undefined;
-  await db.query('TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions CASCADE');
+  await db.query(
+    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions CASCADE',
+  );
 });
 
 const tokenFrom = (url: string) => url.split('/enrol/')[1];
@@ -45,7 +48,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2]);
   });
 });
 
@@ -198,55 +201,224 @@ describe('administration', () => {
   });
 });
 
-describe('shared state', () => {
-  it('requires sign-in', async () => {
-    expect((await new Agent(app()).get('/api/state')).status).toBe(401);
+/** Admin creates an application with the given coordinator (by user id). */
+async function newApplication(admin: Agent, coordinatorId: string, name = 'Dad – Wynnum', postcode = '4178') {
+  const res = await admin.post('/api/admin/applications', { name, suburb: 'Wynnum', postcode, coordinator: { user_id: coordinatorId } });
+  expect(res.status).toBe(201);
+  return res.json.application.id as string;
+}
+const add = (providerId: string) => ({ action: { type: 'selection/add', providerId, at: '1999-01-01T00:00:00Z' } });
+
+describe('applications', () => {
+  it('only site admins create applications, with a coordinator', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    expect((await sam.post('/api/admin/applications', { name: 'X', coordinator: { user_id: alex.id } })).status).toBe(403);
+
+    // A new person as coordinator gets an enrolment link.
+    const res = await admin.post('/api/admin/applications', { name: 'Mum', suburb: 'Manly', postcode: '4179', coordinator: { username: 'jo', display_name: 'Jo' } });
+    expect(res.status).toBe(201);
+    expect(res.json.enrolment_url).toMatch(/\/enrol\//);
+    const list = await admin.get('/api/admin/applications');
+    expect(list.json.applications).toMatchObject([{ name: 'Mum', postcode: '4179', members: 1, coordinators: [{ username: 'jo' }] }]);
   });
 
-  it('applies actions for everyone, stamping time and author', async () => {
-    const { agent: alex, app: a } = await enrolled();
-    const { agent: sam } = await enrolled(a, 'sam', 'member');
-    expect((await alex.get('/api/state')).json.version).toBe(0);
-    // A new database starts with the starter pack's shortlist at the interview stage.
-    expect((await alex.get('/api/state')).json.state.selection.map((e: { provider_id: string }) => e.provider_id)).toEqual([
-      'bolton-clarke',
-      'anglicare-southern-queensland',
-      'right-at-home-brisbane-bayside-south',
-      'bluecare-unitingcare-qld',
-      'five-good-friends-brisbane-east-bayside',
-      'carers-link',
-    ]);
+  it('keeps each application private to its members, including from site admins', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam, user: samUser } = await enrolled(a, 'sam', 'member');
+    const { agent: kim, user: kimUser } = await enrolled(a, 'kim', 'member');
+    const samApp = await newApplication(admin, samUser.id, 'Dad');
+    const kimApp = await newApplication(admin, kimUser.id, 'Aunt');
 
-    await alex.post('/api/actions', { action: { type: 'selection/add', providerId: 'envigor-brisbane-bayside', at: '1999-01-01T00:00:00Z' } });
-    const res = await sam.post('/api/actions', {
+    expect((await sam.get('/api/applications')).json.applications).toMatchObject([{ id: samApp, name: 'Dad', role: 'coordinator' }]);
+    expect((await sam.post(`/api/applications/${samApp}/actions`, add('bolton-clarke'))).status).toBe(200);
+
+    // Other families and the site admin (not a member) can't read or change it.
+    for (const outsider of [kim, admin]) {
+      expect((await outsider.get(`/api/applications/${samApp}/state`)).status).toBe(404);
+      expect((await outsider.post(`/api/applications/${samApp}/actions`, add('carers-link'))).status).toBe(404);
+      expect((await outsider.get(`/api/applications/${samApp}/members`)).status).toBe(404);
+    }
+    expect((await kim.get(`/api/applications/${kimApp}/state`)).json.state.selection).toEqual([]);
+    expect((await admin.get('/api/applications')).json.applications).toEqual([]);
+    // The admin list shows details, never the contents.
+    const listed = (await admin.get('/api/admin/applications')).json.applications.find((x: { id: string }) => x.id === samApp);
+    expect(Object.keys(listed).sort()).toEqual(['coordinators', 'created_at', 'id', 'last_activity', 'members', 'name', 'postcode', 'status', 'suburb', 'updated_at']);
+    void alex;
+  });
+
+  it('applies actions, stamping time and author, and serialises concurrent changes', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam, user: samUser } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam', role: 'contributor' });
+    void samUser;
+    expect((await sam.get(`/api/applications/${id}/state`)).json).toMatchObject({ version: 0, state: { selection: [] } });
+    const res = await sam.post(`/api/applications/${id}/actions`, {
       action: { type: 'note/add', note: { id: 'n1', provider_id: 'bolton-clarke', text: 'Rang them', created_at: 'x', source: 'manual', author: 'Someone else' } },
     });
-    expect(res.json.version).toBe(2);
     expect(res.json.state.notes[0]).toMatchObject({ text: 'Rang them', author: 'Sam' });
     expect(res.json.state.notes[0].created_at).not.toBe('x');
 
-    const seen = await alex.get('/api/state');
-    const added = seen.json.state.selection.find((e: { provider_id: string }) => e.provider_id === 'envigor-brisbane-bayside');
-    expect(added).toMatchObject({ stage: 'scan' });
-    expect(added.added_at).not.toMatch(/^1999/);
-    const [log] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions');
-    expect(Number(log.n)).toBe(2);
+    await Promise.all(['a', 'b', 'c', 'd', 'e'].map((p) => admin.post(`/api/applications/${id}/actions`, add(p))));
+    const { json } = await admin.get(`/api/applications/${id}/state`);
+    expect(json.version).toBe(6);
+    expect(json.state.selection.map((e: { provider_id: string }) => e.provider_id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(json.state.selection[0].added_at).not.toMatch(/^1999/);
+    const [log] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions WHERE application_id = $1', [id]);
+    expect(Number(log.n)).toBe(6);
+    expect((await admin.post(`/api/applications/${id}/actions`, { action: { type: 'nuke' } })).status).toBe(400);
   });
 
-  it('serialises concurrent changes so none are lost', async () => {
-    const { agent } = await enrolled();
-    await Promise.all(
-      ['a', 'b', 'c', 'd', 'e'].map((id) => agent.post('/api/actions', { action: { type: 'selection/add', providerId: id, at: '' } })),
-    );
-    const { json } = await agent.get('/api/state');
-    expect(json.version).toBe(5);
-    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(json.state.selection.some((e: { provider_id: string }) => e.provider_id === id)).toBe(true);
+  it('family join as viewers (read-only) until the coordinator makes them contributors', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+
+    expect((await admin.post(`/api/applications/${id}/members`, { username: 'sam' })).status).toBe(201);
+    const members = (await admin.get(`/api/applications/${id}/members`)).json.members;
+    const samId = members.find((m: { username: string }) => m.username === 'sam').user_id;
+    expect(members.map((m: { username: string; role: string }) => [m.username, m.role])).toEqual([['alex', 'coordinator'], ['sam', 'viewer']]);
+
+    expect((await sam.get(`/api/applications/${id}/state`)).status).toBe(200);
+    const blocked = await sam.post(`/api/applications/${id}/actions`, add('bolton-clarke'));
+    expect(blocked.status).toBe(403);
+    expect(blocked.json.error).toMatch(/view this application but not change it/);
+    // Viewers can't manage people either.
+    expect((await sam.post(`/api/applications/${id}/members`, { username: 'alex' })).status).toBe(403);
+
+    expect((await admin.patch(`/api/applications/${id}/members/${samId}`, { role: 'contributor' })).status).toBe(200);
+    expect((await sam.post(`/api/applications/${id}/actions`, add('bolton-clarke'))).status).toBe(200);
+    const [entry] = await db.query<{ change: string }>('SELECT change FROM membership_log WHERE subject_id = $1 ORDER BY id DESC LIMIT 1', [samId]);
+    expect(entry.change).toBe('role viewer → contributor');
   });
 
-  it('rejects malformed actions', async () => {
-    const { agent } = await enrolled();
-    expect((await agent.post('/api/actions', { action: { type: 'selection/stage', providerId: 'x', stage: 'final', at: '' } })).status).toBe(400);
-    expect((await agent.post('/api/actions', { action: { type: 'nuke' } })).status).toBe(400);
+  it('invites a new person with a one-time link, and never issues links for people who have a passkey', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam' });
+
+    const res = await admin.post(`/api/applications/${id}/members`, { username: 'jo', display_name: 'Jo', new: true });
+    expect(res.status).toBe(201);
+    const jo = new Agent(a);
+    expect((await jo.get(`/api/enrol/${tokenFrom(res.json.enrolment_url)}`)).json.username).toBe('jo');
+    expect((await admin.post(`/api/applications/${id}/members`, { username: 'sam', display_name: 'Sam', new: true })).status).toBe(409);
+
+    const members = (await admin.get(`/api/applications/${id}/members`)).json.members;
+    const joMember = members.find((m: { username: string }) => m.username === 'jo');
+    expect(joMember).toMatchObject({ role: 'viewer', enrolled: false });
+    expect((await admin.post(`/api/applications/${id}/members/${joMember.user_id}/enrolment`)).status).toBe(200);
+    const samId = members.find((m: { username: string }) => m.username === 'sam').user_id;
+    expect((await admin.post(`/api/applications/${id}/members/${samId}/enrolment`)).status).toBe(400);
+  });
+
+  it('always keeps a coordinator, and lets people leave', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam, user: samUser } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    expect((await admin.patch(`/api/applications/${id}/members/${alex.id}`, { role: 'viewer' })).status).toBe(400);
+    expect((await admin.delete(`/api/applications/${id}/members/${alex.id}`)).status).toBe(400);
+
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam', role: 'coordinator' });
+    expect((await admin.patch(`/api/applications/${id}/members/${alex.id}`, { role: 'contributor' })).status).toBe(200);
+    expect((await sam.delete(`/api/applications/${id}/members/${samUser.id}`)).status).toBe(400);
+    expect((await admin.delete(`/api/applications/${id}/members/${alex.id}`)).status).toBe(200);
+    expect((await admin.get(`/api/applications/${id}/state`)).status).toBe(404);
+
+    // A site admin can reassign the coordinator, e.g. if they leave.
+    expect((await admin.post(`/api/admin/applications/${id}/coordinator`, { user_id: alex.id })).status).toBe(200);
+    expect((await admin.get(`/api/applications/${id}`)).json.role).toBe('coordinator');
+  });
+
+  it('archived applications are read-only', async () => {
+    const { agent: admin, user: alex } = await enrolled();
+    const id = await newApplication(admin, alex.id);
+    await admin.patch(`/api/admin/applications/${id}`, { status: 'archived' });
+    expect((await admin.post(`/api/applications/${id}/actions`, add('x'))).json.error).toMatch(/archived/);
+    expect((await admin.get(`/api/applications/${id}/state`)).status).toBe(200);
+  });
+});
+
+describe('provider catalogue', () => {
+  const bolton = { id: 'bolton-clarke', provider: 'Bolton Clarke', type: null, outlet: null, rn: 1, en: null, pc: 130, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null, prices_as_at: '1 Nov 2026', prices_as_at_date: '2026-11-01', veteran_fit: null, flags: [], source_url: null, postcodes_served: ['4150-4179'] };
+
+  it('admins edit the common catalogue for every application, with history', async () => {
+    const { agent: admin, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    expect((await sam.req('PUT', '/api/admin/providers/bolton-clarke', { provider: bolton })).status).toBe(403);
+    expect((await admin.req('PUT', '/api/admin/providers/bolton-clarke', { provider: bolton })).status).toBe(200);
+    expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'bolton-clarke', pc: 130, postcodes_served: ['4150-4179'] }]);
+    expect((await admin.get('/api/admin/providers/bolton-clarke/history')).json.history).toMatchObject([{ change: 'Edited', by: 'Alex' }]);
+    await admin.delete('/api/admin/providers/bolton-clarke');
+    expect((await sam.get('/api/providers')).json.providers).toEqual([]);
+  });
+
+  it('families suggest corrections; admins approve or reject them', async () => {
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam' });
+
+    // Viewers can't suggest; contributors can.
+    expect((await sam.post(`/api/applications/${id}/suggestions`, { provider: bolton, note: 'New price list' })).status).toBe(403);
+    const samId = (await admin.get(`/api/applications/${id}/members`)).json.members.find((m: { username: string }) => m.username === 'sam').user_id;
+    await admin.patch(`/api/applications/${id}/members/${samId}`, { role: 'contributor' });
+    const created = await sam.post(`/api/applications/${id}/suggestions`, { provider: bolton, note: 'New price list' });
+    expect(created.status).toBe(201);
+    expect(created.json.suggestion).toMatchObject({ provider_id: 'bolton-clarke', is_new: false, status: 'pending', suggested_by: 'Sam', application_name: 'Dad – Wynnum' });
+    expect(created.json.suggestion.current.pc).toBe(126);
+    // Nothing changes until an admin approves.
+    expect((await sam.get('/api/providers')).json.providers).toEqual([]);
+
+    const pending = (await admin.get('/api/admin/suggestions?status=pending')).json.suggestions;
+    expect(pending).toHaveLength(1);
+    const decided = await admin.post(`/api/admin/suggestions/${pending[0].id}/decision`, { approve: true, note: 'Checked the price list' });
+    expect(decided.json.suggestion).toMatchObject({ status: 'approved', decided_by: 'Alex' });
+    expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'bolton-clarke', pc: 130 }]);
+    expect((await admin.post(`/api/admin/suggestions/${pending[0].id}/decision`, { approve: false })).status).toBe(409);
+    expect((await sam.get(`/api/applications/${id}/suggestions`)).json.suggestions[0]).toMatchObject({ status: 'approved', decision_note: 'Checked the price list' });
+  });
+});
+
+describe('moving v1 data', () => {
+  it('turns the shared record into the first application and moves provider edits into the catalogue', async () => {
+    const { user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    const legacy = {
+      version: 5,
+      notes: [],
+      selection: [{ provider_id: 'carers-link', stage: 'interview', why: '', watch: '', added_at: 'x', stage_changed_at: 'x' }],
+      interviews: [],
+      participant: null,
+      plan: null,
+      serviceDate: null,
+      providerEdits: [{ id: 'new-co', provider: 'New Co', type: null, outlet: null, rn: null, en: null, pc: 101, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null, prices_as_at: '1 Oct 2026', prices_as_at_date: '2026-10-01', veteran_fit: null, flags: [], source_url: null }],
+      answers: {},
+      customQuestions: [],
+      responses: {},
+      scores: {},
+      weights: {},
+      decisionNotes: '',
+      screenNotes: [],
+    };
+    await db.query('INSERT INTO app_state (id, version, state) VALUES (1, 7, $1::jsonb)', [JSON.stringify(legacy)]);
+    await db.query('INSERT INTO state_actions (user_id, action) VALUES ($1, $2::jsonb)', [alex.id, '{}']);
+
+    const id = await moveLegacyState(db);
+    expect(id).toBeDefined();
+    expect(await moveLegacyState(db)).toBeUndefined();
+    const mine = (await sam.get('/api/applications')).json.applications;
+    expect(mine).toMatchObject([{ id, name: 'First application', role: 'contributor' }]);
+    const state = (await sam.get(`/api/applications/${id}/state`)).json;
+    expect(state.version).toBe(7);
+    expect(state.state).toMatchObject({ version: 6, specialRates: {}, selection: [{ provider_id: 'carers-link' }] });
+    expect(state.state.providerEdits).toBeUndefined();
+    expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'new-co', pc: 101 }]);
+    const [{ n }] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions WHERE application_id = $1', [id]);
+    expect(Number(n)).toBe(1);
+    const [admin] = await db.query<{ role: string }>('SELECT role FROM application_members WHERE user_id = $1', [alex.id]);
+    expect(admin.role).toBe('coordinator');
   });
 });
 

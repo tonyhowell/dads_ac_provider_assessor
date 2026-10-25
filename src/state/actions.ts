@@ -7,10 +7,10 @@ import {
   ParticipantSchema,
   PlanItemSchema,
   ProviderNoteSchema,
-  ProviderSchema,
   ScreenNoteSchema,
   SelectionEntrySchema,
   SelectionStageSchema,
+  SpecialRateSchema,
 } from '../schemas';
 import { CRITERION_IDS } from '../scoring';
 
@@ -38,9 +38,8 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('participant/set'), participant: ParticipantSchema }),
   z.object({ type: z.literal('plan/set'), plan: z.array(PlanItemSchema).max(50).nullable() }),
   z.object({ type: z.literal('settings/serviceDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }),
-  z.object({ type: z.literal('provider/upsert'), provider: ProviderSchema }),
-  z.object({ type: z.literal('provider/import'), providers: z.array(ProviderSchema).max(500) }),
-  z.object({ type: z.literal('provider/revert'), id }),
+  z.object({ type: z.literal('specialRate/set'), providerId: id, rate: SpecialRateSchema }),
+  z.object({ type: z.literal('specialRate/clear'), providerId: id }),
   z.object({ type: z.literal('bounding/answer'), questionId: id, answer: BoundingAnswerSchema }),
   z.object({ type: z.literal('question/add'), question: CustomQuestionSchema }),
   z.object({ type: z.literal('question/delete'), id }),

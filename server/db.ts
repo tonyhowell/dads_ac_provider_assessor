@@ -115,6 +115,75 @@ const MIGRATIONS: string[] = [
     created_at timestamptz NOT NULL DEFAULT now()
   );
   `,
+  // v2: applications (one applicant's assessment each), their members and shared state, and a common provider catalogue.
+  `
+  CREATE TABLE applications (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    suburb text NOT NULL DEFAULT '',
+    postcode text NOT NULL DEFAULT '',
+    status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'decided', 'archived')),
+    created_by text REFERENCES users(id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE application_members (
+    application_id text NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role text NOT NULL CHECK (role IN ('coordinator', 'contributor', 'viewer')),
+    added_by text REFERENCES users(id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (application_id, user_id)
+  );
+  CREATE INDEX application_members_user_idx ON application_members(user_id);
+  CREATE TABLE application_state (
+    application_id text PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    version integer NOT NULL,
+    state jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  ALTER TABLE state_actions ADD COLUMN application_id text REFERENCES applications(id) ON DELETE CASCADE;
+  CREATE INDEX state_actions_application_idx ON state_actions(application_id, id);
+  CREATE TABLE membership_log (
+    id bigserial PRIMARY KEY,
+    application_id text NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    actor_id text REFERENCES users(id) ON DELETE SET NULL,
+    subject_id text REFERENCES users(id) ON DELETE SET NULL,
+    change text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE provider_catalogue (
+    id text PRIMARY KEY,
+    provider jsonb NOT NULL,
+    updated_by text REFERENCES users(id) ON DELETE SET NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE provider_history (
+    id bigserial PRIMARY KEY,
+    provider_id text NOT NULL,
+    provider jsonb,
+    change text NOT NULL,
+    user_id text REFERENCES users(id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX provider_history_provider_idx ON provider_history(provider_id, id);
+  CREATE TABLE provider_suggestions (
+    id text PRIMARY KEY,
+    provider_id text NOT NULL,
+    is_new boolean NOT NULL DEFAULT false,
+    current jsonb,
+    proposed jsonb NOT NULL,
+    note text NOT NULL DEFAULT '',
+    application_id text REFERENCES applications(id) ON DELETE SET NULL,
+    user_id text REFERENCES users(id) ON DELETE SET NULL,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    decided_by text REFERENCES users(id) ON DELETE SET NULL,
+    decision_note text NOT NULL DEFAULT '',
+    decided_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX provider_suggestions_status_idx ON provider_suggestions(status, created_at)
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

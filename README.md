@@ -24,7 +24,26 @@ The first time the server starts with an empty database, it creates the `BOOTSTR
 
 ## What works so far
 
-The full v1 build plan (SPEC §8 screens, calculations, question filtering, scoring and the printable pack) is in place, on top of passkey sign-in and shared family data.
+The full v1 build plan is in place: the SPEC §8 screens, calculations, question filtering, scoring and the printable pack. It runs on top of passkey sign-in, and v2 adds **applications**.
+
+### Applications and family access (v2)
+- **Separate applications:** each application is one applicant's assessment. All the steps are private to the people added to it; provider data is shared by all applications.
+- **Who creates them:** only site admins create applications, each with a **coordinator** (an existing user, or a new person who gets a one-time passkey link).
+- **Roles:**
+  - the coordinator adds family on **People in this application**;
+  - people join as **Viewers** (read-only) by default;
+  - the coordinator can make them **Contributors** (can change things) or coordinators;
+  - there is always at least one coordinator, and anyone can leave.
+- **Your applications:** the list of applications you belong to, with a switcher in the header.
+- **Site admins:**
+  - see each application's details (area, people, status, last change) but **not its contents**, unless they're also a member;
+  - can archive an application (read-only) or restore it;
+  - can make someone coordinator.
+- **Common provider catalogue:** site admins edit it directly or import a spreadsheet, and every change is recorded. Contributors **suggest corrections** with a note on where the information came from; admins approve or reject them on **Suggested corrections**.
+- **Special rates:** rates a provider offered one applicant are recorded on the provider's page. They are costed only in that application and marked "★ Special rate for you".
+- **Service areas:** each provider lists the postcodes it serves (for example `4178`, `4150-4169`). Providers outside the applicant's postcode are hidden by default; providers without a confirmed area always show.
+- **Server checks:** the server checks membership and role on every request.
+- **Upgrading:** the v1 shared record moved into the first application on upgrade. Admins became its coordinators and everyone else a contributor. Family edits to providers moved into the catalogue.
 
 - **Participant setup:** suburb, postcode, classification, pension status, assessed rates, DVA card and no-worse-off status. Shows contribution rates live, the budget, and DVA prompts (suggestions to check with DVA, never eligibility claims). The name is optional.
 - **Overview:** key rules, the budget breakdown (care management, services, carry-over cap), the contribution table and years to the lifetime cap.
@@ -54,7 +73,7 @@ The full v1 build plan (SPEC §8 screens, calculations, question filtering, scor
   - a "disqualify?" flag when a must-ask question has no written answer, or was answered poorly;
   - a suggested price score from the plan cost against the benchmark;
   - shared decision notes and a printable decision summary.
-- **Admin:** passkey users, enrolment links and roles.
+- **Site administration:** applications, people (passkeys, enrolment links, roles, disabling access), suggested corrections and the provider catalogue.
 
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.

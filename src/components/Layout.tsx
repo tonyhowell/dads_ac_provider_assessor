@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { pricesMissing } from '../data/load';
-import { useAuth } from '../auth/AuthContext';
 import { locate, PHASES, phaseState, type PhaseState } from '../phases';
-import { AppMark } from './ui/Feedback';
 import { Icon } from './ui/Icon';
 import { useHelp } from './ui/HelpPanel';
-import { DisplaySettingsButton } from './DisplaySettings';
+import { Footer, Header, ReadOnlyNotice } from './Shell';
 import { ResolutionCard } from './ui/Cards';
 import { ScreenNotes } from './ScreenNotes';
 import { WelcomeBack } from './Welcome';
@@ -15,7 +13,7 @@ import { WelcomeBack } from './Welcome';
 const STATE_WORDS: Record<PhaseState, string> = { 'not-started': 'Not started', 'in-progress': 'In progress', done: 'Done' };
 
 export function Layout() {
-  const { providers, syncError } = useApp();
+  const { providers, syncError, canEdit } = useApp();
   const help = useHelp();
   const location = useLocation();
   const here = locate(location.pathname);
@@ -28,8 +26,9 @@ export function Layout() {
       <Header />
       <JourneyBar />
 
-      {(syncError || pricesMissing(providers)) && (
+      {(syncError || pricesMissing(providers) || !canEdit) && (
         <div className="mx-auto w-full max-w-[var(--wrap)] space-y-2 px-4 pt-4">
+          {!canEdit && <ReadOnlyNotice />}
           {syncError && (
             <ResolutionCard status="stop" title="Your last change wasn't saved" role="alert">
               <p>{syncError.replace(/^Your last change wasn't saved: /, '')} The screen now shows what's saved. Make the change again once you're connected.</p>
@@ -69,82 +68,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-[var(--rule)] px-4 py-6">
-        <div className="mx-auto max-w-[var(--wrap)] space-y-2 text-[0.95rem]">
-          <p>General information only — not financial or legal advice. Check prices and eligibility with the provider, My Aged Care and DVA before deciding.</p>
-          <p className="flex flex-wrap gap-x-4">
-            <Link to="/about#data-sources">Data sources</Link>
-            <Link to="/about#accessibility">Accessibility</Link>
-            <Link to="/about#privacy">Privacy</Link>
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-function Header() {
-  const help = useHelp();
-  return (
-    <header data-app-header className="bg-[var(--header-bg)] text-[var(--on-dark)]">
-      <div className="relative mx-auto flex max-w-[var(--wrap)] flex-wrap items-center justify-between gap-2 px-4 py-3">
-        <Link to="/" className="flex items-center gap-3 no-underline">
-          <AppMark onDark />
-          <span className="leading-tight">
-            <span className="block text-lg font-semibold">Provider Assessor</span>
-            <span className="block text-[0.875rem] text-[var(--on-dark)] opacity-80">from Quantivate</span>
-          </span>
-        </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="header-btn" onClick={(e) => help.open(undefined, e.currentTarget)}>
-            <Icon name="help" size={20} /> Help
-          </button>
-          <DisplaySettingsButton />
-          <UserMenu />
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function UserMenu() {
-  const { user, signOut } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const location = useLocation();
-  useEffect(() => setOpen(false), [location.pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-  return (
-    <div ref={ref}>
-      <button type="button" className="header-btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(!open)}>
-        <Icon name="menu" size={20} /> Menu
-      </button>
-      {open && (
-        <div className="header-panel min-[721px]:w-64 space-y-1 rounded-[var(--radius-panel)] border border-[var(--rule)] bg-[var(--surface)] p-3 text-[var(--charcoal)] shadow-[var(--shadow-raised)]">
-          <p className="muted px-1">Signed in as {user?.display_name}</p>
-          {user?.role === 'admin' && (
-            <Link to="/admin" className="btn w-full justify-start">
-              Manage family access
-            </Link>
-          )}
-          <Link to="/about" className="btn w-full justify-start">
-            About this app
-          </Link>
-          <button type="button" className="btn w-full justify-start" onClick={signOut}>
-            Sign out
-          </button>
-        </div>
-      )}
+      <Footer />
     </div>
   );
 }

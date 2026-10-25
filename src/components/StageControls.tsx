@@ -33,11 +33,14 @@ export function StageControls({
   small?: boolean;
   onDrop?: (stage: SelectionStage) => void;
 }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, canEdit } = useApp();
   const entry = state.selection.find((e) => e.provider_id === provider.id);
   const at = () => new Date().toISOString();
 
+  if (!canEdit && !compact) return entry ? <StageBadge stage={entry.stage} /> : null;
+
   if (!entry) {
+    if (!canEdit) return null;
     return (
       <button type="button" className={`btn ${primaryAdd ? 'btn-primary' : ''}`} onClick={() => dispatch({ type: 'selection/add', providerId: provider.id, at: at() })}>
         <Icon name="plus" size={20} /> Add to my list <span className="sr-only">: {provider.provider}</span>

@@ -18,13 +18,17 @@ import type {
   ProviderNoteSchema,
   ProviderSchema,
   RateKeySchema,
+  SpecialRateSchema,
   SelectionEntrySchema,
   SelectionStageSchema,
   ShortlistSeedSchema,
 } from './schemas';
 
 export type RateKey = z.infer<typeof RateKeySchema>;
-export type Provider = z.infer<typeof ProviderSchema>;
+export type Provider = z.infer<typeof ProviderSchema> & {
+  /** Set in an application when special rates replace some catalogue prices (never stored in the catalogue). */
+  special_rates?: RateKey[];
+};
 export type Benchmark = z.infer<typeof BenchmarkSchema>;
 export type Category = z.infer<typeof CategorySchema>;
 export type PlanItem = z.infer<typeof PlanItemSchema>;
@@ -57,3 +61,4 @@ export type ScreenNote = z.infer<typeof ScreenNoteSchema>;
 export type HelpData = z.infer<typeof HelpDataSchema>;
 export type HelpTopic = HelpData['topics'][number];
 export type GlossaryTerm = HelpData['glossary'][number];
+export type SpecialRate = z.infer<typeof SpecialRateSchema>;

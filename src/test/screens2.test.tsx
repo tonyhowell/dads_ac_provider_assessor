@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { memoryServer, renderApp } from './renderApp';
+import { memoryBackend, memoryServer, renderApp, testApplication } from './renderApp';
+import { loadSeedData } from '../data/load';
 import { emptyState, type AppState } from '../state/reducer';
 
 const shortlisted = (...ids: string[]): AppState => ({
@@ -71,12 +72,13 @@ describe('Relative costs', () => {
 });
 
 describe('Providers: add, edit, import', () => {
-  it('adds a provider through the form', async () => {
+  it('site admins add a provider to the common catalogue, with its service area', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers/new');
+    const { backend } = await renderApp('/providers/new');
     await user.type(screen.getByLabelText('Provider name'), 'Example Home Care');
     await user.type(screen.getByLabelText('Personal care'), '99.5');
     await user.type(screen.getByLabelText('Prices as at'), '20 Oct 2026');
+    await user.type(screen.getByLabelText('Postcodes served'), '4178, 4150 - 4169');
     await user.type(screen.getByLabelText('Price list link'), 'not a link');
     await user.click(screen.getByRole('button', { name: 'Add provider' }));
     expect(screen.getByRole('alert')).toHaveTextContent('full web address');
@@ -84,38 +86,86 @@ describe('Providers: add, edit, import', () => {
     await user.click(screen.getByRole('button', { name: 'Add provider' }));
 
     expect(await screen.findByRole('heading', { name: 'Example Home Care' })).toBeInTheDocument();
-    expect(server.state.providerEdits[0]).toMatchObject({ id: 'example-home-care', pc: 99.5, prices_as_at_date: '2026-10-20' });
+    expect(backend.edits[0]).toMatchObject({ id: 'example-home-care', pc: 99.5, prices_as_at_date: '2026-10-20', postcodes_served: ['4178', '4150-4169'] });
   });
 
-  it('edits a starter-pack provider and can undo it', async () => {
+  it('site admins edit a starter-pack provider for everyone, and can undo it', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers/bolton-clarke/edit');
+    const { backend } = await renderApp('/providers/bolton-clarke/edit');
+    expect(screen.getByText('Changes apply to every application straight away.')).toBeInTheDocument();
     const pc = screen.getByLabelText('Personal care');
     expect(pc).toHaveValue('126');
     await user.clear(pc);
     await user.type(pc, '130');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByText('Edited by the family')).toBeInTheDocument();
+    expect(await screen.findByText('Changed from the starter data')).toBeInTheDocument();
     expect(screen.getByText('Personal care', { selector: 'dt' }).parentElement).toHaveTextContent('$130.00 /hr');
 
     await user.click(screen.getByRole('button', { name: 'Undo changes' }));
     await user.click(within(screen.getByRole('group')).getByRole('button', { name: 'Undo changes' }));
-    await waitFor(() => expect(server.state.providerEdits).toEqual([]));
+    await waitFor(() => expect(backend.edits).toEqual([]));
   });
 
-  it('imports providers from pasted CSV', async () => {
+  it('site admins import providers from pasted CSV, including postcodes served', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers/import');
+    const { backend } = await renderApp('/admin/providers/import', { waitForNav: false });
     // userEvent treats { and [ as special keys, so paste the text.
     await user.click(screen.getByLabelText('Or paste CSV'));
-    await user.paste('provider,pc,prices_as_at\nNew Co,101,1 Oct 2026\nBolton Clarke,128,24 Oct 2026\n,5,');
+    await user.paste('provider,pc,prices_as_at,postcodes_served\nNew Co,101,1 Oct 2026,4178; 4179\nBolton Clarke,128,24 Oct 2026,\n,5,,');
     expect(screen.getByText('Line 4: Provider name is missing.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Import 2 providers (skip 1)' }));
-    expect(await screen.findByRole('heading', { name: 'Look up providers near you' })).toBeInTheDocument();
-    expect(server.state.providerEdits.map((p) => [p.id, p.pc])).toEqual([
-      ['new-co', 101],
-      ['bolton-clarke', 128],
+    expect(await screen.findByRole('link', { name: /Add provider/ })).toBeInTheDocument();
+    expect(backend.edits.map((p) => [p.id, p.pc, p.postcodes_served])).toEqual([
+      ['new-co', 101, ['4178', '4179']],
+      ['bolton-clarke', 128, []],
     ]);
+  });
+
+  it('contributors suggest corrections for an administrator to review', async () => {
+    const user = userEvent.setup();
+    const { backend } = await renderApp('/providers/bolton-clarke/edit', { user: { id: 'u2', username: 'sam', display_name: 'Sam', role: 'member' }, role: 'contributor' });
+    expect(screen.getByRole('heading', { name: 'Suggest a correction to Bolton Clarke' })).toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Personal care'));
+    await user.type(screen.getByLabelText('Personal care'), '130');
+    await user.click(screen.getByRole('button', { name: 'Send for review' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Say where the new information comes from');
+    await user.type(screen.getByLabelText('Where does this come from?'), 'Price list dated 1 Nov');
+    await user.click(screen.getByRole('button', { name: 'Send for review' }));
+    expect(await screen.findByText(/your suggestion has been sent for review/)).toBeInTheDocument();
+    expect(backend.edits).toEqual([]);
+    expect(backend.suggestions[0]).toMatchObject({ provider_id: 'bolton-clarke', note: 'Price list dated 1 Nov', proposed: { pc: 130 } });
+  });
+
+  it('records special rates a provider offered this applicant, costed in this application only', async () => {
+    const user = userEvent.setup();
+    const { server, backend } = await renderApp('/providers/bolton-clarke');
+    await user.click(screen.getByRole('button', { name: /Special rates for Dad – Wynnum/ }));
+    await user.click(screen.getByRole('button', { name: 'Add special rates' }));
+    await user.type(screen.getByLabelText('Domestic assistance'), '95');
+    await user.click(screen.getByRole('button', { name: 'Save special rates' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Say what they offered');
+    await user.type(screen.getByLabelText('What did they offer?'), 'Veteran rate, confirmed by email');
+    await user.click(screen.getByRole('button', { name: 'Save special rates' }));
+    await waitFor(() => expect(server.state.specialRates['bolton-clarke']).toMatchObject({ rates: { domestic: 95 }, note: 'Veteran rate, confirmed by email' }));
+    expect(screen.getAllByText('Domestic assistance', { selector: 'dt' })[0].parentElement).toHaveTextContent('Special rate for you');
+    expect(backend.edits).toEqual([]);
+  });
+
+  it("hides providers outside the applicant's postcode unless asked", async () => {
+    const user = userEvent.setup();
+    const backend = memoryBackend(memoryServer(), 'coordinator', { ...testApplication, postcode: '4178' });
+    const bolton = loadSeedData().providers.find((p) => p.id === 'bolton-clarke')!;
+    const carers = loadSeedData().providers.find((p) => p.id === 'carers-link')!;
+    backend.edits = [
+      { ...bolton, postcodes_served: ['4100-4120'] },
+      { ...carers, postcodes_served: ['4178'] },
+    ];
+    await renderApp('/providers', { backend });
+    expect(screen.queryByRole('heading', { name: 'Bolton Clarke' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('heading', { name: 'Carers Link' }).closest('li')!).getByText('Serves 4178')).toBeInTheDocument();
+    expect(within(screen.getByRole('heading', { name: 'Envigor Brisbane Bayside' }).closest('li')!).getByText('Area not confirmed')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Show 1 provider outside 4178' }));
+    expect(within(screen.getByRole('heading', { name: 'Bolton Clarke' }).closest('li')!).getByText('Outside 4178')).toBeInTheDocument();
   });
 
   it('flags providers that mention travel or admin fees', async () => {

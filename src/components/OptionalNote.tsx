@@ -6,7 +6,24 @@ import { Icon } from './ui/Icon';
  * A note field that stays out of the way: a short "Add a note" button until there's something to say.
  * Once written, the note shows as text with an Edit button. Saves when the box loses focus.
  */
-export function OptionalNote({ id, label, addLabel, hint, value, onCommit }: { id: string; label: string; addLabel?: string; hint?: ReactNode; value: string; onCommit: (v: string) => void }) {
+export function OptionalNote({
+  id,
+  label,
+  addLabel,
+  hint,
+  value,
+  onCommit,
+  readOnly = false,
+}: {
+  id: string;
+  label: string;
+  addLabel?: string;
+  hint?: ReactNode;
+  value: string;
+  onCommit: (v: string) => void;
+  /** Show the note but no way to add or change it (viewers). */
+  readOnly?: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [full, setFull] = useState(false);
   const long = value.length > 90;
@@ -39,13 +56,16 @@ export function OptionalNote({ id, label, addLabel, hint, value, onCommit }: { i
               {full ? 'Show less' : 'Show all'} <span className="sr-only">{label.toLowerCase()}</span>
             </button>
           )}
-          <button type="button" className="btn-quiet" onClick={() => setEditing(true)}>
-            <Icon name="edit" size={18} /> Edit <span className="sr-only">{label.toLowerCase()}</span>
-          </button>
+          {!readOnly && (
+            <button type="button" className="btn-quiet" onClick={() => setEditing(true)}>
+              <Icon name="edit" size={18} /> Edit <span className="sr-only">{label.toLowerCase()}</span>
+            </button>
+          )}
         </div>
       </div>
     );
   }
+  if (readOnly) return null;
   return (
     <button type="button" className="btn-quiet" onClick={() => setEditing(true)}>
       <Icon name="plus" size={20} /> {addLabel ?? `Add ${label.toLowerCase()}`}

@@ -74,7 +74,7 @@ export function ParticipantScreen() {
 }
 
 function ParticipantForm() {
-  const { state, seed, dispatch, plan, serviceDate } = useApp();
+  const { state, seed, dispatch, plan, serviceDate, canEdit } = useApp();
   const fh = useFieldHelp();
   const [draft, setDraft] = useState<Draft>(() => toDraft(state.participant));
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
@@ -138,6 +138,7 @@ function ParticipantForm() {
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,var(--wrap-form))_minmax(0,1fr)]">
         <form onSubmit={save} className="space-y-6" noValidate>
+          <fieldset disabled={!canEdit} className="min-w-0 space-y-6">
           {submitted && errorList.length > 0 && (
             <div ref={summaryRef} tabIndex={-1} role="alert" className="card tone-stop border-l-4">
               <p className="status status-stop font-semibold">
@@ -337,6 +338,7 @@ function ParticipantForm() {
               </span>
             )}
           </div>
+          </fieldset>
         </form>
 
         <aside className="space-y-4 lg:sticky lg:top-4" aria-label="Your summary">

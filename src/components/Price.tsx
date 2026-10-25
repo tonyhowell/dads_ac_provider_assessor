@@ -53,11 +53,12 @@ export function VarianceChip({ rate, guide }: { rate: number | null; guide: numb
 }
 
 /** A provider's hourly rate with its state: published, filled from the guide price, or not published (UI-SPEC §6.5). */
-export function PriceCell({ rate, guide }: { rate: number | null; guide: number | null }) {
+export function PriceCell({ rate, guide, special = false }: { rate: number | null; guide: number | null; special?: boolean }) {
   if (rate !== null) {
     return (
       <span className="flex flex-col items-end gap-1">
         <span className="font-medium tabular-nums">{formatRate(rate)} /hr</span>
+        {special && <span className="chip chip-good">★ Special rate for you</span>}
         <VarianceChip rate={rate} guide={guide} />
       </span>
     );

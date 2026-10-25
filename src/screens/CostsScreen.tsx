@@ -1,3 +1,4 @@
+import { servesArea } from '../area';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
@@ -25,16 +26,17 @@ const PERIOD: Record<Period, { factor: number; word: string }> = {
 };
 
 export function CostsScreen() {
-  const { state, providers, seed, dispatch, serviceDate, plan } = useApp();
+  const { state, providers, seed, dispatch, serviceDate, plan, canEdit, areaPostcode } = useApp();
   const [scope, setScope] = useState<Scope>(state.selection.length > 0 ? 'selected' : 'all');
   const [period, setPeriod] = useState<Period>('quarter');
   const { factor, word } = PERIOD[period];
 
   const shown = useMemo(() => {
     const stageOf = new Map(state.selection.map((e) => [e.provider_id, e.stage]));
-    if (scope === 'all') return providers;
+    // "All" means all in the applicant's area: providers that list other postcodes only are left out.
+    if (scope === 'all') return providers.filter((p) => servesArea(p, areaPostcode) !== 'outside');
     return providers.filter((p) => (scope === 'interview' ? stageOf.get(p.id) === 'interview' : stageOf.has(p.id)));
-  }, [providers, state.selection, scope]);
+  }, [providers, state.selection, scope, areaPostcode]);
 
   const { rates, budget, benchmark, byProvider } = usePlanCosts(shown);
   // A provider with no published price for any service in the plan would just repeat the guide price.
@@ -71,7 +73,7 @@ export function CostsScreen() {
           <select id="cost-scope" className="input" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
             <option value="selected">The ones on my list</option>
             <option value="interview">Providers to interview</option>
-            <option value="all">All providers</option>
+            <option value="all">{areaPostcode ? `All providers serving ${areaPostcode}` : 'All providers'}</option>
           </select>
         </div>
         <fieldset>
@@ -88,9 +90,9 @@ export function CostsScreen() {
           <label htmlFor="cost-date" className="label">
             Services starting
           </label>
-          <input id="cost-date" type="date" className="input" value={serviceDate} onChange={(e) => e.target.value && dispatch({ type: 'settings/serviceDate', date: e.target.value })} />
+          <input id="cost-date" type="date" className="input" value={serviceDate} disabled={!canEdit} onChange={(e) => e.target.value && dispatch({ type: 'settings/serviceDate', date: e.target.value })} />
         </div>
-        {state.serviceDate && state.serviceDate !== toIsoDate(new Date()) && (
+        {canEdit && state.serviceDate && state.serviceDate !== toIsoDate(new Date()) && (
           <button type="button" className="btn" onClick={() => dispatch({ type: 'settings/serviceDate', date: null })}>
             Use today
           </button>
@@ -158,16 +160,17 @@ export function CostsScreen() {
             </thead>
             <tbody>
               {priced.map((r) => (
-                <CostRow key={r.provider.id} name={r.provider.provider} id={r.provider.id} cost={r.cost} factor={factor} word={word} />
+                <CostRow key={r.provider.id} name={r.provider.provider} id={r.provider.id} cost={r.cost} factor={factor} word={word} special={!!r.provider.special_rates?.length} />
               ))}
               <CostRow name="Guide price (benchmark)" cost={benchmark} factor={factor} word={word} />
             </tbody>
           </table>
         </div>
         <ul className="space-y-3 md:hidden">
-          {[...priced.map((r) => ({ name: r.provider.provider, id: r.provider.id as string | undefined, cost: r.cost })), { name: 'Guide price (benchmark)', id: undefined, cost: benchmark }].map((r) => (
+          {[...priced.map((r) => ({ name: r.provider.provider, id: r.provider.id as string | undefined, cost: r.cost, special: !!r.provider.special_rates?.length })), { name: 'Guide price (benchmark)', id: undefined, cost: benchmark, special: false }].map((r) => (
             <li key={r.name} className="well space-y-1">
               <h3>{r.id ? <Link to={`/providers/${r.id}`}>{r.name}</Link> : r.name}</h3>
+              {r.special && <span className="chip chip-good">★ Includes special rates for you</span>}
               <p className="text-2xl font-semibold tabular-nums">
                 <CostWhy name={r.name} cost={r.cost} factor={factor} word={word} />
               </p>
@@ -222,7 +225,7 @@ export function CostsScreen() {
                   </th>
                   {RATE_KEYS.map((k) => (
                     <td key={k} className="num">
-                      <PriceCell rate={p[k]} guide={seed.benchmark[k]} />
+                      <PriceCell rate={p[k]} guide={seed.benchmark[k]} special={p.special_rates?.includes(k)} />
                     </td>
                   ))}
                 </tr>
@@ -242,7 +245,7 @@ export function CostsScreen() {
                   <div key={k} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-t border-[var(--rule)] pt-2">
                     <dt>{RATE_LABELS[k]}</dt>
                     <dd className="min-w-0 text-right">
-                      <PriceCell rate={p[k]} guide={seed.benchmark[k]} />
+                      <PriceCell rate={p[k]} guide={seed.benchmark[k]} special={p.special_rates?.includes(k)} />
                     </dd>
                   </div>
                 ))}
@@ -306,11 +309,16 @@ function BudgetStatus({ cost, factor, word }: { cost: PlanCost; factor: number; 
   );
 }
 
-function CostRow({ name, id, cost, factor, word }: { name: string; id?: string; cost: PlanCost; factor: number; word: string }) {
+function CostRow({ name, id, cost, factor, word, special = false }: { name: string; id?: string; cost: PlanCost; factor: number; word: string; special?: boolean }) {
   return (
     <tr>
       <th scope="row" className="text-left font-normal">
         {id ? <Link to={`/providers/${id}`}>{name}</Link> : name}
+        {special && (
+          <span className="block">
+            <span className="chip chip-good">★ Includes special rates for you</span>
+          </span>
+        )}
         {cost.benchmark_filled.length > 0 && (
           <span className="block">
             <StatusText status="caution">{cost.benchmark_filled.join(', ')} filled from guide price</StatusText>

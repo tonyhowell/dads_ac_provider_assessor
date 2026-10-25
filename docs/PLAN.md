@@ -160,6 +160,59 @@ Every screen works at 360 px width, uses semantic HTML with labelled controls an
 
 ---
 
+## v2 — Applications, family access and a common provider catalogue (requested 26 Oct 2026): built
+
+Each **application** is one applicant's assessment, kept separate from the others. It covers every step: about you, budget, what matters, costs, selection, interview questions, interviews, scores and the decision. Provider data is common to all applications.
+
+**Decisions (from the owner):**
+1. Only site admins create applications.
+2. Site admins see an application's details (name, area, people, status, last activity), not its contents, unless they are also a member.
+3. Roles within an application:
+   - **Coordinator**: the applicant or whoever runs the application;
+   - **Contributor**;
+   - **Viewer** (read-only).
+   Family members join as Viewers by default; the coordinator can make them Contributors.
+4. Provider corrections go through suggest-and-approve. Separately, an application can record **special rates** a provider has offered that applicant; these are costed only in that application.
+5. Providers are filtered by **service area** from v2.0.
+
+**Data model:**
+- `applications` (name, suburb, postcode, status active/decided/archived);
+- `application_members` (role);
+- `application_state` (one shared record per application, same reducer as v1);
+- `state_actions.application_id`;
+- `membership_log`;
+- `provider_catalogue` (common edits over the starter data);
+- `provider_history`;
+- `provider_suggestions`.
+
+The v1 shared record becomes the first application. Admins become its coordinators and other existing users its contributors, so no one loses access. Family edits to providers move into the catalogue.
+
+**Server rules:**
+- Every application route checks membership.
+- Changes need Contributor or Coordinator; people management needs Coordinator.
+- Catalogue edits and suggestion decisions need a site admin.
+
+**Service areas:** `postcodes_served` on each provider holds postcodes (`4178`) or ranges (`4150-4179`). Missing means "area not confirmed". The applicant's postcode is taken from About you, falling back to the application's postcode.
+
+**Later:** export and delete an application, an activity feed, usage limits for drafting notes, duplicating an application.
+
+## v3 — Applicant profile, "What I'm looking for", provider dossier and public claims (requested 26 Oct 2026; after v2)
+
+1. **Applicant profile and DVA details:**
+   - **DVA:** card type, accepted conditions (pick list plus free text) and current DVA services. **No DVA file or card numbers are stored.**
+   - **For providers:** preferred name, a contact person for providers, communication needs, current supports, and "anything else".
+   - Each item is marked whether it goes in the dossier.
+2. **"What I'm looking for in a provider"** replaces the bounding questions. Each question has set answers (single or multiple choice) and always a free-text box. Answers still decide which interview sections are included. The draft options need human review.
+3. **Claude summary:** priorities, must-haves, deal-breakers and a short paragraph, drafted by the server from the profile, plan and questionnaire. It is editable, saved with the application and can be regenerated.
+4. **Dossier:** printed **once per provider**, with that provider's name and the public claims to confirm in writing.
+   - Contents: cover, profile, DVA details, care plan, summary, questionnaire answers, optionally the interview questions.
+   - Budget, pension and contribution figures are off by default; "Watch for" notes and scores are never included.
+   - An explicit sharing confirmation before printing.
+5. **Public claims:** Claude web search runs on the server. For each need and each must-ask question it records the claim, Stated / Partly / Not found, a source link, a quote and the date.
+   - Results are **cached per provider for every application** and searched again **after 60 days** or on Refresh.
+   - Matching to an applicant is a separate, cheaper step.
+   - Shown during the initial scan, on provider pages, and in the interview questions ("They say: …").
+
 ## UI redesign (UI-SPEC.md, PR #1): built
 
 - Implemented on 25 Oct 2026: the tokens, journey bar, help system, resolution cards, new inputs, chart restyle, print layouts, decision summary, welcome screens, family notes, display settings and axe tests.

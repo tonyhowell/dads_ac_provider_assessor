@@ -14,6 +14,7 @@ interface AdminUser {
   created_at: string;
   passkeys: number;
   enrolment_expires_at: string | null;
+  applications: { application_id: string; name: string; role: 'coordinator' | 'contributor' | 'viewer' }[];
 }
 
 interface Passkey {
@@ -56,9 +57,9 @@ export function AdminScreen() {
   return (
     <section className="space-y-4">
       <div>
-        <h1>Manage family access</h1>
-        <p className="muted mt-1">
-          Add family members, issue the one-time links they use to set up a passkey, and remove access when needed.
+        <h2>People</h2>
+        <p className="mt-1">
+          Everyone who can sign in. Coordinators add family to their own application; here you can add people, issue one-time passkey links, and disable access.
         </p>
       </div>
 
@@ -78,9 +79,9 @@ export function AdminScreen() {
       />
 
       <section aria-labelledby="users-heading" className="space-y-3">
-        <h2 id="users-heading">
+        <h3 id="users-heading">
           People with access
-        </h2>
+        </h3>
         {!users ? (
           <p className="muted">Loading…</p>
         ) : (
@@ -127,9 +128,9 @@ function AddUserForm({ onCreated, onError }: { onCreated: (username: string, url
 
   return (
     <form onSubmit={submit} className="card space-y-3" aria-labelledby="add-heading">
-      <h2 id="add-heading">
+      <h3 id="add-heading">
         Add a person
-      </h2>
+      </h3>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <label htmlFor="new-username" className="muted block">
@@ -170,7 +171,7 @@ function AddUserForm({ onCreated, onError }: { onCreated: (username: string, url
   );
 }
 
-function EnrolmentLink({ username, url, onDismiss }: { username: string; url: string; onDismiss: () => void }) {
+export function EnrolmentLink({ username, url, onDismiss }: { username: string; url: string; onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <div role="status" className="card tone-info space-y-2 border-l-4">
@@ -228,12 +229,15 @@ function UserCard({
     <li className="card space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-semibold">
+          <h4 className="font-semibold">
             {user.display_name} <span className="muted font-normal">({user.username})</span>
             {isMe && <span className="muted font-normal"> · you</span>}
-          </h3>
+          </h4>
           <p className="muted">
             {user.role === 'admin' ? 'Administrator' : 'Family member'} · {status}
+          </p>
+          <p className="small">
+            {user.applications.length ? `In ${user.applications.map((a) => `${a.name} (${a.role})`).join(', ')}` : 'Not in any application'}
           </p>
           <p className="muted text-xs">
             Last signed in {user.last_login_at ? formatDateTime(user.last_login_at) : 'never'} · added {formatDateTime(user.created_at)}

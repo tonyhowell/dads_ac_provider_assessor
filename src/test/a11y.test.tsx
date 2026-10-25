@@ -54,6 +54,30 @@ const populated = (): AppState => ({
   ],
 });
 
+/** Sample answers for the screens that call the server directly (people, site administration). */
+function stubApi() {
+  const member = { user_id: 'u1', username: 'alex', display_name: 'Alex', role: 'coordinator', enrolled: true, enrolment_expires_at: null, disabled: false, added_at: AT };
+  const routes: Record<string, unknown> = {
+    '/api/applications/app-1/members': { members: [member, { ...member, user_id: 'u2', username: 'sam', display_name: 'Sam', role: 'viewer', enrolled: false, enrolment_expires_at: AT }] },
+    '/api/applications/app-1/suggestions': { suggestions: [] },
+    '/api/admin/users': {
+      users: [{ id: 'u1', username: 'alex', display_name: 'Alex', role: 'admin', disabled: false, last_login_at: null, created_at: AT, passkeys: 1, enrolment_expires_at: null, applications: [{ application_id: 'app-1', name: 'Dad', role: 'coordinator' }] }],
+    },
+    '/api/admin/applications': {
+      applications: [{ id: 'app-1', name: 'Dad', suburb: 'Wynnum', postcode: '4178', status: 'active', created_at: AT, updated_at: AT, last_activity: AT, members: 2, coordinators: [{ user_id: 'u1', display_name: 'Alex', username: 'alex' }] }],
+    },
+    '/api/admin/suggestions?status=pending': {
+      suggestions: [
+        {
+          id: 's1', provider_id: 'bolton-clarke', is_new: false, current: null, proposed: { id: 'bolton-clarke', provider: 'Bolton Clarke', type: null, outlet: null, rn: null, en: null, pc: 130, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null, prices_as_at: '1 Nov 2026', prices_as_at_date: '2026-11-01', veteran_fit: null, flags: [], source_url: null },
+          note: 'Price list', application_id: 'app-1', application_name: 'Dad', suggested_by: 'Sam', status: 'pending', decided_by: null, decision_note: '', decided_at: null, created_at: AT,
+        },
+      ],
+    },
+  };
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => new Response(JSON.stringify(routes[path] ?? { error: 'Not found' }), { status: routes[path] ? 200 : 404, headers: { 'Content-Type': 'application/json' } })));
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -68,7 +92,7 @@ describe('accessibility (axe)', () => {
     '/providers/bolton-clarke',
     '/providers/bolton-clarke/edit',
     '/providers/new',
-    '/providers/import',
+    '/people',
     '/selection/scan',
     '/selection/interview',
     '/interview-pack',
@@ -77,13 +101,30 @@ describe('accessibility (axe)', () => {
     '/interviews/int-1',
     '/scoring',
     '/summary',
-    '/about',
   ];
 
   it.each(routes)('%s has no violations', async (route) => {
+    stubApi();
     await renderApp(route, { server: memoryServer(populated()) });
     await expectNoViolations();
   }, 20_000);
+
+  const outside = ['/about', '/applications', '/admin', '/admin/applications', '/admin/suggestions', '/admin/providers', '/admin/providers/import', '/admin/providers/bolton-clarke/edit'];
+  it.each(outside)('%s has no violations', async (route) => {
+    stubApi();
+    await renderApp(route, { server: memoryServer(populated()), waitForNav: false });
+    await screen.findAllByRole('heading', { level: 1 });
+    await new Promise((r) => setTimeout(r, 50));
+    await expectNoViolations();
+  }, 20_000);
+
+  it("a viewer's read-only screens have no violations", async () => {
+    for (const route of ['/providers/bolton-clarke', '/bounding', '/selection/interview', '/interview-pack', '/scoring']) {
+      const { unmount } = await renderApp(route, { server: memoryServer(populated()), role: 'viewer' });
+      await expectNoViolations();
+      unmount();
+    }
+  }, 30_000);
 
   it('the empty start has no violations', async () => {
     await renderApp('/costs');

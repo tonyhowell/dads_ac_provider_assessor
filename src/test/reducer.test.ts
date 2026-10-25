@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveProviders, emptyState, entriesAt, initialState, migrate, reducer, type AppState } from '../state/reducer';
+import { effectiveProviders, emptyState, entriesAt, initialState, legacyProviderEdits, migrate, reducer, withSpecialRates, type AppState } from '../state/reducer';
 import type { Interview, Provider } from '../types';
 
 const provider = (id: string, name: string): Provider => ({
@@ -41,7 +41,7 @@ describe('migrate', () => {
     });
   });
 
-  it('remaps placeholder provider ids and adds the v4/v5 fields when upgrading v2 state', () => {
+  it('remaps placeholder provider ids and adds the later fields when upgrading v2 state', () => {
     const v2 = {
       version: 2,
       notes: [{ id: 'n1', provider_id: 'anglicare-sq', text: 'x', created_at: AT, source: 'manual' }],
@@ -49,7 +49,7 @@ describe('migrate', () => {
       interviews: [{ ...{ id: 'i', started_at: AT, duration_seconds: 0, consent_confirmed: true, interviewer: '', audio_id: null, audio_mime: null, transcript: '', notes: null, notes_generated_at: null }, provider_id: 'right-at-home-bayside-south' }],
     };
     const v3 = migrate(v2)!;
-    expect(v3.version).toBe(5);
+    expect(v3.version).toBe(6);
     expect(v3.screenNotes).toEqual([]);
     expect(v3.answers).toEqual({});
     expect(v3.notes[0].provider_id).toBe('anglicare-southern-queensland');
@@ -60,10 +60,18 @@ describe('migrate', () => {
   it('turns v4 satisfactory flags into ratings when upgrading to v5', () => {
     const v4 = { ...emptyState(), version: 4, screenNotes: undefined, responses: { 'a::A1': { text: 'Yes, in writing', satisfactory: true }, 'a::A2': { text: '', satisfactory: false } } };
     const v5 = migrate(v4)!;
-    expect(v5.version).toBe(5);
+    expect(v5.version).toBe(6);
     expect(v5.screenNotes).toEqual([]);
     expect(v5.responses['a::A1']).toEqual({ text: 'Yes, in writing', rating: 'yes', in_writing: true });
     expect(v5.responses['a::A2']).toEqual({ text: '', rating: 'no', in_writing: false });
+  });
+
+  it('moves v5 provider edits out of the family state (for the server to put in the catalogue)', () => {
+    const v5 = { ...emptyState(), version: 5, specialRates: undefined, providerEdits: [{ ...providers[0], rn: 150 }] };
+    expect(legacyProviderEdits(v5)).toHaveLength(1);
+    const v6 = migrate(v5)!;
+    expect(v6).toMatchObject({ version: 6, specialRates: {} });
+    expect('providerEdits' in v6).toBe(false);
   });
 
   it('keeps current state and ignores anything unknown', () => {
@@ -177,16 +185,19 @@ describe('assessment state (v4)', () => {
     expect(reducer(s, { type: 'plan/set', plan: null }).plan).toBeNull();
   });
 
-  it('overrides seed providers with edits and appends new ones', () => {
-    const edited = { ...providers[0], rn: 150 };
-    const added = { ...providers[0], id: 'new-co', provider: 'New Co' };
-    let s = reducer(base(), { type: 'provider/upsert', provider: edited });
-    s = reducer(s, { type: 'provider/import', providers: [added, { ...edited, rn: 160 }] });
-    const merged = effectiveProviders(providers, s.providerEdits);
+  it('overlays catalogue edits on the starter pack and appends new providers', () => {
+    const merged = effectiveProviders(providers, [{ ...providers[0], rn: 160 }, { ...providers[0], id: 'new-co', provider: 'New Co' }]);
     expect(merged.map((p) => p.id)).toEqual(['a', 'b', 'c', 'new-co']);
     expect(merged[0].rn).toBe(160);
-    s = reducer(s, { type: 'provider/revert', id: 'a' });
-    expect(effectiveProviders(providers, s.providerEdits)[0].rn).toBeNull();
+  });
+
+  it("records special rates for this application and costs them over the catalogue's prices", () => {
+    let s = reducer(base(), { type: 'specialRate/set', providerId: 'a', rate: { rates: { domestic: 90 }, note: 'Veteran rate by email', recorded_at: 'x' } });
+    const [a] = withSpecialRates(providers, s.specialRates);
+    expect(a).toMatchObject({ domestic: 90, special_rates: ['domestic'] });
+    expect(withSpecialRates(providers, s.specialRates)[1].special_rates).toBeUndefined();
+    s = reducer(s, { type: 'specialRate/clear', providerId: 'a' });
+    expect(s.specialRates).toEqual({});
   });
 
   it('records bounding answers, custom questions and responses', () => {

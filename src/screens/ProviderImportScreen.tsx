@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApp } from '../state/AppContext';
+import { useSession } from '../state/SessionContext';
 import { providersFromCsv } from '../csv';
 import { RATE_KEYS } from '../schemas';
 
@@ -8,7 +8,8 @@ const EXAMPLE = `provider,type,outlet,rn,en,pc,domestic,social,respite,gardening
 Example Home Care,Private company,Brisbane Bayside,180,150,110,108,108,108,115,140,1 Oct 2026,https://example.org/prices,Unknown,30-min minimum; ask about weekends`;
 
 export function ProviderImportScreen() {
-  const { providers, dispatch } = useApp();
+  const { catalogue: providers, backend, setCatalogue } = useSession();
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const result = text.trim() ? providersFromCsv(text, providers) : null;
@@ -21,14 +22,14 @@ export function ProviderImportScreen() {
 
   return (
     <section className="space-y-4">
-      <Link to="/providers" className="muted">
-        ← All providers
+      <Link to="/admin/providers" className="muted">
+        ← Provider catalogue
       </Link>
       <div>
         <h1>Import providers from CSV</h1>
         <p className="muted mt-1">
           Add providers or update prices in bulk, for example from a spreadsheet of My Aged Care listings. Rows that match an existing provider by name
-          update it.
+          update it. Changes apply to every application.
         </p>
       </div>
 
@@ -49,12 +50,17 @@ export function ProviderImportScreen() {
           <summary className="cursor-pointer">Columns</summary>
           <p className="mt-2">
             <code>provider</code> is required. Optional: <code>type</code>, <code>outlet</code>, the hourly rates ({RATE_KEYS.map((k) => <code key={k}>{k} </code>)}),{' '}
-            <code>prices_as_at</code>, <code>source_url</code>, <code>veteran_fit</code> and <code>flags</code> (separate several with semicolons). A blank rate
+            <code>prices_as_at</code>, <code>source_url</code>, <code>veteran_fit</code>, <code>flags</code> and <code>postcodes_served</code> (separate several with semicolons; postcodes can be ranges like 4150-4169). A blank rate
             means not published.
           </p>
         </details>
       </div>
 
+      {error && (
+        <p role="alert" className="card tone-stop border-l-4">
+          {error}
+        </p>
+      )}
       {result && (
         <section className="card space-y-3" aria-labelledby="preview-heading">
           <h2 id="preview-heading" className="font-semibold">
@@ -84,9 +90,13 @@ export function ProviderImportScreen() {
             type="button"
             className="btn btn-primary"
             disabled={good.length === 0}
-            onClick={() => {
-              dispatch({ type: 'provider/import', providers: good.map((r) => r.provider!) });
-              navigate('/providers');
+            onClick={async () => {
+              try {
+                setCatalogue(await backend.importProviders(good.map((r) => r.provider!)));
+                navigate('/admin/providers');
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Could not import.');
+              }
             }}
           >
             Import {good.length} provider{good.length === 1 ? '' : 's'}

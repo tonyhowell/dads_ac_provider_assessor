@@ -10,6 +10,8 @@ import type { Provider, SelectionStage } from '../types';
 import { NextStepCard, ScreenHeader } from '../components/ui/Cards';
 import { StatusText } from '../components/ui/Status';
 import { Icon } from '../components/ui/Icon';
+import { useAuth } from '../auth/AuthContext';
+import { servesArea, type AreaMatch } from '../area';
 
 type SortKey = 'name' | 'notes';
 type StageFilter = 'all' | 'none' | SelectionStage;
@@ -19,7 +21,10 @@ const hasVeteranExperience = (p: Provider) => /^strong|veteran/i.test(p.veteran_
 const hasFlags = (p: Provider) => p.flags.length > 0;
 
 export function ProvidersScreen() {
-  const { providers, state } = useApp();
+  const { providers, state, canEdit, areaPostcode } = useApp();
+  const { user } = useAuth();
+  const [showOutside, setShowOutside] = useState(false);
+  const outsideCount = providers.filter((p) => servesArea(p, areaPostcode) === 'outside').length;
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [stageFilter, setStageFilter] = useState<StageFilter>('all');
@@ -41,22 +46,28 @@ export function ProvidersScreen() {
         (stageFilter === 'all' || (stageOf.get(p.id) ?? 'none') === stageFilter) &&
         (!chips.has('veteran') || hasVeteranExperience(p)) &&
         (!chips.has('current') || !isStale(p.prices_as_at_date)) &&
-        (!chips.has('noflags') || !hasFlags(p)),
+        (!chips.has('noflags') || !hasFlags(p)) &&
+        (showOutside || servesArea(p, areaPostcode) !== 'outside'),
     );
     return filtered.sort((a, b) =>
       sort === 'notes' ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider) : a.provider.localeCompare(b.provider),
     );
-  }, [providers, query, sort, noteCounts, stageFilter, stageOf, chips]);
+  }, [providers, query, sort, noteCounts, stageFilter, stageOf, chips, showOutside, areaPostcode]);
 
   return (
     <section className="space-y-6">
       <ScreenHeader title="Look up providers near you" purpose="Check each provider's prices and notes, and add the ones worth a closer look to your list." helpTopic="providers">
-        <Link to="/providers/new" className="btn">
-          <Icon name="plus" size={20} /> Add provider
-        </Link>
-        <Link to="/providers/import" className="btn">
-          Import a spreadsheet
-        </Link>
+        {user?.role === 'admin' ? (
+          <Link to="/admin/providers" className="btn">
+            <Icon name="edit" size={20} /> Manage the provider catalogue
+          </Link>
+        ) : (
+          canEdit && (
+            <Link to="/providers/new" className="btn">
+              <Icon name="plus" size={20} /> Suggest a provider
+            </Link>
+          )
+        )}
       </ScreenHeader>
 
       <div className="card space-y-4">
@@ -110,11 +121,16 @@ export function ProvidersScreen() {
         <p aria-live="polite">
           Showing {rows.length} of {providers.length} providers · {state.selection.length} on your list
         </p>
+        {outsideCount > 0 && (
+          <button type="button" className="btn-quiet" aria-pressed={showOutside} onClick={() => setShowOutside(!showOutside)}>
+            <Icon name="pin" size={20} /> {showOutside ? `Hide the ${outsideCount} outside ${areaPostcode}` : `Show ${outsideCount} provider${outsideCount === 1 ? '' : 's'} outside ${areaPostcode}`}
+          </button>
+        )}
       </div>
 
       {rows.length === 0 && (
         <p className="card">
-          No providers match. <button type="button" className="btn-quiet" onClick={() => (setQuery(''), setChips(new Set()), setStageFilter('all'))}>Clear the search and filters</button>
+          No providers match. <button type="button" className="btn-quiet" onClick={() => (setQuery(''), setChips(new Set()), setStageFilter('all'), setShowOutside(true))}>Clear the search and filters</button>
         </p>
       )}
 
@@ -136,6 +152,7 @@ export function ProvidersScreen() {
                     {notes} note{notes === 1 ? '' : 's'}
                   </span>
                   {hasVeteranExperience(p) && <StatusText status="good">Veteran experience</StatusText>}
+                  <AreaBadge match={servesArea(p, areaPostcode)} postcode={areaPostcode} />
                 </div>
               </div>
               <StageControls provider={p} compact />
@@ -152,4 +169,11 @@ export function ProvidersScreen() {
       />
     </section>
   );
+}
+
+function AreaBadge({ match, postcode }: { match: AreaMatch; postcode: string | null }) {
+  if (!postcode) return null;
+  if (match === 'serves') return <StatusText status="good">Serves {postcode}</StatusText>;
+  if (match === 'outside') return <StatusText status="caution">Outside {postcode}</StatusText>;
+  return <span>Area not confirmed</span>;
 }

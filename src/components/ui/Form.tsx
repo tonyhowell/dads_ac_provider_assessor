@@ -61,6 +61,7 @@ export function ChoiceCards<T extends string>({
   onChange,
   columns = 1,
   legendHidden = false,
+  disabled = false,
 }: {
   legend: ReactNode;
   hint?: ReactNode;
@@ -70,11 +71,13 @@ export function ChoiceCards<T extends string>({
   onChange: (v: T) => void;
   columns?: 1 | 2 | 3;
   legendHidden?: boolean;
+  /** Read-only, e.g. for viewers. */
+  disabled?: boolean;
 }) {
   const hintId = useId();
   const grid = columns === 3 ? 'sm:grid-cols-3' : columns === 2 ? 'sm:grid-cols-2' : '';
   return (
-    <fieldset aria-describedby={hint ? hintId : undefined}>
+    <fieldset aria-describedby={hint ? hintId : undefined} disabled={disabled}>
       <legend className={legendHidden ? 'sr-only' : 'label'}>{legend}</legend>
       {hint &&
         (typeof hint === 'string' ? (
@@ -151,7 +154,7 @@ export function HoursStepper({ id, value, onChange, label, describedBy, max = 80
 const SCORE_WORDS = ['Poor', 'Weak', 'OK', 'Good', 'Excellent'];
 
 /** Five labelled buttons, 1 Poor … 5 Excellent (UI-SPEC §6.11). Press the selected one again to clear. */
-export function ScoreInput({ value, onChange, label }: { value: number | undefined; onChange: (v: number | null) => void; label: string }) {
+export function ScoreInput({ value, onChange, label, disabled = false }: { value: number | undefined; onChange: (v: number | null) => void; label: string; disabled?: boolean }) {
   return (
     <div role="group" aria-label={label} className="flex flex-wrap gap-1">
       {SCORE_WORDS.map((w, i) => {
@@ -162,6 +165,7 @@ export function ScoreInput({ value, onChange, label }: { value: number | undefin
             key={n}
             type="button"
             aria-pressed={on}
+            disabled={disabled}
             className={`btn min-h-14 min-w-14 flex-col gap-0 px-2 leading-tight ${on ? 'btn-selected' : ''}`}
             onClick={() => onChange(on ? null : n)}
           >

@@ -41,7 +41,7 @@ describe('sign in', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in with passkey' }));
 
     await user.click(await screen.findByRole('button', { name: 'Menu' }));
-    expect(screen.getByText('Signed in as Alex')).toBeInTheDocument();
+    expect(screen.getByText(/Signed in as Alex/)).toBeInTheDocument();
     expect(calls.find((c) => c.key === 'POST /api/auth/verify')!.body.response).toEqual({ id: 'cred-1', challenge: 'c1' });
     expect(screen.queryByRole('link', { name: 'Manage family access' })).not.toBeInTheDocument();
   });
@@ -90,7 +90,7 @@ describe('enrolment', () => {
     await user.click(screen.getByRole('button', { name: 'Create passkey' }));
 
     await user.click(await screen.findByRole('button', { name: 'Menu' }));
-    expect(screen.getByText('Signed in as Sam')).toBeInTheDocument();
+    expect(screen.getByText(/Signed in as Sam/)).toBeInTheDocument();
     expect(calls.find((c) => c.key === 'POST /api/enrol/tok123/verify')!.body).toEqual({
       response: { id: 'cred-1', challenge: 'r1' },
       nickname: 'Sam phone',
@@ -106,8 +106,8 @@ describe('enrolment', () => {
 
 describe('administration', () => {
   const users = [
-    { id: 'u1', username: 'alex', display_name: 'Alex', role: 'admin', disabled: false, last_login_at: null, created_at: '2026-10-25T00:00:00Z', passkeys: 1, enrolment_expires_at: null },
-    { id: 'u2', username: 'sam', display_name: 'Sam', role: 'member', disabled: false, last_login_at: null, created_at: '2026-10-25T00:00:00Z', passkeys: 0, enrolment_expires_at: '2026-10-26T00:00:00Z' },
+    { id: 'u1', username: 'alex', display_name: 'Alex', role: 'admin', disabled: false, last_login_at: null, created_at: '2026-10-25T00:00:00Z', passkeys: 1, enrolment_expires_at: null, applications: [] },
+    { id: 'u2', username: 'sam', display_name: 'Sam', role: 'member', disabled: false, last_login_at: null, created_at: '2026-10-25T00:00:00Z', passkeys: 0, enrolment_expires_at: '2026-10-26T00:00:00Z', applications: [{ application_id: 'app-1', name: 'Dad', role: 'viewer' }] },
   ];
 
   it('is hidden from family members', async () => {
@@ -123,7 +123,7 @@ describe('administration', () => {
       'POST /api/admin/users': () =>
         json(201, { user: { ...users[1], id: 'u3', username: 'jo' }, enrolment_url: 'https://assessor.quantivate.com.au/enrol/abc' }),
     });
-    await renderApp('/admin');
+    await renderApp('/admin', { waitForNav: false });
     expect(await screen.findByText(/Waiting for passkey setup/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Username'), 'jo');
@@ -142,7 +142,7 @@ describe('administration', () => {
       'GET /api/admin/users': () => json(200, { users }),
       'PATCH /api/admin/users/u2': () => json(200, { user: { ...users[1], disabled: true } }),
     });
-    await renderApp('/admin');
+    await renderApp('/admin', { waitForNav: false });
     const alexCard = (await screen.findByRole('heading', { name: /Alex \(alex\)/ })).closest('li')!;
     expect(within(alexCard).queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument();
 
