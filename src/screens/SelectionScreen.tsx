@@ -4,6 +4,7 @@ import { entriesAt, STAGE_LABELS } from '../state/reducer';
 import { SELECTION_STAGES } from '../schemas';
 import { PriceProvenance } from '../components/Price';
 import { StageControls } from '../components/StageControls';
+import { CommitTextarea } from '../components/CommitTextarea';
 import type { Provider, SelectionEntry, SelectionStage } from '../types';
 
 const STAGE_HELP: Record<SelectionStage, string> = {
@@ -146,11 +147,10 @@ function SelectionCard({ entry, provider, index, count }: { entry: SelectionEntr
           <label htmlFor={`why-${provider.id}`} className="muted block">
             {ranked ? "Why it's on the shortlist" : 'Reason for keeping it'}
           </label>
-          <textarea
+          <CommitTextarea
             id={`why-${provider.id}`}
-            className="input min-h-20"
             value={entry.why}
-            onChange={(e) => dispatch({ type: 'selection/update', providerId: provider.id, why: e.target.value })}
+            onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, why: v })}
           />
         </div>
         {ranked && (
@@ -158,11 +158,10 @@ function SelectionCard({ entry, provider, index, count }: { entry: SelectionEntr
             <label htmlFor={`watch-${provider.id}`} className="muted block">
               Probe at interview
             </label>
-            <textarea
+            <CommitTextarea
               id={`watch-${provider.id}`}
-              className="input min-h-20"
               value={entry.watch}
-              onChange={(e) => dispatch({ type: 'selection/update', providerId: provider.id, watch: e.target.value })}
+              onCommit={(v) => dispatch({ type: 'selection/update', providerId: provider.id, watch: v })}
             />
           </div>
         )}

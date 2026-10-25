@@ -1,6 +1,6 @@
 node_modules
 dist
-dist-static
+.data
 .env
 .env.local
 *.log

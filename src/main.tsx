@@ -1,26 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, MemoryRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import { App } from './App';
 import { loadSeedData, SeedDataError, type SeedData } from './data/load';
-import { AppProvider } from './state/AppContext';
-import { LocalStorageAdapter, MemoryStorage, type Storage } from './storage/storage';
+import { AuthProvider } from './auth/AuthContext';
+import { httpSync } from './state/sync';
 import { indexedDbAudioStore } from './storage/audioStore';
 import { applyStoredTheme } from './components/ThemeToggle';
 
 applyStoredTheme();
-// `vite build --mode static` produces a file-only preview with no server and no URL routing.
-const Router = import.meta.env.MODE === 'static' ? MemoryRouter : BrowserRouter;
 const root = createRoot(document.getElementById('root')!);
-
-function browserStorage(): Storage {
-  try {
-    return new LocalStorageAdapter();
-  } catch {
-    return new MemoryStorage(); // localStorage blocked: the session still works, it just isn't saved.
-  }
-}
 
 let seed: SeedData | undefined;
 try {
@@ -42,11 +32,11 @@ try {
 if (seed) {
   root.render(
     <StrictMode>
-      <Router>
-        <AppProvider seed={seed} storage={browserStorage()} audio={indexedDbAudioStore}>
-          <App />
-        </AppProvider>
-      </Router>
+      <BrowserRouter>
+        <AuthProvider>
+          <App seed={seed} sync={httpSync} audio={indexedDbAudioStore} />
+        </AuthProvider>
+      </BrowserRouter>
     </StrictMode>,
   );
 }

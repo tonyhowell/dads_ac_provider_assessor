@@ -71,6 +71,13 @@ src/
 | **Three-stage provider selection** | Initial scan → Refinement → Interview shortlist. Each selected provider is at exactly one stage and can move forward or back a stage, or be dropped. Stage 3 is the SPEC §8 Shortlist (ranked, with why/watch notes) and feeds the Interviews screen. State v1's single shortlist migrates to stage 3. Later: show plan cost and variance on the refinement cards once Phase 2 lands. |
 | **Interview capture → notes** | Consent check, then the browser `MediaRecorder` records the interview to IndexedDB on this device. Optional live transcription uses the Web Speech API (en-AU) and is disclosed in the UI. The user can edit or paste the transcript. `POST /api/interview-notes` (a Vite server plugin holding `ANTHROPIC_API_KEY`) sends it to the Claude API, which returns structured notes. The user reviews them and saves them to the provider's notes. "Must" interview questions are passed along so unanswered ones show up as follow-ups. |
 
+### Authentication, shared data and hosting (requested 25 Oct 2026): built
+
+- **Passkeys only:** WebAuthn via SimpleWebAuthn. Usernames are created by an admin, and each person registers a passkey from a one-time enrolment link (24 hours, single use, stored as a hash). Signing in takes a username plus passkey, and the response doesn't reveal whether a username exists.
+- **Admin pages:** create users, set roles, disable or enable, reissue links, list and revoke passkeys, see last sign-in. Safeguards stop an admin disabling themselves, demoting the last admin, or removing their own only passkey. `npm run admin:enrol` recovers access from the server shell.
+- **Shared data:** the selection, notes, interviews, transcripts and drafted notes live in Postgres (one household). The browser sends each validated action. The server applies the same reducer under a row lock, so concurrent edits are never lost, and logs who made each change. Interview audio stays on the recording device.
+- **Hosting:** Railway (`railway.json`, `docs/DEPLOY.md`) at `assessor.quantivate.com.au`, with a CNAME on GoDaddy DNS.
+
 Later options for interviews: transcribe recorded audio on the server (needs a speech-to-text service; the Claude API doesn't take audio), show notes per question once the interview pack exists (Phase 3.7), and pre-fill scores from interview notes (Phase 3.8).
 
 ---

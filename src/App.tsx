@@ -7,8 +7,37 @@ import { SelectionScreen } from './screens/SelectionScreen';
 import { InterviewsScreen } from './screens/InterviewsScreen';
 import { InterviewCaptureScreen } from './screens/InterviewCaptureScreen';
 import { InterviewReviewScreen } from './screens/InterviewReviewScreen';
+import { SignInScreen } from './screens/SignInScreen';
+import { EnrolScreen } from './screens/EnrolScreen';
+import { AdminScreen } from './screens/AdminScreen';
+import { useAuth } from './auth/AuthContext';
+import { AppProvider } from './state/AppContext';
+import type { SeedData } from './data/load';
+import type { StateSync } from './state/sync';
+import type { AudioStore } from './storage/audioStore';
 
-export function App() {
+export function App({ seed, sync, audio }: { seed: SeedData; sync: StateSync; audio: AudioStore }) {
+  const { user } = useAuth();
+  return (
+    <Routes>
+      <Route path="/enrol/:token" element={<EnrolScreen />} />
+      <Route
+        path="*"
+        element={
+          user ? (
+            <AppProvider key={user.id} seed={seed} sync={sync} audio={audio}>
+              <SignedInRoutes isAdmin={user.role === 'admin'} />
+            </AppProvider>
+          ) : (
+            <SignInScreen />
+          )
+        }
+      />
+    </Routes>
+  );
+}
+
+function SignedInRoutes({ isAdmin }: { isAdmin: boolean }) {
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -50,6 +79,7 @@ export function App() {
           path="scoring"
           element={<Placeholder title="Scoring & decision" phase="Phase 3.8" description="Score interviewed providers on weighted criteria and record the decision." />}
         />
+        {isAdmin && <Route path="admin" element={<AdminScreen />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

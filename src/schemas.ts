@@ -128,6 +128,8 @@ export const ProviderNoteSchema = z.object({
   updated_at: z.string().optional(),
   source: z.enum(['manual', 'interview']),
   interview_id: z.string().optional(),
+  /** Display name of the family member who wrote it. Set by the server. */
+  author: z.string().optional(),
 });
 
 /** Provider selection runs in three stages: initial scan → refinement → interview shortlist. */
@@ -161,6 +163,7 @@ export const InterviewSchema = z.object({
   duration_seconds: z.number().nonnegative(),
   consent_confirmed: z.boolean(),
   interviewer: z.string(),
+  /** Key of the recording in the recording device's own browser storage. Audio is never uploaded. */
   audio_id: z.string().nullable(),
   audio_mime: z.string().nullable(),
   transcript: z.string(),

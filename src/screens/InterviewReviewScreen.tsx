@@ -4,6 +4,7 @@ import { useApp, useProvider } from '../state/AppContext';
 import { newId } from '../state/reducer';
 import { formatDate, formatDateTime, formatDuration } from '../format';
 import { mustQuestions, notesSections, notesToText, requestInterviewNotes } from '../interviews';
+import { ConfirmButton } from '../components/ConfirmButton';
 
 export function InterviewReviewScreen() {
   const { id } = useParams();
@@ -14,6 +15,7 @@ export function InterviewReviewScreen() {
 
   const [transcript, setTranscript] = useState(interview?.transcript ?? '');
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioMissing, setAudioMissing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedToNotes, setSavedToNotes] = useState(false);
@@ -22,12 +24,15 @@ export function InterviewReviewScreen() {
     if (!interview?.audio_id) return;
     let url: string | null = null;
     let cancelled = false;
-    audio.get(interview.audio_id).then((blob) => {
-      if (blob && !cancelled) {
+    audio
+      .get(interview.audio_id)
+      .catch(() => undefined)
+      .then((blob) => {
+        if (cancelled) return;
+        if (!blob) return setAudioMissing(true);
         url = URL.createObjectURL(blob);
         setAudioUrl(url);
-      }
-    });
+      });
     return () => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
@@ -83,7 +88,6 @@ export function InterviewReviewScreen() {
   };
 
   const remove = async () => {
-    if (!confirm('Delete this interview and its recording? Notes already saved to the provider are kept.')) return;
     if (interview.audio_id) await audio.delete(interview.audio_id).catch(() => undefined);
     dispatch({ type: 'interview/delete', id: interview.id });
     navigate('/interviews');
@@ -106,9 +110,13 @@ export function InterviewReviewScreen() {
             {interview.consent_confirmed && ' · consent confirmed'}
           </p>
         </div>
-        <button type="button" className="btn btn-danger" onClick={remove}>
+        <ConfirmButton
+          prompt="Delete this interview for everyone? Notes already saved to the provider are kept."
+          confirmLabel="Delete interview"
+          onConfirm={remove}
+        >
           Delete interview
-        </button>
+        </ConfirmButton>
       </div>
 
       {interview.audio_id && (
@@ -117,13 +125,17 @@ export function InterviewReviewScreen() {
             Recording
           </h2>
           {audioUrl ? (
-            <audio controls src={audioUrl} className="mt-2 w-full">
-              Your browser can't play this recording.
-            </audio>
+            <>
+              <audio controls src={audioUrl} className="mt-2 w-full">
+                Your browser can't play this recording.
+              </audio>
+              <p className="muted mt-2">Stored only on this device. Clearing site data deletes it.</p>
+            </>
+          ) : audioMissing ? (
+            <p className="muted mt-2">The recording is kept only on the device that made it. The transcript below is shared.</p>
           ) : (
             <p className="muted mt-2">Loading recording…</p>
           )}
-          <p className="muted mt-2">Stored only in this browser. Clearing site data deletes it.</p>
         </section>
       )}
 

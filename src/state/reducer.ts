@@ -1,5 +1,6 @@
 import { SELECTION_STAGES } from '../schemas';
-import type { Interview, InterviewNotes, Provider, ProviderNote, SelectionEntry, SelectionStage, ShortlistSeed } from '../types';
+import type { Action } from './actions';
+import type { Interview, Provider, ProviderNote, SelectionEntry, SelectionStage, ShortlistSeed } from '../types';
 
 export interface AppState {
   version: 2;
@@ -9,18 +10,7 @@ export interface AppState {
   interviews: Interview[];
 }
 
-export type Action =
-  | { type: 'note/add'; note: ProviderNote }
-  | { type: 'note/edit'; id: string; text: string; at: string }
-  | { type: 'note/delete'; id: string }
-  | { type: 'selection/add'; providerId: string; at: string }
-  | { type: 'selection/remove'; providerId: string }
-  | { type: 'selection/stage'; providerId: string; stage: SelectionStage; at: string }
-  | { type: 'selection/move'; providerId: string; toIndex: number }
-  | { type: 'selection/update'; providerId: string; why?: string; watch?: string }
-  | { type: 'interview/save'; interview: Interview }
-  | { type: 'interview/notes'; id: string; notes: InterviewNotes; at: string }
-  | { type: 'interview/delete'; id: string };
+export type { Action };
 
 export const STAGE_LABELS: Record<SelectionStage, string> = {
   scan: 'Initial scan',

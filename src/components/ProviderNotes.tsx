@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { newId } from '../state/reducer';
 import { formatDateTime } from '../format';
+import { ConfirmButton } from './ConfirmButton';
 import type { ProviderNote } from '../types';
 
 export function ProviderNotes({ providerId }: { providerId: string }) {
@@ -66,6 +67,7 @@ function NoteItem({ note }: { note: ProviderNote }) {
   return (
     <li className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
       <p className="muted text-xs">
+        {note.author && `${note.author} · `}
         {formatDateTime(note.created_at)}
         {note.updated_at && ` · edited ${formatDateTime(note.updated_at)}`}
         {note.source === 'interview' && (
@@ -100,19 +102,13 @@ function NoteItem({ note }: { note: ProviderNote }) {
       ) : (
         <>
           <p className="mt-1 whitespace-pre-wrap">{note.text}</p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" className="btn" onClick={() => setEditing(true)}>
               Edit
             </button>
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => {
-                if (confirm('Delete this note?')) dispatch({ type: 'note/delete', id: note.id });
-              }}
-            >
+            <ConfirmButton prompt="Delete this note?" confirmLabel="Delete" onConfirm={() => dispatch({ type: 'note/delete', id: note.id })}>
               Delete
-            </button>
+            </ConfirmButton>
           </div>
         </>
       )}

@@ -11,30 +11,33 @@ Prices captured 25 Oct 2026 — refresh from My Aged Care before relying on them
 
 ```bash
 npm install
-cp .env.example .env   # add ANTHROPIC_API_KEY to enable interview notes
-npm run dev            # http://localhost:5173
-npm test               # unit and component tests
+cp .env.example .env   # set BOOTSTRAP_ADMIN_USERNAME, and ANTHROPIC_API_KEY for interview notes
+npm run dev            # API on :3000 + app on http://localhost:5173
+npm test               # server and browser tests
 npm run build          # typecheck + production build
+npm start              # production server (serves the built app and the API)
 ```
 
-Use `npm run dev` or `npm run preview` (after `npm run build`). The interview-notes endpoint (`/api/interview-notes`) runs inside the Vite server, so the API key never reaches the browser. If you serve `dist/` as plain static files, the endpoint isn't there and notes can't be drafted.
+The first time the server starts with an empty database, it creates the `BOOTSTRAP_ADMIN_USERNAME` admin and prints a one-time enrolment link. Open it to create your passkey. Locally the database is embedded (PGlite in `.data/`); in production it's Postgres. Deployment steps are in `docs/DEPLOY.md`.
 
 **Seed data:** `data/` currently holds placeholders. See `data/README.md`.
 
 ## What works so far
 
-- **Providers:** searchable list with "prices as at", source link and a warning once prices are over 60 days old. Each provider has a detail page with rates against the benchmark.
-- **Assessment notes:** add, edit and delete notes on each provider.
+- **Sign-in with passkeys only.** There are no passwords and no self sign-up. An admin creates each username and sends a one-time enrolment link (valid 24 hours), and the person creates a passkey on their own device.
+- **Admin page:** add people, choose their role (administrator or family member), issue a new link (for a lost device or to add another device), view and remove passkeys, disable or re-enable access, and see when each person last signed in.
+- **Shared assessment:** the selection, notes, interviews, transcripts and drafted notes are stored on the server, so every family member sees the same thing. Notes show who wrote them. Every change is logged with who made it and when.
+- **Providers:** searchable list, filterable by selection stage, with "prices as at", source link and a warning once prices are over 60 days old.
 - **Provider selection, in three stages:**
   1. **Initial scan:** providers you add from the full list for a first look.
   2. **Refinement:** the ones worth comparing more closely.
   3. **Interview shortlist:** the ones you'll interview, ranked, with "why" and "probe at interview" notes.
-
-  You can move a provider forward or back a stage, or drop it, from the Selection page or the provider's own page. The Providers list can be filtered by stage.
-- **Interviews:** record an interview in the browser after confirming consent, with optional live transcription (en-AU). Recordings are stored only in this browser (IndexedDB). You can correct the transcript, then have Claude draft structured notes (summary, strengths, concerns, commitments, prices mentioned, follow-ups) and save them to the provider's notes.
+- **Interviews:** record in the browser after confirming consent, with optional live transcription. You can correct the transcript, have Claude draft structured notes, and save them to the provider's notes.
 - The other screens are placeholders for the later phases in `docs/PLAN.md`.
 
-### Privacy
-- Audio never leaves the device.
-- If live transcription is on, the browser's speech service may send the audio to the browser maker to convert it to text. The capture screen says so, and you can turn it off.
-- "Draft notes" sends only the transcript (after you've reviewed it) to Anthropic's API.
+### Security and privacy
+- Passkeys are bound to the site's domain, so they can't be phished. The server stores only their public keys.
+- Session cookies are HttpOnly, Secure and SameSite=Lax. State-changing requests must come from the app's own origin. Sign-in attempts are rate-limited, and pages carry a strict Content Security Policy.
+- **Interview audio is never uploaded.** It stays on the device that recorded it, and only the transcript and notes are shared.
+- If live transcription is on, the browser's speech service may send audio to the browser maker to convert it to text. You can turn this off.
+- "Draft notes" sends only the transcript to Anthropic's API.

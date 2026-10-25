@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { pricesMissing } from '../data/load';
 import { ThemeToggle } from './ThemeToggle';
+import { useAuth } from '../auth/AuthContext';
 
 const NAV = [
   { to: '/', label: 'Participant', end: true },
@@ -16,17 +17,25 @@ const NAV = [
 ];
 
 export function Layout() {
-  const { seed, state } = useApp();
+  const { seed, state, syncError } = useApp();
+  const { user, signOut } = useAuth();
+  const nav = user?.role === 'admin' ? [...NAV, { to: '/admin', label: 'Admin' }] : NAV;
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3">
           <p className="text-lg font-semibold">Support at Home Provider Assessor</p>
-          <ThemeToggle />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="muted">Signed in as {user?.display_name}</span>
+            <button type="button" className="btn" onClick={signOut}>
+              Sign out
+            </button>
+            <ThemeToggle />
+          </div>
         </div>
         <nav aria-label="Main" className="mx-auto max-w-6xl overflow-x-auto px-4">
           <ul className="flex gap-1 pb-2 text-sm whitespace-nowrap">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <li key={n.to}>
                 <NavLink
                   to={n.to}
@@ -48,12 +57,9 @@ export function Layout() {
         </nav>
       </header>
 
-      {import.meta.env.MODE === 'static' && (
-        <div role="status" className="border-b border-sky-300 bg-sky-50 px-4 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200">
-          <div className="mx-auto max-w-6xl">
-            Review preview. Recording and drafting interview notes need the full app; everything else works and is saved in this
-            browser only.
-          </div>
+      {syncError && (
+        <div role="alert" className="border-b border-red-300 bg-red-50 px-4 py-2 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+          <div className="mx-auto max-w-6xl">{syncError}</div>
         </div>
       )}
 

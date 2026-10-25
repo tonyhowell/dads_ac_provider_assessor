@@ -1,10 +1,7 @@
 // @vitest-environment node
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import { generateInterviewNotes, MODEL, NotesError } from './interviewNotes.ts';
-import { createNotesHandler } from './vitePlugin.ts';
 
 const notes = {
   summary: 'They have a veterans team.',
@@ -63,47 +60,5 @@ describe('generateInterviewNotes', () => {
   it('maps rate limiting to 429', async () => {
     const parse = vi.fn().mockRejectedValue(new Anthropic.RateLimitError(429, {}, 'rate limited', new Headers()));
     await expect(generateInterviewNotes(fakeClient(parse), request)).rejects.toMatchObject({ status: 429 });
-  });
-});
-
-describe('POST /api/interview-notes', () => {
-  let server: Server | undefined;
-  afterEach(() => server?.close());
-
-  async function start(parse: ReturnType<typeof vi.fn>) {
-    const handler = createNotesHandler(() => fakeClient(parse));
-    server = createServer((req, res) => handler(req, res, () => {
-      res.statusCode = 404;
-      res.end();
-    }));
-    await new Promise<void>((resolve) => server!.listen(0, resolve));
-    return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
-  }
-
-  it('returns notes for a valid request', async () => {
-    const base = await start(vi.fn().mockResolvedValue({ stop_reason: 'end_turn', parsed_output: notes }));
-    const res = await fetch(`${base}/api/interview-notes`, { method: 'POST', body: JSON.stringify(request) });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ notes });
-  });
-
-  it('rejects a too-short transcript without calling the API', async () => {
-    const parse = vi.fn();
-    const base = await start(parse);
-    const res = await fetch(`${base}/api/interview-notes`, { method: 'POST', body: JSON.stringify({ ...request, transcript: 'hi' }) });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/too short/);
-    expect(parse).not.toHaveBeenCalled();
-  });
-
-  it('rejects non-JSON bodies and other methods', async () => {
-    const base = await start(vi.fn());
-    expect((await fetch(`${base}/api/interview-notes`, { method: 'POST', body: 'nope' })).status).toBe(400);
-    expect((await fetch(`${base}/api/interview-notes`)).status).toBe(405);
-  });
-
-  it('passes other paths through', async () => {
-    const base = await start(vi.fn());
-    expect((await fetch(`${base}/other`)).status).toBe(404);
   });
 });

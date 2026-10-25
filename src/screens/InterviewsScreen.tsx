@@ -18,7 +18,7 @@ export function InterviewsScreen() {
     <section>
       <h1 className="text-2xl font-semibold">Interviews</h1>
       <p className="muted mt-1">
-        Record each provider interview, then turn the transcript into draft notes. Recordings stay on this device.
+        Record each provider interview, then turn the transcript into draft notes. Transcripts and notes are shared with the family; recordings stay on the device that made them.
       </p>
 
       {providerIds.length === 0 ? (
