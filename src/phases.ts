@@ -1,3 +1,4 @@
+import { isAnswered } from './lookingFor';
 import type { SeedData } from './data/load';
 import { entriesAt, type AppState } from './state/reducer';
 import { CRITERIA, failedMustQuestions, scoreKey } from './scoring';
@@ -20,7 +21,7 @@ export interface Phase {
 }
 
 const allAnswered = (s: AppState, seed: SeedData) =>
-  seed.boundingGroups.flatMap((g) => g.questions).every((q) => s.answers[q.id]?.answer || s.answers[q.id]?.not_relevant);
+  seed.boundingGroups.flatMap((g) => g.questions).every((q) => isAnswered(s.answers[q.id]));
 
 export const PHASES: Phase[] = [
   {
@@ -29,7 +30,7 @@ export const PHASES: Phase[] = [
     screens: [
       { id: 'about', label: 'About you', to: '/', match: ['/'], done: (s) => !!s.participant },
       { id: 'budget', label: 'Your budget', to: '/overview', match: ['/overview'], done: (s) => !!s.participant },
-      { id: 'matters', label: 'What matters to you', to: '/bounding', match: ['/bounding'], done: allAnswered },
+      { id: 'matters', label: "What I'm looking for", to: '/bounding', match: ['/bounding'], done: allAnswered },
     ],
   },
   {

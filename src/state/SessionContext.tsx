@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ApplicationSummary, Backend, Catalogue } from '../backend';
+import type { ApplicationSummary, Backend, Catalogue, ClaimsRow } from '../backend';
 import type { SeedData } from '../data/load';
 import type { Provider } from '../types';
 import { effectiveProviders } from './reducer';
@@ -8,6 +8,7 @@ import { effectiveProviders } from './reducer';
 // the common provider catalogue, and the list of applications they belong to.
 
 const POLL_MS = 60_000;
+const CLAIMS_POLL_MS = 8_000;
 const CURRENT_KEY = 'sah-assessor:application';
 
 const get = (k: string) => {
@@ -41,6 +42,10 @@ interface SessionValue {
   /** The application to open: the last one used if still available, or the only one. */
   currentId: string | null;
   setCurrentId(id: string | null): void;
+  /** Cached public claims by provider id; polled while any search is running. */
+  claims: Map<string, ClaimsRow>;
+  claimsMaxAgeDays: number;
+  startClaims(applicationId: string, providerId: string, refresh?: boolean): Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -50,6 +55,33 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
   const [applications, setApplications] = useState<ApplicationSummary[] | null>(null);
   const [applicationsError, setApplicationsError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(() => get(CURRENT_KEY));
+  const [claimRows, setClaimRows] = useState<ClaimsRow[]>([]);
+  const [claimsMaxAgeDays, setClaimsMaxAgeDays] = useState(60);
+  const refreshClaims = useCallback(async () => {
+    try {
+      const r = await backend.listClaims();
+      setClaimRows(r.claims);
+      setClaimsMaxAgeDays(r.max_age_days);
+    } catch {
+      /* keep what we have; the next poll retries */
+    }
+  }, [backend]);
+  const anyRunning = claimRows.some((r) => r.status === 'running');
+  useEffect(() => {
+    refreshClaims();
+  }, [refreshClaims]);
+  useEffect(() => {
+    if (!anyRunning) return;
+    const timer = setInterval(refreshClaims, CLAIMS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [anyRunning, refreshClaims]);
+  const startClaims = useCallback(
+    async (applicationId: string, providerId: string, refresh = false) => {
+      const row = await backend.startClaims(applicationId, providerId, refresh);
+      setClaimRows((rows) => [...rows.filter((r) => r.provider_id !== providerId), row]);
+    },
+    [backend],
+  );
 
   const setCatalogue = useCallback((c: Catalogue) => setEdits(c.providers), []);
   const refreshCatalogue = useCallback(async () => {
@@ -96,8 +128,11 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
       reloadApplications,
       currentId,
       setCurrentId,
+      claims: new Map(claimRows.map((r) => [r.provider_id, r])),
+      claimsMaxAgeDays,
+      startClaims,
     };
-  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId]);
+  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

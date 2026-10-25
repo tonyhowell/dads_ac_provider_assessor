@@ -14,13 +14,16 @@ import type {
   ScreenNote,
   SelectionStage,
   SpecialRate,
+  ApplicantProfile,
+  StoredSummary,
+  DossierSection,
   ShortlistSeed,
   RateKey,
 } from '../types';
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 6;
+  version: 7;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -32,6 +35,12 @@ export interface AppState {
   serviceDate: string | null;
   /** Special rates providers have offered this applicant, by provider id. Applied over the common catalogue. */
   specialRates: Record<string, SpecialRate>;
+  /** What providers should know about the applicant (v7). */
+  profile: ApplicantProfile | null;
+  /** Claude's draft of what the applicant is looking for, edited by the family (v7). */
+  lookingFor: StoredSummary | null;
+  /** Sections the family includes when printing a provider dossier (v7). */
+  dossierSections: DossierSection[];
   /** Bounding answers by question id. */
   answers: Record<string, BoundingAnswer>;
   customQuestions: CustomQuestion[];
@@ -58,7 +67,7 @@ const V4_DEFAULTS = {
   weights: {},
   decisionNotes: '',
   screenNotes: [],
-} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates'>;
+} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections'>;
 
 export type { Action };
 
@@ -75,7 +84,31 @@ export const prevStage = (s: SelectionStage): SelectionStage | undefined => SELE
 export const entriesAt = (state: AppState, stage: SelectionStage) => state.selection.filter((e) => e.stage === stage);
 
 /** State with nothing in it yet. */
-export const emptyState = (): AppState => ({ version: 6, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {} });
+/** Fields added in v7, at their starting values. Budget and contribution figures stay out of the dossier unless chosen. */
+const V7_DEFAULTS = {
+  profile: null,
+  lookingFor: null,
+  dossierSections: ['profile', 'dva', 'plan', 'looking_for', 'answers', 'claims'] as DossierSection[],
+};
+
+export const emptyProfile = (): ApplicantProfile => ({
+  preferred_name: '',
+  contact_name: '',
+  contact_relationship: '',
+  contact_phone: '',
+  contact_email: '',
+  communication: [],
+  communication_other: '',
+  languages: '',
+  dva_conditions: [],
+  dva_conditions_other: '',
+  dva_services: [],
+  dva_services_detail: '',
+  current_supports: '',
+  anything_else: '',
+});
+
+export const emptyState = (): AppState => ({ version: 7, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -86,7 +119,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 6, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {} };
+  return { version: 7, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS };
 }
 
 interface StateV1 {
@@ -120,13 +153,15 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * v4 → v5: responses get "answered well?" (yes/partly/no) and "in writing"; screen notes are added.
  * v5 → v6: provider edits leave the family's state for the common catalogue (the server moves them first;
  * see `legacyProviderEdits`), and special rates are added.
+ * v6 → v7: the applicant profile, the "What I'm looking for" summary and dossier choices are added.
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 6) return s as AppState;
+  if (s?.version === 7) return s as AppState;
+  if (s?.version === 6) return { ...V7_DEFAULTS, ...(s as unknown as Omit<AppState, 'version'>), version: 7 };
   if (s?.version === 5) {
     const { providerEdits: _moved, ...rest } = s as unknown as Omit<AppState, 'version' | 'specialRates'> & { providerEdits?: Provider[] };
-    return { ...rest, specialRates: {}, version: 6 };
+    return migrate({ ...rest, specialRates: {}, version: 6 });
   }
   if (s?.version === 4) {
     // v4 → v5: responses gain "answered well?" and "in writing"; screen notes start empty.
@@ -244,6 +279,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, plan: action.plan };
     case 'settings/serviceDate':
       return { ...state, serviceDate: action.date };
+    case 'profile/update':
+      return { ...state, profile: { ...(state.profile ?? emptyProfile()), ...action.patch } };
+    case 'lookingFor/set':
+      return { ...state, lookingFor: action.summary };
+    case 'dossier/sections':
+      return { ...state, dossierSections: action.sections };
     case 'specialRate/set':
       return { ...state, specialRates: { ...state.specialRates, [action.providerId]: action.rate } };
     case 'specialRate/clear': {

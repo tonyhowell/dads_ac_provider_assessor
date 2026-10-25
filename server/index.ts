@@ -24,7 +24,7 @@ const app = createApp({
   getAnthropic: config.anthropicApiKey
     ? () => (anthropic ??= new Anthropic({ apiKey: config.anthropicApiKey }))
     : () => {
-        throw new NotesError(503, 'Notes generation is not configured: set ANTHROPIC_API_KEY on the server.');
+        throw new NotesError(503, 'Claude features (notes, summaries, public claims) are not configured: set ANTHROPIC_API_KEY on the server.');
       },
 });
 

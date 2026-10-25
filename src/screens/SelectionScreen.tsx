@@ -1,3 +1,4 @@
+import { CheckAllClaims, ClaimsChip } from '../components/Claims';
 import { useState } from 'react';
 import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
@@ -90,6 +91,11 @@ export function SelectionScreen() {
                   Step {i + 1}: {STAGE_LABELS[s]} <span className="font-normal">({entries.length})</span>
                 </h2>
                 <p>{STAGE_HELP[s]}</p>
+                {s === 'scan' && entries.length > 0 && (
+                  <div className="mt-2">
+                    <CheckAllClaims providerIds={entries.map((e) => e.provider.id)} />
+                  </div>
+                )}
               </div>
               {entries.length === 0 ? (
                 <p className="card">
@@ -202,6 +208,7 @@ function ProviderCard({
           <span className="chip chip-neutral">{Math.abs(vsGuide) < 0.05 ? 'Within 5% of guide' : `${vsGuide > 0 ? '▲' : '▼'} ${formatPercent(Math.abs(vsGuide))} ${vsGuide > 0 ? 'above' : 'below'} guide`}</span>
         )}
         {mentionsDisallowedFees(...provider.flags) && <Chip status="caution">Possible extra fee</Chip>}
+        <ClaimsChip provider={provider} />
         {flags > 0 && (
           <span className="chip chip-neutral">
             {flags} flag{flags === 1 ? '' : 's'}

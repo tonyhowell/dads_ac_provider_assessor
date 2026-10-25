@@ -49,7 +49,7 @@ describe('migrate', () => {
       interviews: [{ ...{ id: 'i', started_at: AT, duration_seconds: 0, consent_confirmed: true, interviewer: '', audio_id: null, audio_mime: null, transcript: '', notes: null, notes_generated_at: null }, provider_id: 'right-at-home-bayside-south' }],
     };
     const v3 = migrate(v2)!;
-    expect(v3.version).toBe(6);
+    expect(v3.version).toBe(7);
     expect(v3.screenNotes).toEqual([]);
     expect(v3.answers).toEqual({});
     expect(v3.notes[0].provider_id).toBe('anglicare-southern-queensland');
@@ -60,7 +60,7 @@ describe('migrate', () => {
   it('turns v4 satisfactory flags into ratings when upgrading to v5', () => {
     const v4 = { ...emptyState(), version: 4, screenNotes: undefined, responses: { 'a::A1': { text: 'Yes, in writing', satisfactory: true }, 'a::A2': { text: '', satisfactory: false } } };
     const v5 = migrate(v4)!;
-    expect(v5.version).toBe(6);
+    expect(v5.version).toBe(7);
     expect(v5.screenNotes).toEqual([]);
     expect(v5.responses['a::A1']).toEqual({ text: 'Yes, in writing', rating: 'yes', in_writing: true });
     expect(v5.responses['a::A2']).toEqual({ text: '', rating: 'no', in_writing: false });
@@ -70,8 +70,20 @@ describe('migrate', () => {
     const v5 = { ...emptyState(), version: 5, specialRates: undefined, providerEdits: [{ ...providers[0], rn: 150 }] };
     expect(legacyProviderEdits(v5)).toHaveLength(1);
     const v6 = migrate(v5)!;
-    expect(v6).toMatchObject({ version: 6, specialRates: {} });
+    expect(v6).toMatchObject({ version: 7, specialRates: {}, profile: null });
     expect('providerEdits' in v6).toBe(false);
+  });
+
+  it('adds the v7 profile, summary and dossier choices to v6 state', () => {
+    const { profile: _p, lookingFor: _l, dossierSections: _d, ...v6 } = { ...emptyState(), version: 6 };
+    expect(migrate(v6)).toMatchObject({ version: 7, profile: null, lookingFor: null, dossierSections: ['profile', 'dva', 'plan', 'looking_for', 'answers', 'claims'] });
+  });
+
+  it('merges profile changes and keeps money out of the dossier by default', () => {
+    let s = reducer(emptyState(), { type: 'profile/update', patch: { preferred_name: 'Bill' } });
+    s = reducer(s, { type: 'profile/update', patch: { dva_services: ['nursing'] } });
+    expect(s.profile).toMatchObject({ preferred_name: 'Bill', dva_services: ['nursing'], contact_name: '' });
+    expect(s.dossierSections).not.toContain('money');
   });
 
   it('keeps current state and ignores anything unknown', () => {

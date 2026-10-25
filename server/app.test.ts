@@ -10,7 +10,8 @@ import { moveLegacyState } from './state.ts';
 
 let db: Db;
 let getAnthropic: (() => Anthropic) | undefined;
-const app = () => createApp({ db, config: testConfig, webauthn: fakeWebAuthn(), getAnthropic }) as never;
+const jobs: Promise<void>[] = [];
+const app = () => createApp({ db, config: testConfig, webauthn: fakeWebAuthn(), getAnthropic, background: (w) => void jobs.push(w) }) as never;
 
 beforeAll(async () => {
   db = await createPgliteDb();
@@ -20,7 +21,7 @@ afterAll(() => db.close());
 beforeEach(async () => {
   getAnthropic = undefined;
   await db.query(
-    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions CASCADE',
+    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims CASCADE',
   );
 });
 
@@ -48,7 +49,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1, 2]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
   });
 });
 
@@ -412,7 +413,7 @@ describe('moving v1 data', () => {
     expect(mine).toMatchObject([{ id, name: 'First application', role: 'contributor' }]);
     const state = (await sam.get(`/api/applications/${id}/state`)).json;
     expect(state.version).toBe(7);
-    expect(state.state).toMatchObject({ version: 6, specialRates: {}, selection: [{ provider_id: 'carers-link' }] });
+    expect(state.state).toMatchObject({ version: 7, specialRates: {}, profile: null, selection: [{ provider_id: 'carers-link' }] });
     expect(state.state.providerEdits).toBeUndefined();
     expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'new-co', pc: 101 }]);
     const [{ n }] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions WHERE application_id = $1', [id]);
@@ -447,6 +448,100 @@ describe('interview notes', () => {
     const res = await agent.post('/api/interview-notes', body);
     expect(res.status).toBe(200);
     expect(res.json.notes).toEqual(notes);
+  });
+});
+
+describe("what I'm looking for summary", () => {
+  it("drafts from the application's saved answers (not money), saves it, and refuses viewers", async () => {
+    const draft = { summary: "I'm looking for the same worker each week.", priorities: ['Same workers'], must_haves: [], deal_breakers: ['Unannounced visits'] };
+    const parse = vi.fn().mockResolvedValue({ stop_reason: 'end_turn', parsed_output: draft });
+    getAnthropic = () => ({ beta: { messages: { parse } } }) as unknown as Anthropic;
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam' });
+    for (const action of [
+      { type: 'bounding/answer', questionId: 'B3.2', answer: { answer: 'essential', notes: 'Strangers upset him', not_relevant: false } },
+      { type: 'participant/set', participant: { id: 'p', name: '', suburb: 'Wynnum', postcode: '4178', pension_status: 'part_pensioner', ind_rate: 0.2, ev_rate: 0.4, dva_card: 'gold', nwop: false, classification: '5', lifetime_contributions_paid: 12345 } },
+      { type: 'profile/update', patch: { preferred_name: 'Bill', dva_services: ['nursing'] } },
+    ]) {
+      expect((await admin.post(`/api/applications/${id}/actions`, { action })).status).toBe(200);
+    }
+
+    expect((await sam.post(`/api/applications/${id}/looking-for/summary`)).status).toBe(403);
+    const res = await admin.post(`/api/applications/${id}/looking-for/summary`);
+    expect(res.status).toBe(200);
+    expect(res.json.state.lookingFor).toMatchObject({ ...draft, edited: false });
+    const sent = parse.mock.calls[0][0].messages[0].content as string;
+    expect(sent).toContain('How much does having the same one or two workers matter to you? → It\'s essential — in their words: "Strangers upset him"');
+    expect(sent).toContain('Preferred name: Bill');
+    expect(sent).toContain('DVA community nursing');
+    expect(sent).not.toMatch(/12345|12,345|part_pensioner|0\.2/);
+  });
+});
+
+describe('public claims', () => {
+  /** A fake Claude: the search finds one page; the structuring step returns one claim from it and one from a page never retrieved. */
+  function fakeClaude() {
+    const message = {
+      stop_reason: 'end_turn',
+      content: [
+        { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'Bolton Clarke veterans' } },
+        { type: 'web_search_tool_result', tool_use_id: 's1', content: [{ type: 'web_search_result', url: 'https://www.boltonclarke.com.au/veterans/', title: 'Veterans', encrypted_content: 'x' }] },
+        { type: 'text', text: 'Bolton Clarke says it has a dedicated veterans team (boltonclarke.com.au/veterans).' },
+      ],
+    };
+    const stream = vi.fn((_params: unknown) => ({ finalMessage: async () => message }));
+    const parse = vi.fn().mockResolvedValue({
+      stop_reason: 'end_turn',
+      parsed_output: {
+        website: 'https://www.boltonclarke.com.au',
+        overview: 'Large not-for-profit with veteran services.',
+        items: [
+          { question_id: 'E1', status: 'stated', claim: 'Dedicated veterans team', quote: 'our dedicated veterans team', source_url: 'https://www.boltonclarke.com.au/veterans', source_title: 'Veterans' },
+          { question_id: 'E2', status: 'partly', claim: 'Invented', quote: 'x', source_url: 'https://made-up.example/page', source_title: 'Nope' },
+        ],
+      },
+    });
+    return { stream, parse, client: { beta: { messages: { stream, parse } } } as unknown as Anthropic };
+  }
+
+  it('researches once, keeps only claims with retrieved links, and reuses the result until refreshed', async () => {
+    const fake = fakeClaude();
+    getAnthropic = () => fake.client;
+    const { agent: admin, user: alex, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/members`, { username: 'sam' });
+    expect((await sam.post(`/api/applications/${id}/claims/bolton-clarke`, {})).status).toBe(403);
+
+    const started = await admin.post(`/api/applications/${id}/claims/bolton-clarke`, {});
+    expect(started.json.claims.status).toBe('running');
+    await Promise.all(jobs.splice(0));
+    const listed = (await sam.get('/api/claims')).json;
+    expect(listed.max_age_days).toBe(60);
+    expect(listed.claims[0]).toMatchObject({ provider_id: 'bolton-clarke', status: 'ready', claims: { overview: 'Large not-for-profit with veteran services.' } });
+    expect(listed.claims[0].claims.items.map((i: { question_id: string }) => i.question_id)).toEqual(['E1']);
+    // The search covered every interview topic and searched from Australia.
+    const sent = fake.stream.mock.calls[0][0] as { messages: { content: string }[]; tools: { type: string }[] };
+    expect(sent.messages[0].content).toContain('E1:');
+    expect(sent.tools.map((t) => t.type)).toEqual(['web_search_20260209', 'web_fetch_20260209']);
+
+    // Cached: no new search, unless a refresh is asked for.
+    expect((await admin.post(`/api/applications/${id}/claims/bolton-clarke`, {})).json.claims.status).toBe('ready');
+    expect(jobs).toHaveLength(0);
+    expect((await admin.post(`/api/applications/${id}/claims/bolton-clarke`, { refresh: true })).json.claims.status).toBe('running');
+    await Promise.all(jobs.splice(0));
+    expect(fake.stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('records a failure, keeping earlier claims', async () => {
+    getAnthropic = () => ({ beta: { messages: { stream: () => ({ finalMessage: async () => ({ stop_reason: 'refusal', content: [] }) }) } } }) as unknown as Anthropic;
+    const { agent: admin, user: alex } = await enrolled();
+    const id = await newApplication(admin, alex.id);
+    await admin.post(`/api/applications/${id}/claims/carers-link`, {});
+    await Promise.all(jobs.splice(0));
+    expect((await admin.get('/api/claims')).json.claims[0]).toMatchObject({ provider_id: 'carers-link', status: 'failed', error: expect.stringMatching(/declined/) });
   });
 });
 

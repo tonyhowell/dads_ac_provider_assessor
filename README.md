@@ -75,6 +75,24 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
   - shared decision notes and a printable decision summary.
 - **Site administration:** applications, people (passkeys, enrolment links, roles, disabling access), suggested corrections and the provider catalogue.
 
+### Applicant profile, questionnaire, dossier and public claims (v3)
+- **For providers** (on About you, saves as you go):
+  - preferred name and a contact person for providers;
+  - communication needs and languages;
+  - current supports.
+  - **DVA details** for card holders: accepted conditions and current DVA services. No DVA file or card numbers are collected.
+- **"What I'm looking for in a provider"** replaces the bounding questions. There are 27 questions with set answers (one or several, some with a limit) and an "Add more detail" box on each. An answer can rule out the interview sections a question covers, for example "I live alone and no one cares for me" drops the carer-respite questions.
+- **Claude summary:** "Draft my summary with Claude" turns the questionnaire, profile and care plan into priorities, must-haves, deal-breakers and a short first-person paragraph. The family can edit it or draft it again. Money and contribution details are never sent.
+- **Dossier for each provider** (provider page → "Dossier for this provider"), printable or saved as PDF:
+  - the family ticks which sections to include; budget and contributions are off by default;
+  - they must confirm they're choosing to share it before Print works;
+  - private notes and scores are never included;
+  - it includes the provider's public claims as a "please confirm in writing" checklist.
+- **Public claims:** "Check what they say publicly" (provider page), or check everyone in the initial scan at once.
+  - Claude searches the provider's website and public listings with web search and web fetch. For each interview topic it records what the provider says (Stated or Partly), with a quote and a direct link. Claims whose link the search didn't actually return are dropped.
+  - Results are cached for each provider for every application, and searched again after 60 days or on request.
+  - Each family sees the claims for the topics their answers keep in. Claims also show under the matching interview questions ("They say: …").
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

@@ -1,3 +1,4 @@
+import { answerLabels } from '../lookingFor';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
@@ -39,6 +40,7 @@ export function ScoringScreen() {
     return c && own ? suggestedPriceScore(c.quarterly_cost, benchmark.quarterly_cost) : null;
   };
   const priorities = state.answers['B8.1'];
+  const priorityQuestion = seed.boundingGroups.flatMap((g) => g.questions).find((q) => q.id === 'B8.1');
 
   if (shortlist.length === 0) {
     return (
@@ -59,9 +61,9 @@ export function ScoringScreen() {
         </Link>
       </ScreenHeader>
 
-      {(priorities?.answer || priorities?.notes) && (
+      {(priorities?.choices?.length || priorities?.answer || priorities?.notes) && (
         <ResolutionCard status="info" title="What matters most to you">
-          <p>{priorities.notes || priorities.answer}</p>
+          <p>{[answerLabels(priorityQuestion!, priorities).join(', '), priorities.notes].filter(Boolean).join(' — ')}</p>
         </ResolutionCard>
       )}
 

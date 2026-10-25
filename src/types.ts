@@ -19,6 +19,11 @@ import type {
   ProviderSchema,
   RateKeySchema,
   SpecialRateSchema,
+  ApplicantProfileSchema,
+  StoredSummarySchema,
+  DossierSectionSchema,
+  ClaimsSchema,
+  ClaimItemSchema,
   SelectionEntrySchema,
   SelectionStageSchema,
   ShortlistSeedSchema,
@@ -62,3 +67,8 @@ export type HelpData = z.infer<typeof HelpDataSchema>;
 export type HelpTopic = HelpData['topics'][number];
 export type GlossaryTerm = HelpData['glossary'][number];
 export type SpecialRate = z.infer<typeof SpecialRateSchema>;
+export type ApplicantProfile = z.infer<typeof ApplicantProfileSchema>;
+export type StoredSummary = z.infer<typeof StoredSummarySchema>;
+export type DossierSection = z.infer<typeof DossierSectionSchema>;
+export type Claims = z.infer<typeof ClaimsSchema>;
+export type ClaimItem = z.infer<typeof ClaimItemSchema>;

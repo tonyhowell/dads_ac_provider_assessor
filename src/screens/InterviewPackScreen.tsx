@@ -1,3 +1,4 @@
+import { ClaimLine } from '../components/Claims';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
@@ -65,6 +66,14 @@ export function InterviewPackScreen() {
               ))}
             </div>
           </nav>
+          {current && (
+            <p>
+              <Link to={`/dossier/${current.provider.id}`}>
+                Make a dossier about you for {current.provider.provider}
+              </Link>{' '}
+              to give them before the interview.
+            </p>
+          )}
           {current?.watch && (
             <ResolutionCard
               status="info"
@@ -163,6 +172,7 @@ function QuestionItem({ q, providerId, providerName }: { q: PackQuestion; provid
           </ConfirmButton>
         )}
       </div>
+      {providerId && <ClaimLine providerId={providerId} questionId={q.id} />}
       {providerId && (
         <fieldset disabled={!canEdit} className="well min-w-0 space-y-3">
           <div>

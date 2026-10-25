@@ -11,6 +11,9 @@ import {
   SelectionEntrySchema,
   SelectionStageSchema,
   SpecialRateSchema,
+  ApplicantProfileSchema,
+  StoredSummarySchema,
+  DossierSectionSchema,
 } from '../schemas';
 import { CRITERION_IDS } from '../scoring';
 
@@ -40,6 +43,9 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('settings/serviceDate'), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }),
   z.object({ type: z.literal('specialRate/set'), providerId: id, rate: SpecialRateSchema }),
   z.object({ type: z.literal('specialRate/clear'), providerId: id }),
+  z.object({ type: z.literal('profile/update'), patch: ApplicantProfileSchema.partial() }),
+  z.object({ type: z.literal('lookingFor/set'), summary: StoredSummarySchema.nullable() }),
+  z.object({ type: z.literal('dossier/sections'), sections: z.array(DossierSectionSchema).max(20) }),
   z.object({ type: z.literal('bounding/answer'), questionId: id, answer: BoundingAnswerSchema }),
   z.object({ type: z.literal('question/add'), question: CustomQuestionSchema }),
   z.object({ type: z.literal('question/delete'), id }),

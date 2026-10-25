@@ -184,6 +184,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX provider_suggestions_status_idx ON provider_suggestions(status, created_at)
   `,
+  // v3: what each provider says publicly about the interview topics, researched by Claude and cached for every application.
+  `
+  CREATE TABLE provider_claims (
+    provider_id text PRIMARY KEY,
+    status text NOT NULL CHECK (status IN ('running', 'ready', 'failed')),
+    claims jsonb,
+    error text,
+    requested_by text REFERENCES users(id) ON DELETE SET NULL,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+  )
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

@@ -102,6 +102,20 @@ export const BoundingGroupSchema = z.object({
       text: z.string(),
       informs_sections: z.array(z.string()),
       note: z.string().nullable().optional(),
+      /** "What I'm looking for" (v3): one answer or several, from set options. Without options: Yes / No / Not sure. */
+      type: z.enum(['single', 'multi']).optional(),
+      options: z
+        .array(
+          z.object({
+            value: z.string(),
+            label: z.string(),
+            /** Choosing this answer makes the question "not relevant" for the interview sections it informs. */
+            rules_out: z.boolean().optional(),
+          }),
+        )
+        .optional(),
+      /** Most options that can be chosen (multi only). */
+      max: z.number().int().positive().optional(),
     }),
   ),
 });
@@ -190,8 +204,10 @@ export const InterviewSchema = z.object({
 
 /** Answer to a bounding question (SPEC §4 BoundingAnswer). "Not relevant" rules out the sections it informs. */
 export const BoundingAnswerSchema = z.object({
-  /** "yes" | "no" | "unsure" | "" (unanswered) */
+  /** The chosen option for a single-answer question ("" = unanswered). */
   answer: z.string().max(5000),
+  /** The chosen options for a multiple-answer question. */
+  choices: z.array(z.string().max(200)).max(30).optional(),
   notes: z.string().max(5000).optional(),
   not_relevant: z.boolean(),
 });
@@ -282,3 +298,87 @@ export const SpecialRateSchema = z.object({
   recorded_at: z.string().max(40),
   author: z.string().max(80).optional(),
 });
+
+/** Communication needs, accepted DVA conditions and DVA services offered as set answers (v3). */
+export const COMMUNICATION_NEEDS = [
+  ['hearing', 'Hearing loss — speak clearly, face me'],
+  ['vision', 'Low vision — large print'],
+  ['speech', 'Speech difficulty'],
+  ['memory', 'Memory — please write things down'],
+  ['interpreter', 'I need an interpreter'],
+  ['phone_first', 'Please phone before visiting'],
+] as const;
+export const DVA_CONDITIONS = [
+  ['ptsd', 'PTSD'],
+  ['mental_health', 'Depression or anxiety'],
+  ['hearing', 'Hearing loss or tinnitus'],
+  ['musculoskeletal', 'Back, joints or other injuries'],
+  ['heart', 'Heart or circulation'],
+  ['respiratory', 'Breathing or lungs'],
+] as const;
+export const DVA_SERVICES = [
+  ['vhc_domestic', "Veterans' Home Care — domestic help"],
+  ['vhc_personal', "Veterans' Home Care — personal care"],
+  ['vhc_respite', "Veterans' Home Care — respite"],
+  ['vhc_garden', "Veterans' Home Care — home and garden"],
+  ['nursing', 'DVA community nursing'],
+  ['open_arms', 'Open Arms counselling'],
+  ['rap', 'Aids and equipment (RAP)'],
+  ['transport', 'DVA transport to appointments'],
+  ['cvc', "Coordinated Veterans' Care"],
+] as const;
+
+const short = z.string().max(200);
+const long = z.string().max(5000);
+
+/**
+ * What providers should know about the applicant (v3). Shared in the dossier only for sections the
+ * family ticks when printing. No DVA file or card numbers are collected.
+ */
+export const ApplicantProfileSchema = z.object({
+  preferred_name: short,
+  contact_name: short,
+  contact_relationship: short,
+  contact_phone: z.string().max(40),
+  contact_email: z.string().max(200),
+  communication: z.array(short).max(20),
+  communication_other: long,
+  languages: short,
+  dva_conditions: z.array(short).max(30),
+  dva_conditions_other: long,
+  dva_services: z.array(short).max(30),
+  dva_services_detail: long,
+  current_supports: long,
+  anything_else: long,
+});
+
+/** Claude's draft of what the applicant is looking for, which the family can edit. */
+export const LookingForSummarySchema = z.object({
+  summary: z.string().max(4000),
+  priorities: z.array(z.string().max(500)).max(10),
+  must_haves: z.array(z.string().max(500)).max(10),
+  deal_breakers: z.array(z.string().max(500)).max(10),
+});
+export const StoredSummarySchema = LookingForSummarySchema.extend({
+  generated_at: z.string().max(40).nullable(),
+  edited: z.boolean(),
+});
+
+export const DOSSIER_SECTIONS = ['profile', 'dva', 'plan', 'looking_for', 'answers', 'questions', 'claims', 'money'] as const;
+export const DossierSectionSchema = z.enum(DOSSIER_SECTIONS);
+
+/** One public claim a provider makes about an interview topic, with where it was found (v3). */
+export const ClaimItemSchema = z.object({
+  question_id: z.string().max(20),
+  status: z.enum(['stated', 'partly']),
+  claim: z.string().max(1000),
+  quote: z.string().max(1000),
+  source_url: z.string().max(2000),
+  source_title: z.string().max(300),
+});
+export const ClaimsSchema = z.object({
+  website: z.string().max(2000).nullable(),
+  overview: z.string().max(2000),
+  items: z.array(ClaimItemSchema).max(200),
+});
+

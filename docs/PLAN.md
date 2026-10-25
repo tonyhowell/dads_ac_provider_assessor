@@ -196,7 +196,7 @@ The v1 shared record becomes the first application. Admins become its coordinato
 
 **Later:** export and delete an application, an activity feed, usage limits for drafting notes, duplicating an application.
 
-## v3 — Applicant profile, "What I'm looking for", provider dossier and public claims (requested 26 Oct 2026; after v2)
+## v3 — Applicant profile, "What I'm looking for", provider dossier and public claims (requested 26 Oct 2026): built
 
 1. **Applicant profile and DVA details:**
    - **DVA:** card type, accepted conditions (pick list plus free text) and current DVA services. **No DVA file or card numbers are stored.**
@@ -212,6 +212,10 @@ The v1 shared record becomes the first application. Admins become its coordinato
    - Results are **cached per provider for every application** and searched again **after 60 days** or on Refresh.
    - Matching to an applicant is a separate, cheaper step.
    - Shown during the initial scan, on provider pages, and in the interview questions ("They say: …").
+6. **Built:** state v7 (`profile`, `lookingFor`, `dossierSections`), a `provider_claims` table (migration 3), and server modules `server/lookingFor.ts` and `server/claims.ts`.
+   - In v3 the questionnaire drops the DVA card and DVA services questions (B4.1, B4.2), which are now asked in About you; 27 questions remain.
+   - Matching claims to an applicant uses no extra Claude call: claims are kept for the topics in the interview sections the applicant's answers keep in.
+   - **Still to check against real use:** the claims search and the summary have only run with a stand-in for Claude in tests. Watch the first live runs (time taken and quality) and adjust the prompts or search limits.
 
 ## UI redesign (UI-SPEC.md, PR #1): built
 

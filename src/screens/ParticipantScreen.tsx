@@ -13,6 +13,7 @@ import { Expander, MoreText } from '../components/ui/Expander';
 import { Meter, ShareRing } from '../components/ui/Visual';
 import { useFieldHelp } from '../components/ui/useFieldHelp';
 import { useFirstRun, WelcomeScreen } from '../components/Welcome';
+import { ProfileEditor } from '../components/ProfileEditor';
 
 type Status = 'full_pensioner' | 'part_pensioner' | 'self_funded';
 type Nwop = 'yes' | 'no' | 'unsure';
@@ -393,6 +394,8 @@ function ParticipantForm() {
           )}
         </aside>
       </div>
+
+      {state.participant && <ProfileEditor />}
 
       <NextStepCard
         done={state.participant ? 'Your details are saved.' : 'Save your details to work out your budget.'}

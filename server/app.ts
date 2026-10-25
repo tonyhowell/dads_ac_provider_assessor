@@ -58,6 +58,8 @@ import { effectiveProviders } from '../src/state/reducer.ts';
 import { loadSeedData } from '../src/data/load.ts';
 import { ActionSchema } from '../src/state/actions.ts';
 import { generateInterviewNotes, NotesError, NotesRequestSchema } from './interviewNotes.ts';
+import { generateLookingForSummary, summaryInput } from './lookingFor.ts';
+import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, listClaims, researchClaims } from './claims.ts';
 
 export type WebAuthn = Pick<
   typeof simpleWebAuthn,
@@ -71,6 +73,8 @@ export interface AppDeps {
   webauthn?: WebAuthn;
   /** Returns a Claude client, or throws NotesError when notes aren't configured. */
   getAnthropic?: () => Anthropic;
+  /** Receives background work (public-claims searches) so tests can wait for it. */
+  background?: (work: Promise<void>) => void;
 }
 
 type Env = { Variables: { user: User; app: Application; role: MemberRole } };
@@ -103,8 +107,9 @@ function rateLimit(max: number, windowMs: number): MiddlewareHandler {
   };
 }
 
-export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic }: AppDeps) {
+export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic, background = () => {} }: AppDeps) {
   const app = new Hono<Env>();
+  const seed = loadSeedData();
   const cookieOpts = { httpOnly: true, secure: config.production, sameSite: 'Lax' as const, path: '/' };
 
   const setSession = async (c: Context, user: User) => {
@@ -414,11 +419,58 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic 
     return c.json({ suggestion }, 201);
   });
 
+  /** Claude drafts "what I'm looking for" from the application's own saved answers, and saves it for the family to edit. */
+  member.post('/looking-for/summary', requireEdit, async (c) => {
+    const current = await readState(db, c.get('app').id);
+    if (!current) return c.json({ error: 'Application not found.' }, 404);
+    try {
+      if (!getAnthropic) throw new NotesError(503, 'Drafting is not configured: set ANTHROPIC_API_KEY on the server.');
+      const summary = await generateLookingForSummary(getAnthropic(), summaryInput(current.state, seed));
+      return c.json(
+        await applyAction(db, c.get('app').id, { type: 'lookingFor/set', summary: { ...summary, generated_at: new Date().toISOString(), edited: false } }, c.get('user')),
+      );
+    } catch (err) {
+      if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
+      console.error('[looking-for]', err);
+      return c.json({ error: 'Unexpected error drafting the summary.' }, 500);
+    }
+  });
+
+  /**
+   * Starts researching a provider's public claims, unless a result from the last 60 days exists (and no
+   * refresh was asked for) or a search is already running. The search runs in the background; poll
+   * GET /api/claims for the result.
+   */
+  member.post('/claims/:providerId', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ refresh: z.boolean().default(false) }));
+    if (body instanceof Response) return body;
+    const provider = (await currentProviders()).find((p) => p.id === c.req.param('providerId'));
+    if (!provider) return c.json({ error: 'Provider not found.' }, 404);
+    if (!getAnthropic) return c.json({ error: 'Research is not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const { row, start } = await claimSearch(db, provider.id, c.get('user').id, body.refresh);
+    if (start) {
+      const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
+      background(
+        (async () => {
+          try {
+            await finishSearch(db, provider.id, { claims: await researchClaims(getAnthropic(), provider, topics) });
+          } catch (err) {
+            if (!(err instanceof NotesError)) console.error('[claims]', provider.id, err);
+            await finishSearch(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error researching this provider.' });
+          }
+        })(),
+      );
+    }
+    return c.json({ claims: row });
+  });
+
   app.route('/api/applications/:appId', member);
+
+  app.get('/api/claims', requireUser, async (c) => c.json({ claims: await listClaims(db), max_age_days: CLAIMS_MAX_AGE_DAYS }));
 
   // --- Common provider catalogue ---
 
-  const seedProviders = loadSeedData().providers;
+  const seedProviders = seed.providers;
   const currentProviders = async () => effectiveProviders(seedProviders, (await catalogueEdits(db)).providers);
 
   app.get('/api/providers', requireUser, async (c) => c.json(await catalogueEdits(db)));

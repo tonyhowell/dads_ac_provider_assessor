@@ -5,7 +5,7 @@ import { loadSeedData, type SeedData } from '../data/load';
 import { AuthProvider, type SessionUser } from '../auth/AuthContext';
 import { emptyState, reducer, type AppState } from '../state/reducer';
 import type { StateSync } from '../state/sync';
-import type { ApplicationInfo, Backend, Catalogue, MemberRole, Suggestion } from '../backend';
+import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, MemberRole, Suggestion } from '../backend';
 import type { Provider } from '../types';
 import type { AudioStore } from '../storage/audioStore';
 
@@ -56,6 +56,8 @@ export interface MemoryBackend extends Backend {
   /** The common catalogue's edits, as the server would hold them. */
   edits: Provider[];
   suggestions: Suggestion[];
+  claimRows: ClaimsRow[];
+  claimRequests: { providerId: string; refresh: boolean }[];
 }
 
 /** Stands in for the server: one application (with the given role) and the common catalogue. */
@@ -63,6 +65,15 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
   const backend: MemoryBackend = {
     edits: [],
     suggestions: [],
+    claimRows: [],
+    claimRequests: [],
+    listClaims: async () => ({ claims: backend.claimRows, max_age_days: 60 }),
+    startClaims: async (_app, providerId, refresh) => {
+      backend.claimRequests.push({ providerId, refresh });
+      const row: ClaimsRow = { provider_id: providerId, status: 'running', claims: null, error: null, started_at: new Date().toISOString(), finished_at: null };
+      backend.claimRows = [...backend.claimRows.filter((r) => r.provider_id !== providerId), row];
+      return row;
+    },
     listApplications: async () => [{ ...application, role, last_activity: application.updated_at, members: 1 }],
     getApplication: async () => ({ application, role }),
     sync: () => server.sync,
@@ -101,6 +112,13 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
       return s;
     },
     applicationSuggestions: async () => backend.suggestions,
+    draftLookingFor: async () => {
+      await server.sync.send({
+        type: 'lookingFor/set',
+        summary: { summary: "I'm looking for a provider who sends the same worker each week.", priorities: ['Same workers'], must_haves: ['Veteran-aware staff'], deal_breakers: ['Unannounced visits'], generated_at: '2026-10-26T00:00:00.000Z', edited: false },
+      });
+      return { version: server.version, state: server.state };
+    },
   };
   const cat = (): Catalogue => ({ providers: backend.edits, updated_at: null });
   return backend;

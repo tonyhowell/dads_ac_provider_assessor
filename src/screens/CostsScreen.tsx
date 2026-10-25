@@ -258,7 +258,7 @@ export function CostsScreen() {
       <NextStepCard
         done={priced.length ? `You've compared ${priced.length} provider${priced.length === 1 ? '' : 's'} on cost.` : 'Look through the providers near you.'}
         next="look at providers' details, flags and notes"
-        back={{ to: '/bounding', label: 'What matters to you' }}
+        back={{ to: '/bounding', label: "What I'm looking for" }}
         forward={{ to: '/providers', label: 'Continue to providers' }}
       />
     </section>

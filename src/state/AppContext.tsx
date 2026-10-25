@@ -28,6 +28,8 @@ interface AppContextValue {
   canEdit: boolean;
   /** The applicant's postcode, for matching providers' service areas: from About you, else the application. */
   areaPostcode: string | null;
+  /** Fetch the latest shared state now, e.g. after the server changed it. */
+  refresh: () => Promise<void>;
   /** The family's plan, or the sample plan until they edit it. */
   plan: PlanItem[];
   /** Date services are costed at (YYYY-MM-DD). */
@@ -141,9 +143,13 @@ export function AppProvider({
             role,
             canEdit,
             areaPostcode: (state.participant?.postcode || application.postcode || '').trim() || null,
+            refresh: async () => {
+              version.current = -1;
+              await refresh();
+            },
           }
         : null,
-    [seed, catalogue, state, dispatch, audio, syncError, saving, savedAt, application, role, canEdit],
+    [seed, catalogue, state, dispatch, audio, syncError, saving, savedAt, application, role, canEdit, refresh],
   );
 
   if (!value) {

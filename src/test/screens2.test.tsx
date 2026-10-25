@@ -39,6 +39,21 @@ describe('Participant setup', () => {
   });
 });
 
+describe('For providers (profile)', () => {
+  it('saves profile details as you go, and shows DVA details for card holders', async () => {
+    const user = userEvent.setup();
+    const participant = { id: 'p', name: '', suburb: 'Wynnum', postcode: '4178', pension_status: 'full_pensioner' as const, ind_rate: null, ev_rate: null, dva_card: 'gold' as const, nwop: false, classification: '5', lifetime_contributions_paid: 0 };
+    const { server } = await renderApp('/', { server: memoryServer({ ...emptyState(), participant }) });
+    await user.type(screen.getByLabelText('Preferred name'), 'Bill');
+    await user.tab();
+    await waitFor(() => expect(server.state.profile?.preferred_name).toBe('Bill'));
+    await user.click(screen.getByLabelText('PTSD'));
+    await user.click(screen.getByLabelText('DVA community nursing'));
+    await waitFor(() => expect(server.state.profile).toMatchObject({ dva_conditions: ['ptsd'], dva_services: ['nursing'] }));
+    expect(screen.getByText(/We don't ask for DVA file or card numbers/)).toBeInTheDocument();
+  });
+});
+
 describe('Relative costs', () => {
   it('shows the headline, plan costs and contributions for the reference plan', async () => {
     const server = memoryServer({ ...emptyState(), serviceDate: '2026-10-25' });
@@ -175,8 +190,8 @@ describe('Providers: add, edit, import', () => {
   });
 });
 
-describe('Bounding questions', () => {
-  it('drops a section only when every covering question is not relevant, live', async () => {
+describe("What I'm looking for", () => {
+  it('drops a section when the chosen answer rules it out, or when marked not relevant', async () => {
     const user = userEvent.setup();
     const { server } = await renderApp('/bounding');
     const counter = () => screen.getByText(/Your interview pack:/);
@@ -186,13 +201,52 @@ describe('Bounding questions', () => {
     expect(group).toHaveAttribute('aria-expanded', 'false');
     await user.click(group);
     expect(group).toHaveAttribute('aria-expanded', 'true');
-    const b61 = screen.getByText(/Does he live alone/).closest('li')!;
+    const b61 = screen.getByText(/Who do you live with/).closest('li')!;
+    await user.click(within(b61).getByLabelText('I live alone and no one cares for me'));
+    expect(counter()).toHaveTextContent('71 questions');
+    await waitFor(() => expect(server.state.answers['B6.1']).toMatchObject({ answer: 'alone', not_relevant: true }));
+    await user.click(within(b61).getByLabelText('With a partner or family member who cares for me'));
+    expect(counter()).toHaveTextContent('74 questions');
+
     await user.click(within(b61).getByRole('button', { name: 'Not relevant to me' }));
     expect(counter()).toHaveTextContent('71 questions');
-    await user.click(within(b61).getByLabelText('No'));
-    await waitFor(() => expect(server.state.answers['B6.1']).toMatchObject({ answer: 'no', not_relevant: true }));
     await user.click(within(b61).getByRole('button', { name: /Marked not relevant to me — undo/ }));
     expect(counter()).toHaveTextContent('74 questions');
+  });
+
+  it('takes several answers where allowed, up to a limit, plus detail in your own words', async () => {
+    const user = userEvent.setup();
+    const { server } = await renderApp('/bounding');
+    await user.click(screen.getByRole('button', { name: /What matters most/ }));
+    const b81 = screen.getByText(/Which of these matter most to you/).closest('li')!;
+    for (const label of ['The same workers', 'Understanding of veterans', 'A local organisation']) await user.click(within(b81).getByLabelText(label));
+    expect(within(b81).getByLabelText('The lowest price')).toBeDisabled();
+    expect(within(b81).getByText(/You've chosen 3/)).toBeInTheDocument();
+    await waitFor(() => expect(server.state.answers['B8.1'].choices).toEqual(['continuity', 'veteran', 'local']));
+
+    await user.click(within(b81).getByRole('button', { name: /Add more detail/ }));
+    await user.type(within(b81).getByLabelText('More detail'), 'Same two workers, please');
+    await user.tab();
+    await waitFor(() => expect(server.state.answers['B8.1'].notes).toBe('Same two workers, please'));
+  });
+
+  it('drafts a summary with Claude, which the family can edit', async () => {
+    const user = userEvent.setup();
+    const { server } = await renderApp('/bounding', {
+      server: memoryServer({
+        ...emptyState(),
+        answers: { 'B3.2': { answer: 'essential', not_relevant: false }, 'B1.4': { answer: 'no', not_relevant: false }, 'B6.3': { answer: 'family', not_relevant: false } },
+      }),
+    });
+    await user.click(screen.getByRole('button', { name: /Draft my summary with Claude/ }));
+    expect(await screen.findByText(/sends the same worker each week/)).toBeInTheDocument();
+    expect(screen.getByText('Unannounced visits')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.clear(screen.getByLabelText('Summary'));
+    await user.type(screen.getByLabelText('Summary'), 'Same worker every week, please.');
+    await user.click(screen.getByRole('button', { name: 'Save summary' }));
+    await waitFor(() => expect(server.state.lookingFor).toMatchObject({ summary: 'Same worker every week, please.', edited: true }));
+    expect(screen.getByText('Edited by the family')).toBeInTheDocument();
   });
 });
 

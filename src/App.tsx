@@ -24,6 +24,7 @@ import { useAuth } from './auth/AuthContext';
 import { AppProvider } from './state/AppContext';
 import { HelpProvider } from './components/ui/HelpPanel';
 import { AboutScreen } from './screens/AboutScreen';
+import { DossierScreen } from './screens/DossierScreen';
 import type { SeedData } from './data/load';
 import type { ApplicationInfo, Backend, MemberRole } from './backend';
 import { SessionProvider, useSession } from './state/SessionContext';
@@ -114,6 +115,7 @@ function ApplicationRoutes() {
   return (
     <Routes>
       <Route path="interview-pack/print" element={<PrintPackScreen />} />
+      <Route path="dossier/:providerId" element={<DossierScreen />} />
       <Route element={<Layout />}>
         <Route index element={<ParticipantScreen />} />
         <Route path="overview" element={<OverviewScreen />} />

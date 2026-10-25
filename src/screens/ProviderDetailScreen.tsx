@@ -1,3 +1,4 @@
+import { ClaimsPanel } from '../components/Claims';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -76,6 +77,9 @@ export function ProviderDetailScreen() {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <StageControls provider={provider} primaryAdd />
+        <Link to={`/dossier/${provider.id}`} className="btn">
+          <Icon name="note" size={20} /> Dossier for this provider
+        </Link>
         {selected && <StageControls provider={provider} compact />}
         <ProviderEditControls />
       </div>
@@ -158,6 +162,8 @@ export function ProviderDetailScreen() {
           </p>
         )}
       </section>
+
+      <ClaimsPanel provider={provider} />
 
       <SpecialRates provider={provider} />
 

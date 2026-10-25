@@ -85,11 +85,12 @@
     {
       "id": "what-matters",
       "screen_route": "/bounding",
-      "title": "What matters to you",
-      "purpose": "These questions decide which interview questions you need, so the interview pack fits your situation.",
+      "title": "What I'm looking for in a provider",
+      "purpose": "Your answers describe what you want from a provider. They decide which interview questions you need, feed the summary Claude can draft, and go in the dossier you give providers.",
       "steps": [
-        "Open each group and answer Yes, No or Not sure.",
-        "Add a note if something needs explaining.",
+        "Open each group and choose the answers that fit. Some questions let you choose several.",
+        "Add more detail in your own words under any question.",
+        "When you've answered what you can, ask Claude to draft a summary of what you're looking for, then check and edit it.",
         "Mark a question \"Not relevant to me\" to drop the interview questions it covers."
       ],
       "outcome": "Your interview pack contains only the questions that matter to you, plus every must-ask question.",
@@ -101,6 +102,10 @@
         {
           "q": "What does Not relevant to me do?",
           "a": "It drops the interview sections that question covers, but only when every question covering that section is not relevant. Must-ask questions always stay."
+        },
+        {
+          "q": "Is the summary sent anywhere?",
+          "a": "Drafting it sends your answers, care plan and the details in About you to Anthropic's Claude to write the summary. Nothing goes to a provider unless you print a dossier and give it to them."
         }
       ],
       "troubleshooting": [],

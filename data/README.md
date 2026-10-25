@@ -10,7 +10,7 @@ Starter-pack data, with prices captured 25 Oct 2026. Refresh them from My Aged C
 | `contributions.json` | Contribution rates by pension status |
 | `sample_plan.json` | Sample weekly care plan |
 | `shortlist.json` | Suggested interview shortlist with rationale |
-| `bounding_questions.json` | 8 groups, 29 bounding questions |
+| `bounding_questions.json` | "What I'm looking for in a provider": 8 groups, 27 questions (the DVA card and DVA services are asked in About you), each with set answers (one or several) plus free text. An answer marked `rules_out` counts as "not relevant" for the interview sections the question informs. Options drafted in v3; needs human review. |
 | `interview_questions.json` | Sections A–Q, 74 interview questions (11 "must") |
 
 The loader (`src/data/load.ts`) accepts the files as written and normalises them:

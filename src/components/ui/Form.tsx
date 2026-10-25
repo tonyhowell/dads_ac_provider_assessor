@@ -111,6 +111,73 @@ export function ChoiceCards<T extends string>({
   );
 }
 
+/**
+ * Several-answer version of choice cards: tappable cards with a checkbox each. `max` limits how many can
+ * be chosen; the rest are disabled once it's reached.
+ */
+export function CheckCards({
+  legend,
+  hint,
+  value,
+  choices,
+  onChange,
+  columns = 2,
+  max,
+  disabled = false,
+}: {
+  legend: ReactNode;
+  hint?: ReactNode;
+  value: string[];
+  choices: Choice<string>[];
+  onChange: (v: string[]) => void;
+  columns?: 1 | 2 | 3;
+  max?: number;
+  disabled?: boolean;
+}) {
+  const hintId = useId();
+  const grid = columns === 3 ? 'sm:grid-cols-3' : columns === 2 ? 'sm:grid-cols-2' : '';
+  const full = max !== undefined && value.length >= max;
+  return (
+    <fieldset aria-describedby={hint ? hintId : undefined} disabled={disabled}>
+      <legend className="label">{legend}</legend>
+      {hint &&
+        (typeof hint === 'string' ? (
+          <MoreText id={hintId} text={hint} className="hint" />
+        ) : (
+          <span id={hintId} className="hint">
+            {hint}
+          </span>
+        ))}
+      <div className={`mt-1 grid grid-cols-[minmax(0,1fr)] gap-2 ${grid}`}>
+        {choices.map((c) => {
+          const selected = value.includes(c.value);
+          return (
+            <label
+              key={c.value}
+              className={`flex min-h-[var(--target-min)] cursor-pointer items-start gap-3 rounded-[var(--radius-control)] border p-3 ${
+                selected ? 'border-2 border-[var(--charcoal)] bg-[var(--amber-tint)]' : 'border-[var(--line)] bg-[var(--surface)]'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={selected}
+                disabled={!selected && full}
+                onChange={() => onChange(selected ? value.filter((v) => v !== c.value) : [...value, c.value])}
+              />
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                <span className="block font-medium">{c.label}</span>
+                {c.description && <span className="block">{c.description}</span>}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {max !== undefined && <p className="small mt-1">{full ? `You've chosen ${max}. Untick one to change.` : `Choose up to ${max}.`}</p>}
+    </fieldset>
+  );
+}
+
 /** "1 hr 15 min" */
 export function hoursText(h: number): string {
   if (!Number.isFinite(h) || h <= 0) return '0 min';

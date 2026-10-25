@@ -25,7 +25,7 @@ describe('starter-pack data', () => {
   it('loads every file', () => {
     expect(seed.providers).toHaveLength(7);
     expect(seed.benchmark.pc).toBe(103.11);
-    expect(seed.boundingGroups.flatMap((g) => g.questions)).toHaveLength(29);
+    expect(seed.boundingGroups.flatMap((g) => g.questions)).toHaveLength(27);
     expect(seed.interviewSections.flatMap((s) => s.questions)).toHaveLength(74);
     expect(seed.samplePlan).toHaveLength(5);
     expect(seed.shortlist).toHaveLength(6);

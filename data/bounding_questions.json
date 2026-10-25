@@ -1,191 +1,528 @@
 [
   {
-    "group": "Where is he in the process?",
+    "group": "Where you are in the process",
     "questions": [
       {
         "id": "B1.1",
-        "text": "Has he had his aged care assessment, and does he hold a Notice of Decision with a classification?",
+        "text": "Have you had your aged care assessment and received a Notice of Decision with a classification?",
         "informs_sections": [
           "A",
           "H"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes, I have my classification"
+          },
+          {
+            "value": "waiting",
+            "label": "Assessed, waiting for the letter"
+          },
+          {
+            "value": "no",
+            "label": "Not assessed yet"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       },
       {
         "id": "B1.2",
-        "text": "Has a Support at Home budget been allocated, or is he still on the national priority queue?",
+        "text": "Has a Support at Home budget been allocated?",
         "informs_sections": [
           "A"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes, it's allocated"
+          },
+          {
+            "value": "queue",
+            "label": "I'm on the priority queue"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       },
       {
         "id": "B1.3",
-        "text": "Is he currently receiving CHSP, Veterans' Home Care, or a transitioned Home Care Package (no-worse-off rules)?",
+        "text": "Do you already receive any of these?",
         "informs_sections": [
           "A",
           "F",
           "G"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "chsp",
+            "label": "Commonwealth Home Support (CHSP)"
+          },
+          {
+            "value": "vhc",
+            "label": "Veterans' Home Care"
+          },
+          {
+            "value": "hcp",
+            "label": "A Home Care Package (moving across)"
+          },
+          {
+            "value": "none",
+            "label": "None of these"
+          }
+        ]
       },
       {
         "id": "B1.4",
-        "text": "Is there a hospital discharge or other event creating urgency?",
+        "text": "Is there anything making this urgent?",
         "informs_sections": [
           "A",
           "P"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "discharge",
+            "label": "Coming home from hospital"
+          },
+          {
+            "value": "crisis",
+            "label": "A fall or other recent change"
+          },
+          {
+            "value": "carer",
+            "label": "My carer can't keep going as they are"
+          },
+          {
+            "value": "no",
+            "label": "No, no particular urgency"
+          }
+        ]
       }
     ]
   },
   {
-    "group": "What does he need, and how will that change?",
+    "group": "What help you need",
     "questions": [
       {
         "id": "B2.1",
-        "text": "Which daily tasks does he need help with now \u2014 showering, dressing, medication, meals, cleaning, garden, transport?",
+        "text": "Which everyday things do you need help with now?",
         "informs_sections": [
           "B",
           "D"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "showering",
+            "label": "Showering and dressing"
+          },
+          {
+            "value": "medication",
+            "label": "Medication"
+          },
+          {
+            "value": "meals",
+            "label": "Meals"
+          },
+          {
+            "value": "cleaning",
+            "label": "Cleaning and laundry"
+          },
+          {
+            "value": "garden",
+            "label": "Garden and home maintenance"
+          },
+          {
+            "value": "transport",
+            "label": "Transport and shopping"
+          },
+          {
+            "value": "social",
+            "label": "Getting out and company"
+          }
+        ]
       },
       {
         "id": "B2.2",
-        "text": "Are there clinical needs (wounds, diabetes, continence, falls, cognition, pain) that need a nurse rather than a support worker?",
+        "text": "Do you have health needs that need a nurse rather than a support worker?",
         "informs_sections": [
           "D"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "wounds",
+            "label": "Wound care"
+          },
+          {
+            "value": "diabetes",
+            "label": "Diabetes"
+          },
+          {
+            "value": "continence",
+            "label": "Continence"
+          },
+          {
+            "value": "falls",
+            "label": "Falls"
+          },
+          {
+            "value": "memory",
+            "label": "Memory or thinking"
+          },
+          {
+            "value": "pain",
+            "label": "Pain"
+          },
+          {
+            "value": "none",
+            "label": "None of these",
+            "rules_out": true
+          }
+        ]
       },
       {
         "id": "B2.3",
-        "text": "Is decline expected over 12\u201324 months, and is residential care or palliative care a likely end-point?",
+        "text": "Do you expect your needs to grow over the next year or two?",
         "informs_sections": [
           "D",
           "P"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "stable",
+            "label": "Probably stay about the same"
+          },
+          {
+            "value": "grow",
+            "label": "Likely to grow"
+          },
+          {
+            "value": "end",
+            "label": "Residential or palliative care is likely later"
+          },
+          {
+            "value": "unsure",
+            "label": "Hard to say"
+          }
+        ]
       },
       {
         "id": "B2.4",
-        "text": "Would short-term restorative care (e.g. physio after a fall) help before ongoing services are set?",
+        "text": "Would short-term help to get stronger (for example physio after a fall) be useful before ongoing services start?",
         "informs_sections": [
           "P"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes"
+          },
+          {
+            "value": "no",
+            "label": "No",
+            "rules_out": true
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       }
     ]
   },
   {
-    "group": "How does the PTSD shape the care?",
+    "group": "Feeling safe and comfortable at home",
     "questions": [
       {
         "id": "B3.1",
-        "text": "What are his known triggers \u2014 strangers in the house, unannounced visits, certain behaviours, gender of workers, loud equipment?",
+        "text": "What could make a visit stressful for you?",
         "informs_sections": [
           "C",
           "E"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "strangers",
+            "label": "New or unfamiliar people"
+          },
+          {
+            "value": "unannounced",
+            "label": "Visits that aren't announced"
+          },
+          {
+            "value": "gender",
+            "label": "The worker's gender"
+          },
+          {
+            "value": "noise",
+            "label": "Loud noise or equipment"
+          },
+          {
+            "value": "rushed",
+            "label": "Feeling rushed"
+          },
+          {
+            "value": "none",
+            "label": "Nothing in particular"
+          }
+        ]
       },
       {
         "id": "B3.2",
-        "text": "How much does continuity of the same one or two workers matter to him?",
+        "text": "How much does having the same one or two workers matter to you?",
         "informs_sections": [
           "C",
           "E"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "essential",
+            "label": "It's essential"
+          },
+          {
+            "value": "important",
+            "label": "Important"
+          },
+          {
+            "value": "nice",
+            "label": "Nice to have"
+          },
+          {
+            "value": "no",
+            "label": "Doesn't matter"
+          }
+        ]
       },
       {
         "id": "B3.3",
-        "text": "Who treats his PTSD now (GP, psychiatrist, Open Arms, psychologist), and should the provider liaise with them?",
+        "text": "Who supports your mental health now, and should the provider work with them?",
         "informs_sections": [
           "E",
           "F"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "gp",
+            "label": "GP"
+          },
+          {
+            "value": "psychiatrist",
+            "label": "Psychiatrist"
+          },
+          {
+            "value": "psychologist",
+            "label": "Psychologist"
+          },
+          {
+            "value": "openarms",
+            "label": "Open Arms"
+          },
+          {
+            "value": "liaise",
+            "label": "Yes, I'd like the provider to liaise with them"
+          },
+          {
+            "value": "none",
+            "label": "No one at the moment"
+          }
+        ]
       },
       {
         "id": "B3.4",
-        "text": "Does he want veteran-specific social connection (RSL sub-branch, Legacy, peer groups) as part of social support?",
+        "text": "Would you like social support with other veterans (RSL sub-branch, Legacy, peer groups)?",
         "informs_sections": [
           "E",
           "N"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes, please"
+          },
+          {
+            "value": "maybe",
+            "label": "Maybe"
+          },
+          {
+            "value": "no",
+            "label": "No"
+          },
+          {
+            "value": "na",
+            "label": "Doesn't apply to me",
+            "rules_out": true
+          }
+        ]
       }
     ]
   },
   {
-    "group": "Which DVA services does he already use or qualify for?",
+    "group": "DVA",
     "questions": [
       {
-        "id": "B4.1",
-        "text": "Which DVA card does he hold \u2014 Gold, or White (specific conditions)?",
-        "informs_sections": [
-          "F"
-        ],
-        "note": null
-      },
-      {
-        "id": "B4.2",
-        "text": "Is he already receiving Veterans' Home Care, DVA community nursing, Coordinated Veterans' Care, or MRCA household services/attendant care?",
-        "informs_sections": [
-          "F",
-          "G"
-        ],
-        "note": null
-      },
-      {
         "id": "B4.3",
-        "text": "Which services should DVA fund so the Support at Home budget is kept for the rest?",
+        "text": "Should DVA fund some services so your Support at Home budget goes further?",
         "informs_sections": [
           "F",
           "H"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes, I'd like help working that out"
+          },
+          {
+            "value": "already",
+            "label": "That's already arranged"
+          },
+          {
+            "value": "no",
+            "label": "No"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       }
     ]
   },
   {
-    "group": "What is his financial position?",
+    "group": "Money",
     "questions": [
       {
         "id": "B5.1",
-        "text": "Is the \u201carmy pension\u201d a DVA Service Pension (means-tested) or military superannuation (DFRDB/MSBS)?",
+        "text": "What kind of pension do you receive?",
         "informs_sections": [
           "G"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "dva_service",
+            "label": "DVA Service Pension"
+          },
+          {
+            "value": "milsuper",
+            "label": "Military superannuation (DFRDB or MSBS)"
+          },
+          {
+            "value": "age",
+            "label": "Age Pension"
+          },
+          {
+            "value": "none",
+            "label": "No pension"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       },
       {
         "id": "B5.2",
-        "text": "Has DVA issued his Support at Home contribution letter yet? If not, has the income and assets assessment been lodged?",
+        "text": "Have you received your Support at Home contribution letter?",
         "informs_sections": [
           "G"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes"
+          },
+          {
+            "value": "lodged",
+            "label": "Not yet; income and assets assessment lodged"
+          },
+          {
+            "value": "no",
+            "label": "Not yet; nothing lodged"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       },
       {
         "id": "B5.3",
-        "text": "Would he top up privately for extra hours beyond the budget?",
+        "text": "Would you pay privately for extra hours beyond your budget?",
         "informs_sections": [
           "G",
           "H"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes"
+          },
+          {
+            "value": "maybe",
+            "label": "Maybe, depending on cost"
+          },
+          {
+            "value": "no",
+            "label": "No"
+          }
+        ]
       },
       {
         "id": "B5.4",
-        "text": "Is anyone else's income or assets involved (partner)?",
+        "text": "Is a partner's income or assets involved?",
         "informs_sections": [
           "G"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes"
+          },
+          {
+            "value": "no",
+            "label": "No"
+          },
+          {
+            "value": "unsure",
+            "label": "Not sure"
+          }
+        ]
       }
     ]
   },
@@ -194,93 +531,295 @@
     "questions": [
       {
         "id": "B6.1",
-        "text": "Does he live alone, or with a partner or family carer who needs respite or support?",
+        "text": "Who do you live with?",
         "informs_sections": [
           "O"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "alone",
+            "label": "I live alone and no one cares for me",
+            "rules_out": true
+          },
+          {
+            "value": "alone_carer",
+            "label": "I live alone; family help me"
+          },
+          {
+            "value": "partner_carer",
+            "label": "With a partner or family member who cares for me"
+          },
+          {
+            "value": "other",
+            "label": "With others who don't care for me",
+            "rules_out": true
+          }
+        ]
       },
       {
         "id": "B6.2",
-        "text": "Is the home safe as it is \u2014 steps, bathroom, rails, ramps, security, emergency alarm?",
+        "text": "Does anything about your home need attention?",
         "informs_sections": [
           "K"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "steps",
+            "label": "Steps or stairs"
+          },
+          {
+            "value": "bathroom",
+            "label": "Bathroom"
+          },
+          {
+            "value": "rails",
+            "label": "Rails or ramps"
+          },
+          {
+            "value": "alarm",
+            "label": "An emergency alarm"
+          },
+          {
+            "value": "security",
+            "label": "Security"
+          },
+          {
+            "value": "none",
+            "label": "It's fine as it is",
+            "rules_out": true
+          }
+        ]
       },
       {
         "id": "B6.3",
-        "text": "Does he drive? How far are his GP, specialists, pharmacy and hospital (QEII, PA)?",
+        "text": "How do you get to appointments?",
         "informs_sections": [
           "N"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "drive",
+            "label": "I drive"
+          },
+          {
+            "value": "family",
+            "label": "Family take me"
+          },
+          {
+            "value": "public",
+            "label": "Public transport or taxis"
+          },
+          {
+            "value": "help",
+            "label": "I need help with transport"
+          }
+        ]
       },
       {
         "id": "B6.4",
-        "text": "Are there pets, smoking, firearms or other worker-safety matters a provider will ask about?",
+        "text": "Is there anything a worker should know before visiting?",
         "informs_sections": [
           "I"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "pets",
+            "label": "Pets"
+          },
+          {
+            "value": "smoking",
+            "label": "Smoking"
+          },
+          {
+            "value": "firearms",
+            "label": "Firearms in the home"
+          },
+          {
+            "value": "access",
+            "label": "Hard to access or park"
+          },
+          {
+            "value": "none",
+            "label": "Nothing"
+          }
+        ]
       }
     ]
   },
   {
-    "group": "Decision-making and family involvement",
+    "group": "Decisions and family",
     "questions": [
       {
         "id": "B7.1",
-        "text": "Is there an enduring power of attorney, and should a family member be his registered supporter?",
+        "text": "Who helps you make decisions?",
         "informs_sections": [
           "M"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "epoa",
+            "label": "I have an enduring power of attorney"
+          },
+          {
+            "value": "supporter",
+            "label": "I'd like a family member as my registered supporter"
+          },
+          {
+            "value": "self",
+            "label": "I make my own decisions"
+          }
+        ]
       },
       {
         "id": "B7.2",
-        "text": "Who should receive statements, incident notices and care-plan reviews?",
+        "text": "Who should get statements, incident notices and care plan reviews?",
         "informs_sections": [
           "M",
           "H"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "me",
+            "label": "Me"
+          },
+          {
+            "value": "family",
+            "label": "A family member"
+          },
+          {
+            "value": "both",
+            "label": "Both me and family"
+          }
+        ]
       },
       {
         "id": "B7.3",
-        "text": "How tech-capable are he and the family \u2014 app, portal, email, paper?",
+        "text": "How would you like to hear from the provider?",
         "informs_sections": [
           "Q"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "app",
+            "label": "An app"
+          },
+          {
+            "value": "email",
+            "label": "Email"
+          },
+          {
+            "value": "phone",
+            "label": "Phone calls"
+          },
+          {
+            "value": "paper",
+            "label": "Paper letters"
+          }
+        ]
       }
     ]
   },
   {
-    "group": "What matters most to him?",
+    "group": "What matters most",
     "questions": [
       {
         "id": "B8.1",
-        "text": "Rank: same workers \u00b7 lowest price \u00b7 clinical depth \u00b7 flexibility of times \u00b7 local organisation \u00b7 veteran ethos.",
+        "text": "Which of these matter most to you? Choose up to three.",
         "informs_sections": [],
-        "note": "weights the scoring"
+        "note": "weights the scoring",
+        "type": "multi",
+        "options": [
+          {
+            "value": "continuity",
+            "label": "The same workers"
+          },
+          {
+            "value": "price",
+            "label": "The lowest price"
+          },
+          {
+            "value": "clinical",
+            "label": "Strong nursing and clinical care"
+          },
+          {
+            "value": "flexibility",
+            "label": "Flexible times"
+          },
+          {
+            "value": "local",
+            "label": "A local organisation"
+          },
+          {
+            "value": "veteran",
+            "label": "Understanding of veterans"
+          }
+        ],
+        "max": 3
       },
       {
         "id": "B8.2",
-        "text": "Are there faith, cultural or values preferences for the provider?",
+        "text": "Do you have faith, cultural or values preferences for the provider?",
         "informs_sections": [
           "L"
         ],
-        "note": null
+        "note": null,
+        "type": "single",
+        "options": [
+          {
+            "value": "yes",
+            "label": "Yes (say more below)"
+          },
+          {
+            "value": "no",
+            "label": "No"
+          }
+        ]
       },
       {
         "id": "B8.3",
-        "text": "What would make him end a provider relationship?",
+        "text": "What would make you end a provider relationship?",
         "informs_sections": [
           "I",
           "L"
         ],
-        "note": null
+        "note": null,
+        "type": "multi",
+        "options": [
+          {
+            "value": "late",
+            "label": "Late or missed visits"
+          },
+          {
+            "value": "changes",
+            "label": "Too many different workers"
+          },
+          {
+            "value": "fees",
+            "label": "Unexpected fees"
+          },
+          {
+            "value": "communication",
+            "label": "Poor communication"
+          },
+          {
+            "value": "disrespect",
+            "label": "Not being treated with respect"
+          }
+        ]
       }
     ]
   }
