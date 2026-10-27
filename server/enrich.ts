@@ -130,8 +130,10 @@ export interface EnrichmentRun {
 
 export class EnrichmentBusyError extends Error {}
 
-/** A run that hasn't saved progress for this long died with a restart. */
-const STALE_RUN_MINUTES = 15;
+/** A running check saves a heartbeat this often, even while waiting on a long Claude call. */
+const HEARTBEAT_MS = 30_000;
+/** A run with no heartbeat for this long has stopped (the server restarted or the process died). */
+const STALE_RUN_MINUTES = 3;
 const MAX_LOG = 300;
 /** Items checked at once, by part. Claims searches are slow and costly, so fewer run together. */
 const CONCURRENCY: Record<EnrichPart, number> = { discover: 2, prices: 4, sources: 3, claims: 2 };
@@ -155,20 +157,54 @@ const toRun = (r: Record<string, unknown>): EnrichmentRun => ({
   heartbeat_at: iso(r.heartbeat_at) ?? null,
 });
 
+const ACTIVE = `status = 'running' AND COALESCE(heartbeat_at, started_at) > now() - interval '${STALE_RUN_MINUTES} minutes'`;
+
+/**
+ * Closes runs that say "running" but aren't: no heartbeat for a few minutes, or (with `all`, used when the server
+ * starts) every run the server itself was doing. Items that were in hand are marked interrupted, the rest not started.
+ */
+export async function reapStaleRuns(db: Queryable, all = false): Promise<number> {
+  const rows = await db.query(
+    `SELECT * FROM enrichment_runs WHERE status = 'running' AND (${all ? `trigger <> 'cli' OR ` : ''}COALESCE(heartbeat_at, started_at) <= now() - interval '${STALE_RUN_MINUTES} minutes')`,
+  );
+  for (const r of rows.map(toRun)) {
+    const items = (r.progress.items ?? []).map((i) =>
+      i.status === 'running'
+        ? { ...i, status: 'failed' as const, stage: null, detail: null, error: { stage: i.stage ?? 'Checking', message: 'interrupted — the check stopped before this finished' } }
+        : i.status === 'queued'
+          ? { ...i, status: 'cancelled' as const }
+          : i,
+    );
+    await db.query(
+      `UPDATE enrichment_runs SET status = 'failed', error = $2, finished_at = COALESCE(heartbeat_at, started_at), progress = $3::jsonb WHERE id = $1 AND status = 'running'`,
+      [r.id, 'Stopped: the server restarted during the check. Run it again to finish.', JSON.stringify({ ...r.progress, items, eta_seconds: 0 })],
+    );
+  }
+  return rows.length;
+}
+
+/** After a restart, nothing the server was doing is still running: close runs, price reads and claims searches left "running". */
+export async function recoverAfterRestart(db: Queryable): Promise<void> {
+  await reapStaleRuns(db, true);
+  await db.query(`UPDATE provider_price_checks SET status = 'failed', stage = NULL, error = 'Interrupted by a server restart — try again', finished_at = now() WHERE status = 'running'`);
+  await db.query(`UPDATE provider_claims SET status = 'failed', error = 'Interrupted by a server restart — try again', finished_at = now() WHERE status = 'running'`);
+}
+
 export async function listRuns(db: Queryable, limit = 20): Promise<EnrichmentRun[]> {
+  await reapStaleRuns(db);
   return (await db.query('SELECT * FROM enrichment_runs ORDER BY started_at DESC LIMIT $1', [limit])).map(toRun);
 }
 
-const ACTIVE = `status = 'running' AND COALESCE(heartbeat_at, started_at) > now() - interval '${STALE_RUN_MINUTES} minutes'`;
-
 /** The run in progress, if any. */
 export async function activeRun(db: Queryable): Promise<EnrichmentRun | undefined> {
+  await reapStaleRuns(db);
   const [r] = await db.query(`SELECT * FROM enrichment_runs WHERE ${ACTIVE} ORDER BY started_at DESC LIMIT 1`);
   return r ? toRun(r) : undefined;
 }
 
-/** Asks the running check to stop after the items it's on. */
+/** Asks the running check to stop after the items it's on. False when nothing is running (any stale run is closed). */
 export async function requestCancel(db: Queryable): Promise<boolean> {
+  await reapStaleRuns(db);
   return (await db.query(`UPDATE enrichment_runs SET cancel_requested = true WHERE ${ACTIVE} RETURNING id`)).length > 0;
 }
 
@@ -340,12 +376,21 @@ class Run {
   cancelled = false;
   private lastSave = 0;
   private saving: Promise<void> = Promise.resolve();
+  private readonly heartbeat: ReturnType<typeof setInterval>;
 
   constructor(
     readonly db: Queryable,
     readonly id: string,
     private readonly history: Record<EnrichPart, number>,
-  ) {}
+  ) {
+    // Keeps the run visibly alive (and its time estimate fresh) through long Claude calls with no other progress.
+    this.heartbeat = setInterval(() => void this.save(true).catch(() => undefined), HEARTBEAT_MS);
+    this.heartbeat.unref?.();
+  }
+
+  stop() {
+    clearInterval(this.heartbeat);
+  }
 
   note(line: string) {
     if (this.log.length < MAX_LOG) this.log.push(line);
@@ -444,17 +489,18 @@ async function pool<T>(run: Run, list: T[], n: number, work: (x: T) => Promise<v
 
 async function startRun(db: Db, trigger: string): Promise<Run> {
   const id = randomUUID();
+  await reapStaleRuns(db);
   await db.transaction(async (tx) => {
     await tx.query('LOCK TABLE enrichment_runs IN EXCLUSIVE MODE');
     const busy = await tx.query(`SELECT id FROM enrichment_runs WHERE ${ACTIVE}`);
     if (busy.length) throw new EnrichmentBusyError('A data check is already running.');
-    await tx.query(`UPDATE enrichment_runs SET status = 'failed', error = 'Stopped: the server restarted during the check', finished_at = now() WHERE status = 'running'`);
     await tx.query(`INSERT INTO enrichment_runs (id, trigger, status, heartbeat_at) VALUES ($1, $2, 'running', now())`, [id, trigger]);
   });
   return new Run(db, id, await historicalSeconds(db));
 }
 
 async function finishRun(run: Run, status: 'done' | 'failed' | 'cancelled', error: string | null = null) {
+  run.stop();
   if (status === 'cancelled') for (const i of run.items) if (i.status === 'queued') i.status = 'cancelled';
   await run.save(true);
   await run.db.query(`UPDATE enrichment_runs SET status = $2, error = $3, finished_at = now(), progress = $4::jsonb WHERE id = $1`, [run.id, status, error, JSON.stringify({ ...run.progress(), eta_seconds: 0 })]);

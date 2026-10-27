@@ -6,7 +6,7 @@ import { openDb } from './openDb.ts';
 import { createApp } from './app.ts';
 import { NotesError } from './interviewNotes.ts';
 import { countUsers, createUser, issueEnrolment } from './users.ts';
-import { EnrichmentBusyError, runEnrichment } from './enrich.ts';
+import { EnrichmentBusyError, recoverAfterRestart, runEnrichment } from './enrich.ts';
 import { effectiveProviders } from '../src/state/reducer.ts';
 import { loadSeedData } from '../src/data/load.ts';
 import { catalogueEdits } from './catalogue.ts';
@@ -20,6 +20,9 @@ if (config.bootstrapAdmin && (await countUsers(db)) === 0) {
   const token = await issueEnrolment(db, user.id, null);
   console.log(`[bootstrap] Created admin "${user.username}". Set up their passkey within 24 hours at:\n  ${config.origin}/enrol/${token}`);
 }
+
+// Nothing the server was doing before it restarted is still running.
+await recoverAfterRestart(db);
 
 let anthropic: Anthropic | undefined;
 const app = createApp({

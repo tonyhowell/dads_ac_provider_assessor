@@ -653,7 +653,8 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     );
     return c.json({ started: true }, 202);
   });
-  admin.post('/enrichment/stop', async (c) => ((await requestCancel(db)) ? c.json({ ok: true }) : c.json({ error: 'No data check is running.' }, 409)));
+  // Stopping when nothing is running isn't an error: the page may be showing a check that has just ended.
+  admin.post('/enrichment/stop', async (c) => c.json({ ok: true, stopping: await requestCancel(db) }));
   admin.post('/enrichment/sources', async (c) => {
     const body = await parse(c, z.object({ name: z.string().trim().min(1).max(200), url: z.url().max(2000).refine((u) => /^https?:\/\//.test(u), 'Use a web address'), note: z.string().max(1000).default('') }));
     if (body instanceof Response) return body;

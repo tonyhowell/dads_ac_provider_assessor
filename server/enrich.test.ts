@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type Anthropic from '@anthropic-ai/sdk';
 import { createPgliteDb, migrate, type Db } from './db.ts';
 import { readFileSync } from 'node:fs';
-import { EnrichmentBusyError, activeRun, addSource, readPrices, listRuns, listSources, priceChanges, requestCancel, runEnrichment, type EnrichDeps, type PriceList, type RunProgress } from './enrich.ts';
+import { EnrichmentBusyError, activeRun, addSource, readPrices, recoverAfterRestart, listRuns, listSources, priceChanges, requestCancel, runEnrichment, type EnrichDeps, type PriceList, type RunProgress } from './enrich.ts';
 import { checkPage, htmlToText, type Fetcher } from './pages.ts';
 import { getClaims } from './claims.ts';
 import { catalogueEdits, listSuggestions } from './catalogue.ts';
@@ -445,5 +445,56 @@ describe('loaded providers, finding providers and prices on shortlist', () => {
     expect(edits.find((p) => p.provider === 'NewCo Home Support')).toMatchObject({ source_url: 'https://newco.example/prices', postcodes_served: ['4178'], origin: { kind: 'search' } });
     expect(edits.find((p) => p.id === 'bayside-care')).toMatchObject({ source_url: 'https://bayside.example/fees', postcodes_served: ['4178'] });
     expect(run.stats.discover).toMatchObject({ found: 2, added: 1, updated: 1 });
+  });
+});
+
+describe('checks that stopped without finishing', () => {
+  const progress = (status: string) =>
+    JSON.stringify({ eta_seconds: 90, items: [{ id: '1', part: 'prices', label: 'Price list · A', url: null, status, stage: 'Downloading', detail: null, outcome: null, error: null, started_at: null, ms: null }, { id: '2', part: 'prices', label: 'Price list · B', url: null, status: 'queued', stage: null, detail: null, outcome: null, error: null, started_at: null, ms: null }] });
+
+  it("closes a run whose heartbeat stopped, so it doesn't show as running or block a new one", async () => {
+    await db.query(`INSERT INTO enrichment_runs (id, trigger, status, heartbeat_at, started_at, progress) VALUES ('ghost', 'admin', 'running', now() - interval '20 minutes', now() - interval '25 minutes', $1::jsonb)`, [progress('running')]);
+    expect(await activeRun(db)).toBeUndefined();
+    const [ghost] = await listRuns(db);
+    expect(ghost).toMatchObject({ id: 'ghost', status: 'failed', error: 'Stopped: the server restarted during the check. Run it again to finish.' });
+    expect(ghost.progress.items!.map((i) => [i.status, i.error?.message ?? null])).toEqual([
+      ['failed', 'interrupted — the check stopped before this finished'],
+      ['cancelled', null],
+    ]);
+    expect(ghost.progress.eta_seconds).toBe(0);
+    expect(await requestCancel(db)).toBe(false);
+    expect((await runEnrichment(deps(fakeClaude([]).client, []), { trigger: 'admin' })).status).toBe('done');
+  });
+
+  it("on restart, closes the server's own runs, price reads and searches, but not a command-line run still going", async () => {
+    await db.query(`INSERT INTO enrichment_runs (id, trigger, status, heartbeat_at, progress) VALUES ('mine', 'schedule', 'running', now(), $1::jsonb), ('cli', 'cli', 'running', now(), $1::jsonb)`, [progress('running')]);
+    await db.query(`INSERT INTO provider_price_checks (provider_id, status) VALUES ('bolton-clarke', 'running')`);
+    await db.query(`INSERT INTO provider_claims (provider_id, status) VALUES ('bolton-clarke', 'running')`);
+    await recoverAfterRestart(db);
+    expect((await listRuns(db)).map((r) => [r.id, r.status]).sort()).toEqual([
+      ['cli', 'running'],
+      ['mine', 'failed'],
+    ]);
+    expect((await db.query(`SELECT status, error FROM provider_price_checks`))[0]).toEqual({ status: 'failed', error: 'Interrupted by a server restart — try again' });
+    expect((await getClaims(db, 'bolton-clarke'))!.status).toBe('failed');
+  });
+
+  it('keeps a long-running check alive with a heartbeat while it waits on Claude', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const slow: EnrichDeps = { ...deps(fakeClaude([]).client), providers: async () => (await gate, []) };
+      const running = runEnrichment(slow, { trigger: 'admin' });
+      await new Promise((r) => setTimeout(r, 30));
+      await db.query(`UPDATE enrichment_runs SET heartbeat_at = now() - interval '10 minutes'`);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await new Promise((r) => setTimeout(r, 30));
+      expect((await activeRun(db))?.status).toBe('running');
+      release();
+      expect((await running).status).toBe('done');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
