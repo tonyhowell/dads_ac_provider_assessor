@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
+import { useSession } from '../state/SessionContext';
 import { nextStage, prevStage, STAGE_LABELS } from '../state/reducer';
 import type { Provider, SelectionStage } from '../types';
 import { Icon } from './ui/Icon';
@@ -34,6 +35,7 @@ export function StageControls({
   onDrop?: (stage: SelectionStage) => void;
 }) {
   const { state, dispatch, canEdit } = useApp();
+  const { watchPriceChecks } = useSession();
   const entry = state.selection.find((e) => e.provider_id === provider.id);
   const at = () => new Date().toISOString();
 
@@ -42,7 +44,7 @@ export function StageControls({
   if (!entry) {
     if (!canEdit) return null;
     return (
-      <button type="button" className={`btn ${primaryAdd ? 'btn-primary' : ''}`} onClick={() => dispatch({ type: 'selection/add', providerId: provider.id, at: at() })}>
+      <button type="button" className={`btn ${primaryAdd ? 'btn-primary' : ''}`} onClick={() => (dispatch({ type: 'selection/add', providerId: provider.id, at: at() }), watchPriceChecks())}>
         <Icon name="plus" size={20} /> Add to my list <span className="sr-only">: {provider.provider}</span>
       </button>
     );

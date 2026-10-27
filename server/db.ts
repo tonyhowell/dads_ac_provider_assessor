@@ -242,6 +242,18 @@ const MIGRATIONS: string[] = [
   ALTER TABLE enrichment_runs DROP CONSTRAINT enrichment_runs_status_check;
   ALTER TABLE enrichment_runs ADD CONSTRAINT enrichment_runs_status_check CHECK (status IN ('running', 'done', 'failed', 'cancelled'))
   `,
+  // v6: reading a provider's prices when a family shortlists it.
+  `
+  CREATE TABLE provider_price_checks (
+    provider_id text PRIMARY KEY,
+    status text NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+    stage text,
+    outcome text,
+    error text,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+  )
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

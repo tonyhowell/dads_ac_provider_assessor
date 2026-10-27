@@ -62,6 +62,7 @@ import { generateLookingForSummary, summaryInput } from './lookingFor.ts';
 import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, getClaims, listClaims } from './claims.ts';
 import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, listSources, refreshClaims, removeSource, requestCancel, runEnrichment, updateSource, type EnrichDeps } from './enrich.ts';
 import { listPages, type Fetcher } from './pages.ts';
+import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
 import { UsageTally } from './usage.ts';
 
 export type WebAuthn = Pick<
@@ -347,7 +348,17 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
   member.post('/actions', requireEdit, async (c) => {
     const body = await parse(c, z.object({ action: ActionSchema }));
     if (body instanceof Response) return body;
-    return c.json(await applyAction(db, c.get('app').id, body.action, c.get('user')));
+    const result = await applyAction(db, c.get('app').id, body.action, c.get('user'));
+    // Shortlisting a provider reads its prices (finding the price list first if needed).
+    if (body.action.type === 'selection/add' && getAnthropic) await startPriceCheck(body.action.providerId, false);
+    return c.json(result);
+  });
+
+  /** Reads a shortlisted provider's prices again (or for the first time). */
+  member.post('/prices/:providerId', requireEdit, async (c) => {
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const row = await startPriceCheck(c.req.param('providerId'), true);
+    return row ? c.json({ check: row }) : c.json({ error: 'Provider not found.' }, 404);
   });
 
   member.get('/members', async (c) => c.json({ members: await listMembers(db, c.get('app').id) }));
@@ -473,12 +484,20 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
   app.route('/api/applications/:appId', member);
 
   app.get('/api/claims', requireUser, async (c) => c.json({ claims: await listClaims(db), max_age_days: CLAIMS_MAX_AGE_DAYS }));
+  app.get('/api/price-checks', requireUser, async (c) => c.json({ checks: await listPriceChecks(db) }));
 
   // --- Common provider catalogue ---
 
   const seedProviders = seed.providers;
   const currentProviders = async () => effectiveProviders(seedProviders, (await catalogueEdits(db)).providers);
   const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
+  const startPriceCheck = async (providerId: string, force: boolean) => {
+    const provider = (await currentProviders()).find((p) => p.id === providerId);
+    if (!provider) return null;
+    const { row, start } = await claimPriceCheck(db, provider.id, force);
+    if (start) background(runPriceCheck(enrichDeps(), provider));
+    return row;
+  };
   const enrichDeps = (): EnrichDeps => ({
     db,
     getAnthropic: getAnthropic ?? (() => { throw new NotesError(503, 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.'); }),
@@ -579,6 +598,22 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
       for (const p of body.providers) await upsertCatalogue(tx, p, c.get('user').id, 'Imported from CSV');
     });
     return c.json(await catalogueEdits(db));
+  });
+  /** Initial load from the government service list: adds providers not yet in the catalogue, marked as loaded. */
+  admin.post('/providers/load', async (c) => {
+    const body = await parse(c, z.object({ providers: z.array(catalogueProvider).min(1).max(1000) }));
+    if (body instanceof Response) return body;
+    const taken = new Set((await currentProviders()).map((p) => p.id));
+    const added: string[] = [];
+    await db.transaction(async (tx) => {
+      for (const p of body.providers) {
+        if (taken.has(p.id)) continue;
+        taken.add(p.id);
+        await upsertCatalogue(tx, p, c.get('user').id, p.origin?.kind === 'gen' ? `Loaded from the government service list (${p.origin.note})` : 'Loaded');
+        added.push(p.id);
+      }
+    });
+    return c.json({ added, ...(await catalogueEdits(db)) });
   });
   admin.delete('/providers/:id', async (c) => {
     await revertCatalogue(db, c.req.param('id'), c.get('user').id);

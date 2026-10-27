@@ -31,6 +31,18 @@ export const ProviderSchema = z.object({
   source_url: z.url().nullable(),
   registration_status: z.string().optional(),
   postcodes_served: z.array(z.string()).optional(),
+  /** The provider's own website, when known (v5). */
+  website: z.url().nullable().optional(),
+  /** Where its outlets are, e.g. "Wynnum 4178" (from the government service list). Not the area it serves. */
+  locations: z.array(z.string().max(120)).max(50).optional(),
+  /** How it got into the catalogue, when it wasn't added by hand: the government list or a Claude search. */
+  origin: z
+    .object({
+      kind: z.enum(['gen', 'search']),
+      note: z.string().max(300),
+      at: isoDate,
+    })
+    .optional(),
 });
 
 /** Provider as written in the starter pack: no id, flags as one string, free-text "prices as at". */

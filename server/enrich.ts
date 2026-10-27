@@ -20,7 +20,11 @@ import {
   type ClaimsRow,
   type Topic,
 } from './claims.ts';
-import { createSuggestion, listSuggestions, type Suggestion } from './catalogue.ts';
+import { createSuggestion, listSuggestions, upsertCatalogue, type Suggestion } from './catalogue.ts';
+import { areaLabel, findPriceList, findProvidersInArea, type Area } from './discover.ts';
+import { mentionsDisallowedFees } from '../src/flags.ts';
+import { matchCatalogue } from '../src/genLoad.ts';
+import { slugify } from '../src/data/normalise.ts';
 import { RATE_KEYS } from '../src/schemas.ts';
 import { latestDateIn } from '../src/data/normalise.ts';
 import type { Claims, Provider, RateKey } from '../src/types.ts';
@@ -39,8 +43,10 @@ import type { Claims, Provider, RateKey } from '../src/types.ts';
 //    - only when there's nothing to go on (first time, pages gone, or the last full search is 180+ days old)
 //      does a full web search run, with Claude Sonnet 5.5 — and at most `maxResearch` of those per run.
 
-export type EnrichPart = 'prices' | 'sources' | 'claims';
-export const ENRICH_PARTS: EnrichPart[] = ['prices', 'sources', 'claims'];
+export type EnrichPart = 'discover' | 'prices' | 'sources' | 'claims';
+export const ENRICH_PARTS: EnrichPart[] = ['discover', 'prices', 'sources', 'claims'];
+/** What a run checks unless told otherwise. Finding providers is chosen on purpose: it searches the web. */
+export const DEFAULT_PARTS: EnrichPart[] = ['prices', 'sources', 'claims'];
 
 export interface EnrichDeps {
   db: Db;
@@ -60,6 +66,8 @@ export interface EnrichOptions {
   maxResearch?: number;
   /** Only these providers (all when omitted). */
   providerIds?: string[];
+  /** Areas to find providers in (default: the active applications' postcodes). */
+  areas?: Area[];
 }
 
 interface Counts {
@@ -70,7 +78,8 @@ interface Counts {
 }
 
 export interface RunStats {
-  prices: Counts & { suggestions: number; matched: number };
+  discover: { found: number; added: number; updated: number; failed: number };
+  prices: Counts & { suggestions: number; matched: number; applied: number };
   sources: Counts & { summarised: number };
   claims: { due: number; revalidated: number; reread: number; researched: number; deferred: number; failed: number };
 }
@@ -100,7 +109,7 @@ export interface RunProgress {
   /** Seconds left, estimated from this run and recent ones. Null before anything can be estimated. */
   eta_seconds: number | null;
   /** Things not needed this run. */
-  skipped: { claims_current: number; no_price_list: number };
+  skipped: { claims_current: number; no_price_list: number; not_shortlisted?: number };
   updated_at: string;
 }
 
@@ -125,9 +134,9 @@ export class EnrichmentBusyError extends Error {}
 const STALE_RUN_MINUTES = 15;
 const MAX_LOG = 300;
 /** Items checked at once, by part. Claims searches are slow and costly, so fewer run together. */
-const CONCURRENCY: Record<EnrichPart, number> = { prices: 4, sources: 3, claims: 2 };
+const CONCURRENCY: Record<EnrichPart, number> = { discover: 2, prices: 4, sources: 3, claims: 2 };
 /** Seconds per item before there's any history to go on. */
-const DEFAULT_SECONDS: Record<EnrichPart, number> = { prices: 20, sources: 20, claims: 60 };
+const DEFAULT_SECONDS: Record<EnrichPart, number> = { discover: 120, prices: 20, sources: 20, claims: 60 };
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null));
 const json = <T>(v: unknown): T => (typeof v === 'string' ? JSON.parse(v) : v) as T;
 
@@ -322,11 +331,12 @@ class Run {
   readonly log: string[] = [];
   readonly items: RunItem[] = [];
   readonly stats: RunStats = {
-    prices: { checked: 0, unchanged: 0, changed: 0, errors: 0, suggestions: 0, matched: 0 },
+    discover: { found: 0, added: 0, updated: 0, failed: 0 },
+    prices: { checked: 0, unchanged: 0, changed: 0, errors: 0, suggestions: 0, matched: 0, applied: 0 },
     sources: { checked: 0, unchanged: 0, changed: 0, errors: 0, summarised: 0 },
     claims: { due: 0, revalidated: 0, reread: 0, researched: 0, deferred: 0, failed: 0 },
   };
-  skipped = { claims_current: 0, no_price_list: 0 };
+  skipped = { claims_current: 0, no_price_list: 0, not_shortlisted: 0 };
   cancelled = false;
   private lastSave = 0;
   private saving: Promise<void> = Promise.resolve();
@@ -452,40 +462,95 @@ async function finishRun(run: Run, status: 'done' | 'failed' | 'cancelled', erro
 
 const pageOpts = (deps: EnrichDeps, run: Run, item: RunItem) => ({ fetcher: deps.fetcher, sleep: deps.sleep, onProgress: (d: string) => run.detail(item, d) });
 
-type PriceTarget = { provider: Provider; url: string; item: RunItem };
+export type PriceResult =
+  | { ok: true; kind: 'unchanged' | 'matched' | 'suggested' | 'applied' | 'waiting' | 'no-list' | 'deferred'; outcome: string; provider: Provider }
+  | { ok: false; stage: string; error: string };
 
-async function checkPrice(deps: EnrichDeps, run: Run, { provider, url, item }: PriceTarget, pending: Suggestion[]) {
+export interface PriceOptions {
+  usage: UsageTally;
+  /** Search for the price list when the provider has no link (uses one search from the budget). */
+  findMissing: boolean;
+  takeSearch: () => boolean;
+  pending?: Suggestion[];
+  onStage?: (stage: string, detail?: string | null) => void;
+  onDetail?: (detail: string) => void;
+  onCheck?: (check: PageCheck) => void;
+}
+
+const noPrices = (p: Provider) => RATE_KEYS.every((k) => p[k] === null);
+
+/**
+ * Reads one provider's price list. Prices for a provider with none yet (one just loaded) go straight into the
+ * catalogue, marked as read automatically; changes to existing prices become suggestions for an admin.
+ */
+export async function readPrices(deps: EnrichDeps, start: Provider, opts: PriceOptions): Promise<PriceResult> {
   const { db } = deps;
-  run.start(item, 'Downloading');
-  const check = await checkPage(db, url, pageOpts(deps, run, item));
-  run.count(run.stats.prices, check);
-  if (check.status === 'error') return run.fail(item, 'Download', check.error);
-  if (check.status === 'unchanged') return run.done(item, check.attempts > 1 ? `Unchanged (after ${check.attempts} tries)` : 'Unchanged');
+  let provider = start;
+  if (!provider.source_url) {
+    if (!opts.findMissing) return { ok: true, kind: 'no-list', outcome: 'No price list link', provider };
+    if (!opts.takeSearch()) return { ok: true, kind: 'deferred', outcome: 'Needs a search for its price list — left for the next run (search limit reached)', provider };
+    opts.onStage?.('Finding the price list with Claude Sonnet', 'usually under a minute');
+    let found;
+    try {
+      found = await findPriceList(deps.getAnthropic(), provider, opts.usage);
+    } catch (err) {
+      return { ok: false, stage: 'Finding the price list', error: message(err) };
+    }
+    if (!found.price_list_url) return { ok: false, stage: 'Finding the price list', error: "no published price list was found — ask the provider for one" };
+    provider = { ...provider, source_url: found.price_list_url, website: provider.website ?? found.website };
+    await upsertCatalogue(db, provider, null, `Price list found by search: ${found.price_list_url}`);
+  }
+  opts.onStage?.('Downloading');
+  const check = await checkPage(db, provider.source_url!, { fetcher: deps.fetcher, sleep: deps.sleep, onProgress: opts.onDetail });
+  opts.onCheck?.(check);
+  if (check.status === 'error') return { ok: false, stage: 'Download', error: check.error };
+  if (check.status === 'unchanged' && !noPrices(provider)) return { ok: true, kind: 'unchanged', outcome: check.attempts > 1 ? `Unchanged (after ${check.attempts} tries)` : 'Unchanged', provider };
+  if (check.status === 'unchanged') {
+    // Seen before but never read into the catalogue (it had no prices): read it now.
+    await forgetPage(db, check.url);
+    return readPrices(deps, provider, opts);
+  }
   try {
-    run.stage(item, 'Reading with Claude Haiku', readingWhat(check.content));
-    const found = await extract(deps.getAnthropic(), run.usage, PriceListSchema, PRICE_SYSTEM, [
+    opts.onStage?.('Reading with Claude Haiku', readingWhat(check.content));
+    const found = await extract(deps.getAnthropic(), opts.usage, PriceListSchema, PRICE_SYSTEM, [
       { type: 'text', text: `Provider: ${provider.provider}${provider.outlet ? ` (${provider.outlet})` : ''}` },
       ...pageBlocks(check.content, check.url),
     ]);
-    if (!found.is_price_list) return run.fail(item, 'Reading with Claude Haiku', "the page doesn't look like a price list any more — check the link");
-    run.stage(item, 'Comparing with the catalogue');
+    if (!found.is_price_list) return { ok: false, stage: 'Reading with Claude Haiku', error: "the page doesn't look like a price list — check the link" };
+    opts.onStage?.('Comparing with the catalogue');
+    const foundDate = found.prices_as_at ? latestDateIn(found.prices_as_at) : null;
+    const first = check.status === 'new' ? 'Read for the first time' : 'Changed';
+    if (noPrices(provider)) {
+      const rates = Object.fromEntries(RATE_KEYS.filter((k) => found.rates[k] !== null).map((k) => [k, found.rates[k]]));
+      if (!Object.keys(rates).length) return { ok: false, stage: 'Reading with Claude Haiku', error: 'no hourly prices found on the page — ask the provider for a quote' };
+      const today = now().slice(0, 10);
+      // Fees and conditions worth asking about become flags, as a family's own notes would.
+      const feeNotes = found.notes.filter((n) => mentionsDisallowedFees(n) || /\b(travel|admin|fee|levy|establishment|exit|cancell?ation|minimum)\b/i.test(n));
+      const updated: Provider = {
+        ...provider,
+        ...rates,
+        prices_as_at: `${found.prices_as_at ?? 'Date not stated'} (read automatically on ${today})`,
+        prices_as_at_date: foundDate ?? today,
+        flags: [...new Set([...provider.flags, ...feeNotes])],
+      };
+      delete updated.special_rates;
+      await upsertCatalogue(db, updated, null, `Prices read automatically from ${check.url}`);
+      const n = Object.keys(rates).length;
+      return { ok: true, kind: 'applied', outcome: `${n} price${n === 1 ? '' : 's'} read into the catalogue`, provider: updated };
+    }
     const changes = priceChanges(provider, found);
     // A newer "prices as at" date is worth recording even when every price is the same; an older one isn't.
-    const foundDate = found.prices_as_at ? latestDateIn(found.prices_as_at) : null;
     const dateChanged = !!foundDate && (!provider.prices_as_at_date || foundDate > provider.prices_as_at_date);
-    const first = check.status === 'new' ? 'Read for the first time' : 'Changed';
-    if (!Object.keys(changes).length && !dateChanged) {
-      run.stats.prices.matched += 1;
-      return run.done(item, `${first}; prices match the catalogue`);
-    }
+    if (!Object.keys(changes).length && !dateChanged) return { ok: true, kind: 'matched', outcome: `${first}; prices match the catalogue`, provider };
     const proposed: Provider = {
       ...provider,
       ...Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v!.to])),
       ...(dateChanged ? { prices_as_at: found.prices_as_at!, prices_as_at_date: foundDate } : {}),
     };
     delete proposed.special_rates;
-    const same = pending.find((s) => s.provider_id === provider.id && RATE_KEYS.every((k) => s.proposed[k] === proposed[k]) && s.proposed.prices_as_at === proposed.prices_as_at);
-    if (same) return run.done(item, `${first}; the same change is already waiting for approval`);
+    const pending = opts.pending ?? (await listSuggestions(db, { status: 'pending' })).filter((s) => s.application_id === null && s.note.startsWith(AUTO_NOTE));
+    if (pending.some((s) => s.provider_id === provider.id && RATE_KEYS.every((k) => s.proposed[k] === proposed[k]) && s.proposed.prices_as_at === proposed.prices_as_at))
+      return { ok: true, kind: 'waiting', outcome: `${first}; the same change is already waiting for approval`, provider };
     const lines = Object.entries(changes).map(([k, v]) => `${k} ${v!.from === null ? 'not listed' : `$${v!.from}`} → $${v!.to}`);
     await createSuggestion(db, {
       current: provider,
@@ -494,13 +559,40 @@ async function checkPrice(deps: EnrichDeps, run: Run, { provider, url, item }: P
       applicationId: null,
       userId: null,
     });
-    run.stats.prices.suggestions += 1;
-    return run.done(item, `${first}; ${lines.length || 'no'} price${lines.length === 1 ? '' : 's'} differ${lines.length === 1 ? 's' : ''}${dateChanged ? ', newer date' : ''} — suggestion created`);
+    return {
+      ok: true,
+      kind: 'suggested',
+      outcome: `${first}; ${lines.length || 'no'} price${lines.length === 1 ? '' : 's'} differ${lines.length === 1 ? 's' : ''}${dateChanged ? ', newer date' : ''} — suggestion created`,
+      provider,
+    };
   } catch (err) {
-    run.stats.prices.errors += 1;
     await forgetPage(db, check.url);
-    return run.fail(item, 'Reading with Claude Haiku', `${message(err)}. It will be read again next run`);
+    return { ok: false, stage: 'Reading with Claude Haiku', error: `${message(err)}. It will be read again next time` };
   }
+}
+
+type PriceTarget = { provider: Provider; item: RunItem };
+
+async function checkPrice(deps: EnrichDeps, run: Run, { provider, item }: PriceTarget, pending: Suggestion[], budget: { left: number }) {
+  run.start(item, provider.source_url ? 'Downloading' : 'Finding the price list');
+  const res = await readPrices(deps, provider, {
+    usage: run.usage,
+    findMissing: true,
+    takeSearch: () => (budget.left > 0 ? (budget.left--, true) : false),
+    pending,
+    onStage: (stage, detail = null) => run.stage(item, stage, detail),
+    onDetail: (d) => run.detail(item, d),
+    onCheck: (c) => run.count(run.stats.prices, c),
+  });
+  if (!res.ok) {
+    if (res.stage !== 'Download') run.stats.prices.errors += 1;
+    return run.fail(item, res.stage, res.error);
+  }
+  if (res.kind === 'matched') run.stats.prices.matched += 1;
+  if (res.kind === 'suggested') run.stats.prices.suggestions += 1;
+  if (res.kind === 'applied') run.stats.prices.applied += 1;
+  item.url = res.provider.source_url;
+  return run.done(item, res.outcome);
 }
 
 async function checkSource(deps: EnrichDeps, run: Run, source: EnrichmentSource, item: RunItem, providers: Provider[]) {
@@ -620,24 +712,115 @@ async function checkClaimsFor(deps: EnrichDeps, run: Run, provider: Provider, be
 }
 
 /** One enrichment run. Throws EnrichmentBusyError if another is running. */
+/** Providers on any application's shortlist (any stage). */
+export async function shortlistedIds(db: Queryable): Promise<Set<string>> {
+  const rows = await db.query<{ id: string }>(`SELECT DISTINCT e->>'provider_id' AS id FROM application_state, jsonb_array_elements(COALESCE(state->'selection', '[]'::jsonb)) AS e`);
+  return new Set(rows.map((r) => r.id).filter(Boolean));
+}
+
+/** The areas the active applications are in. */
+export async function applicationAreas(db: Queryable): Promise<Area[]> {
+  const rows = await db.query<{ postcode: string; suburb: string }>(`SELECT DISTINCT postcode, suburb FROM applications WHERE status = 'active' AND postcode <> '' ORDER BY postcode`);
+  const byPostcode = new Map<string, Area>();
+  for (const r of rows) if (!byPostcode.has(r.postcode)) byPostcode.set(r.postcode, { postcode: r.postcode, suburb: r.suburb });
+  return [...byPostcode.values()];
+}
+
+async function discoverArea(deps: EnrichDeps, run: Run, area: Area, item: RunItem, budget: { left: number }) {
+  const { db } = deps;
+  run.start(item, 'Waiting for a search');
+  if (!(budget.left > 0 ? (budget.left--, true) : false)) return run.done(item, 'Left for the next run (search limit reached)');
+  try {
+    const catalogue = await deps.providers();
+    run.stage(item, 'Searching the web with Claude Sonnet', 'usually 1–3 minutes');
+    const found = await findProvidersInArea(deps.getAnthropic(), area, catalogue, run.usage);
+    run.stage(item, 'Adding to the catalogue', `${found.length} found`);
+    const taken = new Set(catalogue.map((p) => p.id));
+    let added = 0;
+    let updated = 0;
+    for (const f of found) {
+      const existing = matchCatalogue([f.name], catalogue);
+      if (existing) {
+        const patch: Partial<Provider> = {};
+        if (!existing.source_url && f.price_list_url) patch.source_url = f.price_list_url;
+        if (!existing.website && f.website) patch.website = f.website;
+        if (!existing.postcodes_served?.includes(area.postcode) && existing.origin) patch.postcodes_served = [...(existing.postcodes_served ?? []), area.postcode];
+        if (Object.keys(patch).length) {
+          const next = { ...existing, ...patch };
+          delete next.special_rates;
+          await upsertCatalogue(db, next, null, `Filled in by the provider search for ${areaLabel(area)}`);
+          Object.assign(existing, patch);
+          updated += 1;
+        }
+        continue;
+      }
+      let id = slugify(f.name) || 'provider';
+      for (let n = 2; taken.has(id); n++) id = `${slugify(f.name)}-${n}`;
+      taken.add(id);
+      const provider: Provider = {
+        id,
+        provider: f.name,
+        type: null,
+        outlet: null,
+        rn: null,
+        en: null,
+        pc: null,
+        domestic: null,
+        social: null,
+        respite: null,
+        gardening: null,
+        care_mgmt: null,
+        prices_as_at: 'Not read yet',
+        prices_as_at_date: null,
+        veteran_fit: null,
+        flags: [],
+        source_url: f.price_list_url,
+        website: f.website,
+        postcodes_served: [area.postcode],
+        origin: { kind: 'search', note: `Found by a search for ${areaLabel(area)}${f.evidence_url ? ` (${f.evidence_url})` : ''}`.slice(0, 300), at: now().slice(0, 10) },
+      };
+      await upsertCatalogue(db, provider, null, `Found by the provider search for ${areaLabel(area)}`);
+      catalogue.push(provider);
+      added += 1;
+    }
+    run.stats.discover.found += found.length;
+    run.stats.discover.added += added;
+    run.stats.discover.updated += updated;
+    return run.done(item, `${found.length} provider${found.length === 1 ? '' : 's'} found: ${added} new, ${updated} filled in`);
+  } catch (err) {
+    run.stats.discover.failed += 1;
+    return run.fail(item, item.stage ?? 'Searching', message(err));
+  }
+}
+
+/** One enrichment run. Throws EnrichmentBusyError if another is running. */
 export async function runEnrichment(deps: EnrichDeps, opts: EnrichOptions): Promise<EnrichmentRun> {
   const run = await startRun(deps.db, opts.trigger);
-  const parts = new Set(opts.parts ?? ENRICH_PARTS);
+  const parts = new Set(opts.parts ?? DEFAULT_PARTS);
   try {
     deps.getAnthropic(); // fail early if Claude isn't configured
-    const all = await deps.providers();
-    const providers = opts.providerIds ? all.filter((p) => opts.providerIds!.includes(p.id)) : all;
 
     // Plan every item first, so the live view can show what's coming and estimate the time.
+    const areas = parts.has('discover') ? (opts.areas ?? (await applicationAreas(deps.db))) : [];
+    const discover = areas.map((a) => ({ area: a, item: run.add('discover', `Find providers · ${areaLabel(a)}`, null) }));
+    await run.save(true);
+    const budget = { left: opts.maxResearch ?? 3 };
+    // Finding providers first, so what it fills in (price list links) is used by the rest of the run.
+    await pool(run, discover, CONCURRENCY.discover, ({ area, item }) => discoverArea(deps, run, area, item, budget));
+
+    const all = await deps.providers();
+    // Loaded providers are only checked once someone shortlists them; the rest of the catalogue always.
+    const shortlisted = await shortlistedIds(deps.db);
+    const providers = opts.providerIds ? all.filter((p) => opts.providerIds!.includes(p.id)) : all.filter((p) => !p.origin || shortlisted.has(p.id));
+    run.skipped.not_shortlisted = opts.providerIds ? 0 : all.length - providers.length;
+
     const prices: PriceTarget[] = [];
     if (parts.has('prices')) {
       const seen = new Set<string>();
       for (const p of providers) {
-        if (!p.source_url) run.skipped.no_price_list += 1;
-        else if (!seen.has(p.source_url)) {
-          seen.add(p.source_url);
-          prices.push({ provider: p, url: p.source_url, item: run.add('prices', `Price list · ${p.provider}`, p.source_url) });
-        }
+        if (p.source_url && seen.has(p.source_url)) continue;
+        if (p.source_url) seen.add(p.source_url);
+        prices.push({ provider: p, item: run.add('prices', `Price list · ${p.provider}`, p.source_url) });
       }
     }
     const sources = parts.has('sources') ? (await listSources(deps.db)).filter((s) => s.active).map((s) => ({ source: s, item: run.add('sources', `Source · ${s.name}`, s.url) })) : [];
@@ -653,9 +836,8 @@ export async function runEnrichment(deps: EnrichDeps, opts: EnrichOptions): Prom
     await run.save(true);
 
     const pending = (await listSuggestions(deps.db, { status: 'pending' })).filter((s) => s.application_id === null && s.note.startsWith(AUTO_NOTE));
-    await pool(run, prices, CONCURRENCY.prices, (t) => checkPrice(deps, run, t, pending));
+    await pool(run, prices, CONCURRENCY.prices, (t) => checkPrice(deps, run, t, pending, budget));
     await pool(run, sources, CONCURRENCY.sources, ({ source, item }) => checkSource(deps, run, source, item, all));
-    const budget = { left: opts.maxResearch ?? 3 };
     await pool(run, claims, CONCURRENCY.claims, ({ provider, before, item }) => checkClaimsFor(deps, run, provider, before, item, budget));
 
     if (run.cancelled) {

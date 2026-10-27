@@ -23,6 +23,7 @@ import { Meter } from './ui/Visual';
 import { ClaimsPanel } from './Claims';
 import { ProviderNotes } from './ProviderNotes';
 import { usePhone } from './useMinWidth';
+import { ProviderDataBox } from './ProviderData';
 
 // Shared pieces of "Find providers" (v4): the ranked matches, the insight panel and the shortlist bar.
 
@@ -116,6 +117,7 @@ export function ReasonList({ reasons }: { reasons: Reason[] }) {
 /** Adds a provider to the shortlist (the selection list) or takes it off. */
 export function ShortlistButton({ match, className = '' }: { match: Match; className?: string }) {
   const { state, dispatch, canEdit } = useApp();
+  const { watchPriceChecks } = useSession();
   const on = state.selection.some((e) => e.provider_id === match.provider.id);
   if (!canEdit) return on ? <span className="chip chip-outline">Shortlisted</span> : null;
   return (
@@ -123,9 +125,11 @@ export function ShortlistButton({ match, className = '' }: { match: Match; class
       type="button"
       className={`btn ${className}`}
       aria-pressed={on}
-      onClick={() =>
-        dispatch(on ? { type: 'selection/remove', providerId: match.provider.id } : { type: 'selection/add', providerId: match.provider.id, at: new Date().toISOString() })
-      }
+      onClick={() => {
+        dispatch(on ? { type: 'selection/remove', providerId: match.provider.id } : { type: 'selection/add', providerId: match.provider.id, at: new Date().toISOString() });
+        // Shortlisting reads the provider's prices on the server; look for the result.
+        if (!on) watchPriceChecks();
+      }}
     >
       {on && <Icon name="check" size={20} />} {on ? 'Shortlisted' : 'Shortlist'}
       <span className="sr-only">: {match.provider.provider}</span>
@@ -185,6 +189,7 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
             <VerdictText verdict={match.verdict} />. {match.summary}
           </p>
         </div>
+        <ProviderDataBox provider={p} />
         <ReasonList reasons={match.reasons} />
         {match.cautions.map((c) => (
           <p key={c.text} className="text-[var(--caution)]">
@@ -241,6 +246,7 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
           <VerdictText verdict={match.verdict} />. {match.summary}
         </p>
       </div>
+      <ProviderDataBox provider={p} />
       {extra}
       <div role="tablist" aria-label={`About ${p.provider}`} className="flex flex-wrap gap-1 border-b-2 border-[var(--charcoal)]">
         {tabs.map(([t, label]) => (

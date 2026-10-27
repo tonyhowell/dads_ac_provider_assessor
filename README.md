@@ -122,6 +122,16 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
 - **Fetching:** a site has 20 seconds to start answering and 150 seconds to finish a download (up to 25 MB). Timeouts, dropped connections, 429 and 5xx answers are tried 3 times. PDFs are turned into text on the server (`unpdf`) and compared on that text; only a scanned PDF with no text goes to Claude as a document. Claude calls allow 5 minutes and are retried 3 times.
 - **Live view:** every item a run will check is planned first. The admin page shows progress (done of total), an estimated time left (from this run's pace and recent runs), what each item is doing now (connecting, downloading with size, reading with Claude, searching), problems with the stage and reason, and a Stop button that stops after the items in hand. Finished runs list each item with its result and time taken.
 
+### Loading providers, and prices on shortlist
+- **Load from the government list** (Site administration → Provider catalogue): upload GEN's *Aged care service list* (one Excel file per state, current to 30 June). It's read in the browser: the columns are found automatically (and can be changed), home care services are kept, the regions your applications are in are ticked, and providers not already in the catalogue are added without prices, marked as loaded. See `src/genLoad.ts`.
+- **Find providers near each application** (Data checks, optional): Claude Sonnet searches the web and My Aged Care for providers serving each active application's postcode. It adds new ones, marked as found by search, and fills in missing websites and price list links. It uses the run's search limit and keeps only links the search actually retrieved. See `server/discover.ts`.
+- **Loaded providers are checked only once shortlisted:** scheduled and manual data checks skip loaded providers no one has shortlisted.
+- **Prices on shortlist:** when a family shortlists a provider, the server reads its prices. If there's no price list link it runs one small search to find it (Sonnet), then Haiku reads the list.
+  - A provider with no prices yet gets them straight into the catalogue, marked "read automatically" with the date; fees on the page become flags.
+  - Changes to existing prices still become suggestions for an admin.
+  - It isn't repeated within a week unless someone asks ("Try again").
+- **"What we know"** box (provider page and insight panel, shortlisted providers only) shows the price read and offers **Enrich this provider** (check what they say publicly), or **Update** when that's been done before.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

@@ -25,7 +25,7 @@ beforeEach(async () => {
   getAnthropic = undefined;
   web.clear();
   await db.query(
-    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs CASCADE',
+    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs, provider_price_checks CASCADE',
   );
 });
 
@@ -53,7 +53,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
 
@@ -573,6 +573,53 @@ describe('data enrichment (admin)', () => {
     expect((await admin.patch(`/api/admin/enrichment/sources/${added.json.source.id}`, { active: false })).status).toBe(200);
     expect((await admin.delete(`/api/admin/enrichment/sources/${added.json.source.id}`)).status).toBe(200);
     expect((await admin.get('/api/admin/enrichment')).json.sources).toEqual([]);
+  });
+});
+
+describe('loading providers and reading prices on shortlist', () => {
+  const loaded = {
+    id: 'bayside-care', provider: 'Bayside Care', type: 'For-profit', outlet: 'Bayside Home Support', rn: null, en: null, pc: null, domestic: null, social: null, respite: null,
+    gardening: null, care_mgmt: null, prices_as_at: 'Not read yet', prices_as_at_date: null, veteran_fit: null, flags: [], source_url: 'https://bayside.example/prices',
+    locations: ['Manly 4179'], origin: { kind: 'gen', note: 'qld.xlsx', at: '2026-10-27' },
+  };
+
+  it('adds loaded providers that are new, skipping ids already in the catalogue', async () => {
+    const { agent: admin, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    expect((await sam.post('/api/admin/providers/load', { providers: [loaded] })).status).toBe(403);
+    const res = await admin.post('/api/admin/providers/load', { providers: [loaded, { ...loaded, id: 'bolton-clarke', provider: 'Bolton Clarke again' }] });
+    expect(res.json.added).toEqual(['bayside-care']);
+    expect(res.json.providers.find((p: { id: string }) => p.id === 'bayside-care')).toMatchObject({ origin: { kind: 'gen' }, locations: ['Manly 4179'] });
+    expect((await admin.get('/api/admin/providers/bayside-care/history')).json.history[0].change).toBe('Loaded from the government service list (qld.xlsx)');
+  });
+
+  it('reads prices when a provider is shortlisted, once a week at most, and on request', async () => {
+    const parse = vi.fn().mockResolvedValue({
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 10, output_tokens: 5 },
+      parsed_output: { is_price_list: true, prices_as_at: '1 Oct 2026', rates: { rn: null, en: null, pc: 118, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null }, notes: [] },
+    });
+    getAnthropic = () => ({ beta: { messages: { parse } } }) as unknown as Anthropic;
+    web.set('https://bayside.example/prices', '<p>Personal care $118</p>');
+    const { agent: admin, user: alex } = await enrolled();
+    await admin.post('/api/admin/providers/load', { providers: [loaded] });
+    const id = await newApplication(admin, alex.id);
+
+    await admin.post(`/api/applications/${id}/actions`, add('bayside-care'));
+    expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ provider_id: 'bayside-care', status: 'running' });
+    await Promise.all(jobs.splice(0));
+    expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ status: 'done', outcome: '1 price read into the catalogue' });
+    expect((await admin.get('/api/providers')).json.providers.find((p: { id: string }) => p.id === 'bayside-care').pc).toBe(118);
+
+    // Shortlisted again (another application, or removed and re-added): not read again this week.
+    await admin.post(`/api/applications/${id}/actions`, { action: { type: 'selection/remove', providerId: 'bayside-care' } });
+    await admin.post(`/api/applications/${id}/actions`, add('bayside-care'));
+    expect(jobs).toHaveLength(0);
+    // Asked for: read again.
+    expect((await admin.post(`/api/applications/${id}/prices/bayside-care`, {})).json.check.status).toBe('running');
+    await Promise.all(jobs.splice(0));
+    expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ status: 'done', outcome: 'Price list unchanged since it was last read' });
+    expect(parse).toHaveBeenCalledTimes(1);
   });
 });
 

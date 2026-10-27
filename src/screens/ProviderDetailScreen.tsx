@@ -1,4 +1,5 @@
 import { ClaimsPanel } from '../components/Claims';
+import { ProviderDataBox } from '../components/ProviderData';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -75,6 +76,7 @@ export function ProviderDetailScreen() {
         </p>
         <SuggestionStatus providerId={provider.id} />
       </div>
+      <ProviderDataBox provider={provider} />
       <div className="flex flex-wrap items-center gap-3">
         <StageControls provider={provider} primaryAdd />
         <Link to={`/dossier/${provider.id}`} className="btn">

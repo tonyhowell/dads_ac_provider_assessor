@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ApplicationSummary, Backend, Catalogue, ClaimsRow } from '../backend';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { ApplicationSummary, Backend, Catalogue, ClaimsRow, PriceCheckRow } from '../backend';
 import type { SeedData } from '../data/load';
 import type { Provider } from '../types';
 import { effectiveProviders } from './reducer';
@@ -9,6 +9,7 @@ import { effectiveProviders } from './reducer';
 
 const POLL_MS = 60_000;
 const CLAIMS_POLL_MS = 8_000;
+const PRICES_POLL_MS = 5_000;
 const CURRENT_KEY = 'sah-assessor:application';
 
 const get = (k: string) => {
@@ -46,6 +47,11 @@ interface SessionValue {
   claims: Map<string, ClaimsRow>;
   claimsMaxAgeDays: number;
   startClaims(applicationId: string, providerId: string, refresh?: boolean): Promise<void>;
+  /** Price reads by provider id (started when a provider is shortlisted); polled while any is running. */
+  priceChecks: Map<string, PriceCheckRow>;
+  /** Looks again soon: call after shortlisting, since the server starts a price read then. */
+  watchPriceChecks(): void;
+  startPriceCheck(applicationId: string, providerId: string): Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -83,6 +89,34 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
     [backend],
   );
 
+  const [priceRows, setPriceRows] = useState<PriceCheckRow[]>([]);
+  const refreshPrices = useCallback(async () => {
+    try {
+      setPriceRows(await backend.listPriceChecks());
+    } catch {
+      /* keep what we have; the next poll retries */
+    }
+  }, [backend]);
+  const pricesRunning = priceRows.filter((r) => r.status === 'running').map((r) => r.provider_id).join(',');
+  useEffect(() => {
+    refreshPrices();
+  }, [refreshPrices]);
+  useEffect(() => {
+    if (!pricesRunning) return;
+    const timer = setInterval(refreshPrices, PRICES_POLL_MS);
+    return () => clearInterval(timer);
+  }, [pricesRunning, refreshPrices]);
+  const watchPriceChecks = useCallback(() => {
+    setTimeout(refreshPrices, 1500);
+  }, [refreshPrices]);
+  const startPriceCheck = useCallback(
+    async (applicationId: string, providerId: string) => {
+      const row = await backend.startPriceCheck(applicationId, providerId);
+      setPriceRows((rows) => [...rows.filter((r) => r.provider_id !== providerId), row]);
+    },
+    [backend],
+  );
+
   const setCatalogue = useCallback((c: Catalogue) => setEdits(c.providers), []);
   const refreshCatalogue = useCallback(async () => {
     try {
@@ -100,6 +134,13 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
       setApplicationsError(err instanceof Error ? err.message : 'Could not load your applications.');
     }
   }, [backend]);
+
+  // When a price read finishes, the catalogue may have new prices.
+  const previousRunning = useRef(pricesRunning);
+  useEffect(() => {
+    if (previousRunning.current && previousRunning.current !== pricesRunning) refreshCatalogue();
+    previousRunning.current = pricesRunning;
+  }, [pricesRunning, refreshCatalogue]);
 
   useEffect(() => {
     refreshCatalogue();
@@ -131,8 +172,11 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
       claims: new Map(claimRows.map((r) => [r.provider_id, r])),
       claimsMaxAgeDays,
       startClaims,
+      priceChecks: new Map(priceRows.map((r) => [r.provider_id, r])),
+      watchPriceChecks,
+      startPriceCheck,
     };
-  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims]);
+  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims, priceRows, watchPriceChecks, startPriceCheck]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

@@ -3,10 +3,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type Anthropic from '@anthropic-ai/sdk';
 import { createPgliteDb, migrate, type Db } from './db.ts';
 import { readFileSync } from 'node:fs';
-import { EnrichmentBusyError, activeRun, addSource, listRuns, listSources, priceChanges, requestCancel, runEnrichment, type EnrichDeps, type PriceList, type RunProgress } from './enrich.ts';
+import { EnrichmentBusyError, activeRun, addSource, readPrices, listRuns, listSources, priceChanges, requestCancel, runEnrichment, type EnrichDeps, type PriceList, type RunProgress } from './enrich.ts';
 import { checkPage, htmlToText, type Fetcher } from './pages.ts';
 import { getClaims } from './claims.ts';
-import { listSuggestions } from './catalogue.ts';
+import { catalogueEdits, listSuggestions } from './catalogue.ts';
 import { UsageTally } from './usage.ts';
 import { loadSeedData } from '../src/data/load.ts';
 import type { Claims, Provider } from '../src/types.ts';
@@ -52,7 +52,7 @@ afterAll(() => db.close());
 beforeEach(async () => {
   web.clear();
   fetches.length = 0;
-  await db.query('TRUNCATE provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs CASCADE');
+  await db.query('TRUNCATE provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs, provider_price_checks, provider_catalogue, provider_history, applications, application_state CASCADE');
 });
 
 describe('price lists', () => {
@@ -307,19 +307,21 @@ describe('progress', () => {
         return fetcher(url, init);
       },
     };
-    const run = await runEnrichment(watched, { trigger: 'admin', parts: ['prices'] });
+    const run = await runEnrichment(watched, { trigger: 'admin', parts: ['prices'], maxResearch: 0 });
     const items = (run.progress as RunProgress).items;
     expect(items.map((i) => [i.label, i.status])).toEqual([
       ['Price list · Bolton Clarke', 'done'],
       ['Price list · Anglicare Southern Queensland', 'failed'],
+      ['Price list · No list', 'done'],
     ]);
+    expect(items[2].outcome).toMatch(/search limit reached/);
     expect(items[0]).toMatchObject({ outcome: 'Read for the first time; prices match the catalogue', error: null });
     expect(items[0].ms).toBeGreaterThanOrEqual(0);
     expect(items[1].error).toEqual({ stage: 'Download', message: 'HTTP 404: page not found — the link may have moved' });
-    expect(run.progress.skipped).toEqual({ claims_current: 0, no_price_list: 1 });
+    expect(run.progress.skipped).toEqual({ claims_current: 0, no_price_list: 0, not_shortlisted: 0 });
     expect(run.progress.eta_seconds).toBe(0);
     // While running, the plan was already saved with an estimate.
-    expect(snapshots[0].items).toHaveLength(2);
+    expect(snapshots[0].items).toHaveLength(3);
     expect(snapshots[0].eta_seconds).toBeGreaterThan(0);
   });
 
@@ -343,5 +345,105 @@ describe('progress', () => {
     expect(statuses.filter((s) => s === 'cancelled').length).toBeGreaterThan(0);
     expect(statuses).not.toContain('running');
     expect(await activeRun(db)).toBeUndefined();
+  });
+});
+
+describe('loaded providers, finding providers and prices on shortlist', () => {
+  const loaded: Provider = {
+    ...bolton,
+    id: 'bayside-care',
+    provider: 'Bayside Care',
+    rn: null,
+    en: null,
+    pc: null,
+    domestic: null,
+    social: null,
+    respite: null,
+    gardening: null,
+    care_mgmt: null,
+    prices_as_at: 'Not read yet',
+    prices_as_at_date: null,
+    flags: [],
+    source_url: null,
+    origin: { kind: 'gen', note: 'qld.xlsx', at: '2026-10-27' },
+  };
+
+  /** A fake web search that "finds" the given pages, then a structuring step returning `parsed`. */
+  function searching(pages: string[], parsed: unknown[]) {
+    const fake = fakeClaude(parsed);
+    fake.stream.mockImplementation(() => ({
+      finalMessage: async () => ({
+        stop_reason: 'end_turn',
+        usage: { ...usage, server_tool_use: { web_search_requests: 1 } },
+        content: [{ type: 'web_search_tool_result', content: pages.map((url) => ({ type: 'web_search_result', url, title: url })) }, { type: 'text', text: 'found some' }],
+      }),
+    }));
+    return fake;
+  }
+
+  it('skips loaded providers in scheduled checks until someone shortlists them', async () => {
+    const fake = fakeClaude([]);
+    const run = await runEnrichment(deps(fake.client, [loaded]), { trigger: 'schedule', parts: ['prices', 'claims'] });
+    expect(run.progress.items).toEqual([]);
+    expect(run.progress.skipped).toMatchObject({ not_shortlisted: 1 });
+
+    await db.query(`INSERT INTO applications (id, name, suburb, postcode, status) VALUES ('a1', 'Dad', 'Wynnum', '4178', 'active')`);
+    await db.query(`INSERT INTO application_state (application_id, version, state) VALUES ('a1', 1, $1::jsonb)`, [JSON.stringify({ selection: [{ provider_id: 'bayside-care', stage: 'scan' }] })]);
+    const later = await runEnrichment(deps(fake.client, [loaded]), { trigger: 'schedule', parts: ['prices'], maxResearch: 0 });
+    expect(later.progress.items!.map((i) => i.label)).toEqual(['Price list · Bayside Care']);
+  });
+
+  it('reads prices straight into the catalogue for a provider that had none, finding its price list first', async () => {
+    const LIST = 'https://bayside.example/pricing.pdf';
+    web.set(LIST, '<p>Personal care $118 per hour. Travel charged at $1/km.</p>');
+    const fake = searching([LIST, 'https://bayside.example/'], [
+      { providers: [{ name: 'Bayside Care', website: 'https://bayside.example/', price_list_url: LIST, evidence_url: LIST, note: '' }] },
+      { ...prices(), rates: { ...prices().rates, rn: null, en: null, pc: 118, domestic: 105, social: null, respite: null, gardening: null, care_mgmt: null }, prices_as_at: '1 October 2026', notes: ['Travel charged at $1/km'] },
+    ]);
+    const res = await readPrices(deps(fake.client, [loaded]), loaded, { usage: new UsageTally(), findMissing: true, takeSearch: () => true });
+    expect(res).toMatchObject({ ok: true, kind: 'applied', outcome: '2 prices read into the catalogue' });
+    expect(fake.stream.mock.calls[0][0]).toMatchObject({ model: 'claude-sonnet-5-5' });
+    const [saved] = (await catalogueEdits(db)).providers;
+    expect(saved).toMatchObject({
+      id: 'bayside-care',
+      source_url: LIST,
+      website: 'https://bayside.example/',
+      pc: 118,
+      domestic: 105,
+      prices_as_at_date: '2026-10-01',
+      flags: ['Travel charged at $1/km'],
+    });
+    expect(saved.prices_as_at).toMatch(/^1 October 2026 \(read automatically on \d{4}-\d{2}-\d{2}\)$/);
+    // No suggestion needed: there were no prices to correct.
+    expect(await listSuggestions(db, { status: 'pending' })).toEqual([]);
+  });
+
+  it('says plainly when no price list can be found', async () => {
+    const fake = searching([], [{ providers: [] }]);
+    expect(await readPrices(deps(fake.client), loaded, { usage: new UsageTally(), findMissing: true, takeSearch: () => true })).toEqual({
+      ok: false,
+      stage: 'Finding the price list',
+      error: 'no published price list was found — ask the provider for one',
+    });
+  });
+
+  it('finds providers in each application area: adds new ones and fills in what known ones are missing', async () => {
+    await db.query(`INSERT INTO applications (id, name, suburb, postcode, status) VALUES ('a2', 'Dad', 'Wynnum', '4178', 'active')`);
+    const fake = searching(['https://newco.example/', 'https://newco.example/prices', 'https://myagedcare.example/newco', 'https://bayside.example/fees'], [
+      {
+        providers: [
+          { name: 'NewCo Home Support', website: 'https://newco.example/', price_list_url: 'https://newco.example/prices', evidence_url: 'https://myagedcare.example/newco', note: '' },
+          { name: 'Bayside Care Pty Ltd', website: null, price_list_url: 'https://bayside.example/fees', evidence_url: 'https://bayside.example/fees', note: '' },
+          { name: 'Made Up Care', website: 'https://never-retrieved.example/', price_list_url: null, evidence_url: 'https://never-retrieved.example/', note: '' },
+        ],
+      },
+    ]);
+    const catalogue = [loaded];
+    const run = await runEnrichment({ ...deps(fake.client), providers: async () => [...catalogue, ...(await catalogueEdits(db)).providers.filter((p) => p.id !== 'bayside-care')] }, { trigger: 'admin', parts: ['discover'] });
+    expect(run.progress.items!.map((i) => [i.label, i.outcome])).toEqual([['Find providers · Wynnum 4178', '2 providers found: 1 new, 1 filled in']]);
+    const edits = (await catalogueEdits(db)).providers;
+    expect(edits.find((p) => p.provider === 'NewCo Home Support')).toMatchObject({ source_url: 'https://newco.example/prices', postcodes_served: ['4178'], origin: { kind: 'search' } });
+    expect(edits.find((p) => p.id === 'bayside-care')).toMatchObject({ source_url: 'https://bayside.example/fees', postcodes_served: ['4178'] });
+    expect(run.stats.discover).toMatchObject({ found: 2, added: 1, updated: 1 });
   });
 });

@@ -67,6 +67,16 @@ export interface ClaimsRow {
   finished_at: string | null;
 }
 
+export interface PriceCheckRow {
+  provider_id: string;
+  status: 'running' | 'done' | 'failed';
+  stage: string | null;
+  outcome: string | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
 export interface Backend {
   listApplications(): Promise<ApplicationSummary[]>;
   getApplication(id: string): Promise<{ application: ApplicationInfo; role: MemberRole }>;
@@ -85,6 +95,9 @@ export interface Backend {
   listClaims(): Promise<{ claims: ClaimsRow[]; max_age_days: number }>;
   /** Starts researching a provider's public claims (runs in the background on the server). */
   startClaims(applicationId: string, providerId: string, refresh: boolean): Promise<ClaimsRow>;
+  /** Price reads started by shortlisting (or by asking again). */
+  listPriceChecks(): Promise<PriceCheckRow[]>;
+  startPriceCheck(applicationId: string, providerId: string): Promise<PriceCheckRow>;
 }
 
 export const httpBackend: Backend = {
@@ -105,4 +118,7 @@ export const httpBackend: Backend = {
   listClaims: () => api('/api/claims'),
   startClaims: async (applicationId, providerId, refresh) =>
     (await api<{ claims: ClaimsRow }>(`/api/applications/${encodeURIComponent(applicationId)}/claims/${encodeURIComponent(providerId)}`, { body: { refresh } })).claims,
+  listPriceChecks: async () => (await api<{ checks: PriceCheckRow[] }>('/api/price-checks')).checks,
+  startPriceCheck: async (applicationId, providerId) =>
+    (await api<{ check: PriceCheckRow }>(`/api/applications/${encodeURIComponent(applicationId)}/prices/${encodeURIComponent(providerId)}`, { body: {} })).check,
 };

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
+import { useSession } from '../state/SessionContext';
 import { benchmarkCard } from '../calc';
 import { bestCombinations, passes, rankForServices, VERDICT_SHORT, type Match, type MatchFilters, type ServiceMatch } from '../matching';
 import { formatAud, formatRate } from '../format';
@@ -396,6 +397,7 @@ function ByService() {
   const phone = usePhone();
   const side = useMinWidth(SIDE_PANEL_MIN);
   const { plan, seed, state, dispatch, canEdit } = useApp();
+  const { watchPriceChecks } = useSession();
   const [params, setParams] = useSearchParams();
   const link = useParamLink();
   const f = useFinderState();
@@ -421,7 +423,10 @@ function ByService() {
   const toggleKey = (k: RateKey) => setKeys(keys.includes(k) ? (keys.length > 1 ? keys.filter((x) => x !== k) : keys) : services.map((i) => i.key).filter((x) => x === k || keys.includes(x)));
   const pick = (key: RateKey, providerId: string | null) => {
     dispatch({ type: 'servicePick/set', key, providerId });
-    if (providerId && !state.selection.some((e) => e.provider_id === providerId)) dispatch({ type: 'selection/add', providerId, at: new Date().toISOString() });
+    if (providerId && !state.selection.some((e) => e.provider_id === providerId)) {
+      dispatch({ type: 'selection/add', providerId, at: new Date().toISOString() });
+      watchPriceChecks();
+    }
   };
 
   if (selected && !side) {

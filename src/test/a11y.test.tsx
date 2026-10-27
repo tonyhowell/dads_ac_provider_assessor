@@ -143,7 +143,7 @@ describe('accessibility (axe)', () => {
     await expectNoViolations();
   }, 20_000);
 
-  const outside = ['/dossier/bolton-clarke', '/about', '/applications', '/admin', '/admin/applications', '/admin/suggestions', '/admin/providers', '/admin/providers/import', '/admin/data-checks', '/admin/providers/bolton-clarke/edit'];
+  const outside = ['/dossier/bolton-clarke', '/about', '/applications', '/admin', '/admin/applications', '/admin/suggestions', '/admin/providers', '/admin/providers/import', '/admin/providers/load', '/admin/data-checks', '/admin/providers/bolton-clarke/edit'];
   it.each(outside)('%s has no violations', async (route) => {
     stubApi();
     await renderApp(route, { server: memoryServer(populated()), waitForNav: false });

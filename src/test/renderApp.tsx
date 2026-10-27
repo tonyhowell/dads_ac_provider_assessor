@@ -5,7 +5,7 @@ import { loadSeedData, type SeedData } from '../data/load';
 import { AuthProvider, type SessionUser } from '../auth/AuthContext';
 import { emptyState, reducer, type AppState } from '../state/reducer';
 import type { StateSync } from '../state/sync';
-import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, MemberRole, Suggestion } from '../backend';
+import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, MemberRole, PriceCheckRow, Suggestion } from '../backend';
 import type { Provider } from '../types';
 import type { AudioStore } from '../storage/audioStore';
 
@@ -58,6 +58,8 @@ export interface MemoryBackend extends Backend {
   suggestions: Suggestion[];
   claimRows: ClaimsRow[];
   claimRequests: { providerId: string; refresh: boolean }[];
+  priceRows: PriceCheckRow[];
+  priceRequests: string[];
 }
 
 /** Stands in for the server: one application (with the given role) and the common catalogue. */
@@ -67,6 +69,15 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
     suggestions: [],
     claimRows: [],
     claimRequests: [],
+    priceRows: [],
+    priceRequests: [],
+    listPriceChecks: async () => backend.priceRows,
+    startPriceCheck: async (_app, providerId) => {
+      backend.priceRequests.push(providerId);
+      const row: PriceCheckRow = { provider_id: providerId, status: 'running', stage: 'Starting', outcome: null, error: null, started_at: new Date().toISOString(), finished_at: null };
+      backend.priceRows = [...backend.priceRows.filter((r) => r.provider_id !== providerId), row];
+      return row;
+    },
     listClaims: async () => ({ claims: backend.claimRows, max_age_days: 60 }),
     startClaims: async (_app, providerId, refresh) => {
       backend.claimRequests.push({ providerId, refresh });

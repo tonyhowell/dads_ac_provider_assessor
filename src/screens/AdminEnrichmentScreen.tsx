@@ -11,7 +11,7 @@ import { Icon } from '../components/ui/Icon';
 // Site administration → Data checks: run the enrichment service, see what each run did and cost, and manage
 // the extra sources it reads. Price changes it finds arrive as suggested corrections for approval.
 
-type Part = 'prices' | 'sources' | 'claims';
+type Part = 'discover' | 'prices' | 'sources' | 'claims';
 
 type ItemStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -34,13 +34,14 @@ interface Run {
   trigger: 'schedule' | 'admin' | 'cli';
   status: 'running' | 'done' | 'failed' | 'cancelled';
   stats: {
-    prices?: { checked: number; unchanged: number; changed: number; errors: number; suggestions: number; matched: number };
+    discover?: { found: number; added: number; updated: number; failed: number };
+    prices?: { checked: number; unchanged: number; changed: number; errors: number; suggestions: number; matched: number; applied?: number };
     sources?: { checked: number; unchanged: number; changed: number; errors: number; summarised: number };
     claims?: { due: number; revalidated: number; reread: number; researched: number; deferred: number; failed: number };
   };
   usage: { estimated_cost_usd?: number; models?: Record<string, { requests: number; input_tokens: number; output_tokens: number; web_searches: number }> };
   log: string[];
-  progress: { items?: RunItem[]; eta_seconds?: number | null; skipped?: { claims_current: number; no_price_list: number }; updated_at?: string };
+  progress: { items?: RunItem[]; eta_seconds?: number | null; skipped?: { claims_current: number; no_price_list: number; not_shortlisted?: number }; updated_at?: string };
   cancel_requested: boolean;
   error: string | null;
   started_at: string;
@@ -74,7 +75,11 @@ interface View {
 }
 
 const PART_LABELS: Record<Part, { label: string; hint: string }> = {
-  prices: { label: 'Price lists', hint: "Each provider's published price page. Changed prices become suggested corrections." },
+  discover: {
+    label: 'Find providers near each application',
+    hint: "Claude searches the web and My Aged Care for providers serving each application's postcode, adds new ones and fills in missing websites and price lists. One search per area, from the search limit below.",
+  },
+  prices: { label: 'Price lists', hint: "Shortlisted and hand-added providers. Missing price lists are searched for; changed prices become suggested corrections." },
   sources: { label: 'Extra sources', hint: 'The pages listed below. Changes are summarised here.' },
   claims: { label: 'Public claims older than 60 days', hint: 'Re-checks the pages claims came from; searches the web only when needed.' },
 };
@@ -104,8 +109,10 @@ const usd = (n: number | undefined) => (n === undefined ? '—' : n < 0.01 ? 'un
 
 function runSummary(r: Run): string {
   const parts: string[] = [];
+  const d = r.stats.discover;
+  if (d && (d.found || d.failed)) parts.push(`finding providers: ${d.found} found, ${d.added} new, ${d.updated} filled in`);
   const p = r.stats.prices;
-  if (p) parts.push(`price lists: ${p.checked} checked, ${p.changed} changed, ${p.suggestions} suggestion${p.suggestions === 1 ? '' : 's'}`);
+  if (p) parts.push(`price lists: ${p.checked} checked, ${p.changed} changed${p.applied ? `, ${p.applied} read into the catalogue` : ''}, ${p.suggestions} suggestion${p.suggestions === 1 ? '' : 's'}`);
   const s = r.stats.sources;
   if (s && s.checked) parts.push(`sources: ${s.checked} checked, ${s.changed} changed`);
   const c = r.stats.claims;
@@ -195,7 +202,7 @@ export function AdminEnrichmentScreen() {
             </label>
           ))}
         </fieldset>
-        <Field label="Most full web searches this run" hint="Each costs more than everything else in a run together. Providers over the limit wait for the next run.">
+        <Field label="Most web searches this run" hint="Finding providers, finding a missing price list and a full public-claims search each use one. Each costs more than everything else in a run together; anything over the limit waits for the next run.">
           {({ id, describedBy }) => (
             <input id={id} aria-describedby={describedBy} type="number" min={0} max={20} className="input max-w-[8rem]" value={maxResearch} onChange={(e) => setMaxResearch(Math.max(0, Math.min(20, Number(e.target.value) || 0)))} />
           )}
@@ -350,7 +357,7 @@ function Sources({ sources, reload, onError }: { sources: Source[]; reload: () =
   );
 }
 
-const PART_SHORT: Record<Part, string> = { prices: 'Price lists', sources: 'Extra sources', claims: 'Public claims' };
+const PART_SHORT: Record<Part, string> = { discover: 'Finding providers', prices: 'Price lists', sources: 'Extra sources', claims: 'Public claims' };
 
 function counts(items: RunItem[]) {
   const c = { total: items.length, done: 0, failed: 0, running: 0, queued: 0, cancelled: 0 };
@@ -415,7 +422,7 @@ function LiveRun({ run, reload, onError }: { run: Run; reload: () => Promise<voi
       </div>
 
       <div className="grid gap-2 md:grid-cols-3">
-        {(['prices', 'sources', 'claims'] as Part[]).map((part) => {
+        {(['discover', 'prices', 'sources', 'claims'] as Part[]).map((part) => {
           const mine = counts(items.filter((i) => i.part === part));
           if (!mine.total) return null;
           return (
@@ -456,10 +463,11 @@ function LiveRun({ run, reload, onError }: { run: Run; reload: () => Promise<voi
           <ItemTable items={problems} />
         </div>
       )}
-      {(run.progress.skipped?.claims_current || run.progress.skipped?.no_price_list) ? (
+      {(run.progress.skipped?.claims_current || run.progress.skipped?.no_price_list || run.progress.skipped?.not_shortlisted) ? (
         <p className="small">
           Not needed this time:{' '}
           {[
+            run.progress.skipped?.not_shortlisted && `${run.progress.skipped.not_shortlisted} loaded provider${run.progress.skipped.not_shortlisted === 1 ? " isn't" : "s aren't"} shortlisted yet`,
             run.progress.skipped?.claims_current && `${run.progress.skipped.claims_current} provider${run.progress.skipped.claims_current === 1 ? "'s" : "s'"} public claims ${run.progress.skipped.claims_current === 1 ? 'are' : 'are'} still current`,
             run.progress.skipped?.no_price_list && `${run.progress.skipped.no_price_list} provider${run.progress.skipped.no_price_list === 1 ? ' has' : 's have'} no price list link`,
           ]

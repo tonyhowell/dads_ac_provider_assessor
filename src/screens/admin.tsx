@@ -528,6 +528,9 @@ export function AdminProvidersScreen() {
         <Link to="/admin/providers/import" className="btn">
           Import a spreadsheet
         </Link>
+        <Link to="/admin/providers/load" className="btn">
+          Load from the government list
+        </Link>
       </div>
       {noArea > 0 && (
         <ResolutionCard
