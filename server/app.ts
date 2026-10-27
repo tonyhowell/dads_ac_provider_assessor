@@ -59,7 +59,10 @@ import { loadSeedData } from '../src/data/load.ts';
 import { ActionSchema } from '../src/state/actions.ts';
 import { generateInterviewNotes, NotesError, NotesRequestSchema } from './interviewNotes.ts';
 import { generateLookingForSummary, summaryInput } from './lookingFor.ts';
-import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, listClaims, researchClaims } from './claims.ts';
+import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, getClaims, listClaims } from './claims.ts';
+import { addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, listSources, refreshClaims, removeSource, runEnrichment, updateSource, type EnrichDeps } from './enrich.ts';
+import { listPages, type Fetcher } from './pages.ts';
+import { UsageTally } from './usage.ts';
 
 export type WebAuthn = Pick<
   typeof simpleWebAuthn,
@@ -73,8 +76,10 @@ export interface AppDeps {
   webauthn?: WebAuthn;
   /** Returns a Claude client, or throws NotesError when notes aren't configured. */
   getAnthropic?: () => Anthropic;
-  /** Receives background work (public-claims searches) so tests can wait for it. */
+  /** Receives background work (public-claims searches, data checks) so tests can wait for it. */
   background?: (work: Promise<void>) => void;
+  /** How data checks fetch pages. Injected so tests never touch the network. */
+  fetcher?: Fetcher;
 }
 
 type Env = { Variables: { user: User; app: Application; role: MemberRole } };
@@ -107,7 +112,7 @@ function rateLimit(max: number, windowMs: number): MiddlewareHandler {
   };
 }
 
-export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic, background = () => {} }: AppDeps) {
+export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic, background = () => {}, fetcher }: AppDeps) {
   const app = new Hono<Env>();
   const seed = loadSeedData();
   const cookieOpts = { httpOnly: true, secure: config.production, sameSite: 'Lax' as const, path: '/' };
@@ -447,13 +452,14 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     const provider = (await currentProviders()).find((p) => p.id === c.req.param('providerId'));
     if (!provider) return c.json({ error: 'Provider not found.' }, 404);
     if (!getAnthropic) return c.json({ error: 'Research is not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const before = await getClaims(db, provider.id);
     const { row, start } = await claimSearch(db, provider.id, c.get('user').id, body.refresh);
     if (start) {
-      const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
       background(
         (async () => {
           try {
-            await finishSearch(db, provider.id, { claims: await researchClaims(getAnthropic(), provider, topics) });
+            // "Check again" forces a full search; otherwise the cheapest way that keeps the claims current.
+            await refreshClaims(enrichDeps(), provider, before, { force: body.refresh, allowResearch: true, usage: new UsageTally() });
           } catch (err) {
             if (!(err instanceof NotesError)) console.error('[claims]', provider.id, err);
             await finishSearch(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error researching this provider.' });
@@ -472,6 +478,14 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
 
   const seedProviders = seed.providers;
   const currentProviders = async () => effectiveProviders(seedProviders, (await catalogueEdits(db)).providers);
+  const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
+  const enrichDeps = (): EnrichDeps => ({
+    db,
+    getAnthropic: getAnthropic ?? (() => { throw new NotesError(503, 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.'); }),
+    providers: currentProviders,
+    topics,
+    fetcher,
+  });
 
   app.get('/api/providers', requireUser, async (c) => c.json(await catalogueEdits(db)));
 
@@ -584,6 +598,38 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     if (result === 'decided') return c.json({ error: 'Someone has already decided this suggestion.' }, 409);
     return c.json({ suggestion: result, ...(await catalogueEdits(db)) });
   });
+
+  // Data enrichment: price lists, extra sources and public claims, checked for changes.
+  admin.get('/enrichment', async (c) => {
+    const [runs, sources, pages] = await Promise.all([listRuns(db), listSources(db), listPages(db)]);
+    return c.json({ runs, sources, pages, configured: !!getAnthropic, schedule_hours: config.enrichEveryHours ?? null });
+  });
+  admin.post('/enrichment/run', async (c) => {
+    const body = await parse(c, z.object({ parts: z.array(z.enum(ENRICH_PARTS as [string, ...string[]])).min(1).optional(), max_research: z.number().int().min(0).max(20).optional() }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const running = (await listRuns(db, 1)).find((r) => r.status === 'running' && Date.now() - new Date(r.started_at).getTime() < 3 * 3_600_000);
+    if (running) return c.json({ error: 'A data check is already running.' }, 409);
+    background(
+      runEnrichment(enrichDeps(), { trigger: 'admin', parts: body.parts as typeof ENRICH_PARTS | undefined, maxResearch: body.max_research ?? config.enrichMaxResearch })
+        .then(() => undefined)
+        .catch((err) => {
+          if (!(err instanceof EnrichmentBusyError)) console.error('[enrich]', err);
+        }),
+    );
+    return c.json({ started: true }, 202);
+  });
+  admin.post('/enrichment/sources', async (c) => {
+    const body = await parse(c, z.object({ name: z.string().trim().min(1).max(200), url: z.url().max(2000).refine((u) => /^https?:\/\//.test(u), 'Use a web address'), note: z.string().max(1000).default('') }));
+    if (body instanceof Response) return body;
+    return c.json({ source: await addSource(db, body, c.get('user').id) }, 201);
+  });
+  admin.patch('/enrichment/sources/:id', async (c) => {
+    const body = await parse(c, z.object({ active: z.boolean() }));
+    if (body instanceof Response) return body;
+    return (await updateSource(db, c.req.param('id'), body)) ? c.json({ ok: true }) : c.json({ error: 'Source not found.' }, 404);
+  });
+  admin.delete('/enrichment/sources/:id', async (c) => ((await removeSource(db, c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'Source not found.' }, 404)));
 
   admin.post('/users', async (c) => {
     const body = await parse(

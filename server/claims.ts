@@ -2,14 +2,22 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { Db, Queryable } from './db.ts';
 import { ClaimsSchema } from '../src/schemas.ts';
-import type { Claims, Provider } from '../src/types.ts';
-import { MODEL, NotesError } from './interviewNotes.ts';
+import type { Claims, ClaimItem, Provider } from '../src/types.ts';
+import { NotesError } from './interviewNotes.ts';
+import { EXTRACT_MODEL, RESEARCH_MODEL, UsageTally } from './usage.ts';
+import { z } from 'zod';
+import { ClaimItemSchema } from '../src/schemas.ts';
+import type { PageContent } from './pages.ts';
 
 // What each provider says publicly about the interview topics. Researched by Claude with web search and
 // web fetch, then structured in a second step that keeps only links the search actually returned.
-// Public information, so one result serves every application; searched again after 60 days or on request.
+// Public information, so one result serves every application; checked again after 60 days or on request.
+// A check after 60 days first re-reads the pages the claims came from (see enrich.ts): unchanged pages
+// keep their claims, changed pages are re-read, and a full web search runs only when needed.
 
 export const CLAIMS_MAX_AGE_DAYS = 60;
+/** A full web search runs at least this often, to find pages the earlier search didn't. */
+export const FULL_RESEARCH_DAYS = 180;
 /** A search still "running" after this long died with a server restart; it can be started again. */
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 
@@ -20,6 +28,8 @@ export interface ClaimsRow {
   error: string | null;
   started_at: string;
   finished_at: string | null;
+  /** When the last full web search finished; revalidations don't change it. */
+  researched_at: string | null;
 }
 
 export interface Topic {
@@ -35,6 +45,7 @@ const toRow = (r: Record<string, unknown>): ClaimsRow => ({
   error: (r.error as string | null) ?? null,
   started_at: iso(r.started_at)!,
   finished_at: iso(r.finished_at),
+  researched_at: iso(r.researched_at) ?? null,
 });
 
 export async function listClaims(db: Queryable): Promise<ClaimsRow[]> {
@@ -54,7 +65,7 @@ const isRunning = (row: ClaimsRow, now = Date.now()) => row.status === 'running'
  * Starts a search unless a fresh result exists (and no refresh was asked for) or one is already running.
  * Returns the row as it now stands and whether the caller should run the search.
  */
-export async function claimSearch(db: Db, providerId: string, userId: string, refresh: boolean): Promise<{ row: ClaimsRow; start: boolean }> {
+export async function claimSearch(db: Db, providerId: string, userId: string | null, refresh: boolean): Promise<{ row: ClaimsRow; start: boolean }> {
   return db.transaction(async (tx) => {
     await tx.query(`INSERT INTO provider_claims (provider_id, status, requested_by, started_at) VALUES ($1, 'failed', $2, now()) ON CONFLICT (provider_id) DO NOTHING`, [providerId, userId]);
     const [locked] = await tx.query('SELECT * FROM provider_claims WHERE provider_id = $1 FOR UPDATE', [providerId]);
@@ -69,13 +80,22 @@ export async function claimSearch(db: Db, providerId: string, userId: string, re
   });
 }
 
-export async function finishSearch(db: Queryable, providerId: string, result: { claims: Claims } | { error: string }): Promise<void> {
+export async function finishSearch(db: Queryable, providerId: string, result: { claims: Claims; researched?: boolean } | { error: string }): Promise<void> {
   if ('claims' in result) {
-    await db.query(`UPDATE provider_claims SET status = 'ready', claims = $2::jsonb, error = NULL, finished_at = now() WHERE provider_id = $1`, [providerId, JSON.stringify(result.claims)]);
+    await db.query(
+      `UPDATE provider_claims SET status = 'ready', claims = $2::jsonb, error = NULL, finished_at = now(), researched_at = CASE WHEN $3 THEN now() ELSE researched_at END WHERE provider_id = $1`,
+      [providerId, JSON.stringify(result.claims), !!result.researched],
+    );
   } else {
     // A failed refresh keeps the previous claims, so the family still sees what was found before.
     await db.query(`UPDATE provider_claims SET status = 'failed', error = $2, finished_at = now() WHERE provider_id = $1`, [providerId, result.error]);
   }
+}
+
+/** Puts back a row the runner locked but didn't search (no research budget left this run). */
+export async function releaseSearch(db: Queryable, providerId: string, before: ClaimsRow | undefined): Promise<void> {
+  if (!before) await db.query('DELETE FROM provider_claims WHERE provider_id = $1 AND claims IS NULL', [providerId]);
+  else await db.query('UPDATE provider_claims SET status = $2, started_at = $3 WHERE provider_id = $1', [before.provider_id, before.status, before.started_at]);
 }
 
 const RESEARCH_SYSTEM = `You research what an Australian Support at Home (aged care) provider says publicly about itself, for a family preparing to interview it. Search the web and read the provider's own pages first (website, service pages, price list, policies, veterans or DVA pages), then reputable third-party sources (My Aged Care listings, the Aged Care Quality and Safety Commission, news).
@@ -105,7 +125,7 @@ function apiError(err: unknown): never {
 }
 
 /** Researches one provider. `client` is injected so tests can use a fake. */
-export async function researchClaims(client: Anthropic, provider: Provider, topics: Topic[]): Promise<Claims> {
+export async function researchClaims(client: Anthropic, provider: Provider, topics: Topic[], usage = new UsageTally()): Promise<Claims> {
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: researchPrompt(provider, topics) }];
   const seen = new Map<string, string>();
   let notes = '';
@@ -114,7 +134,7 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
     for (let turn = 0; turn < 5; turn++) {
       const message = await client.beta.messages
         .stream({
-          model: MODEL,
+          model: RESEARCH_MODEL,
           max_tokens: 32000,
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
@@ -127,6 +147,7 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
           messages,
         })
         .finalMessage();
+      usage.add(RESEARCH_MODEL, message.usage);
       for (const block of message.content) {
         if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
           for (const r of block.content) if (r.type === 'web_search_result') seen.set(normalise(r.url), r.title ?? r.url);
@@ -149,10 +170,8 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
   let structured;
   try {
     structured = await client.beta.messages.parse({
-      model: MODEL,
+      model: EXTRACT_MODEL,
       max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
       output_config: { effort: 'low', format: betaZodOutputFormat(ClaimsSchema) },
       system: STRUCTURE_SYSTEM,
       messages: [
@@ -165,6 +184,7 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
   } catch (err) {
     apiError(err);
   }
+  usage.add(EXTRACT_MODEL, structured.usage);
   if (structured.stop_reason === 'refusal') throw new NotesError(422, 'The research service declined to structure these claims.');
   if (!structured.parsed_output) throw new NotesError(502, 'The research came back incomplete. Try again later.');
   const ids = new Set(topics.map((t) => t.id));
@@ -172,3 +192,43 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
   // Keep only claims about known topics with a link the search actually returned.
   return { ...claims, items: claims.items.filter((i) => ids.has(i.question_id) && seen.has(normalise(i.source_url))) };
 }
+
+const REREAD_SYSTEM = `You read pages from an Australian Support at Home (aged care) provider's website and list what the provider claims about each interview topic you're given. Report only what the page text says, with a short exact quote and the page's URL. Say whether the claim fully answers the topic ("stated") or only partly ("partly"). If a page says nothing about a topic, leave it out. Never infer or use general knowledge.`;
+
+const RereadSchema = z.object({ items: z.array(ClaimItemSchema).max(200) });
+
+/**
+ * Re-reads pages that changed since the claims were found, with the cheap extraction model, and returns
+ * the claims they now support. Claims from unchanged pages are kept by the caller.
+ */
+export async function rereadClaimPages(client: Anthropic, provider: Provider, topics: Topic[], pages: { url: string; content: PageContent }[], usage = new UsageTally()): Promise<ClaimItem[]> {
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [
+    { type: 'text', text: `Provider: ${provider.provider}\n\nInterview topics (id: topic):\n${topics.map((t) => `${t.id}: ${t.text}`).join('\n')}` },
+  ];
+  for (const p of pages) {
+    if (p.content.kind === 'pdf') {
+      content.push({ type: 'text', text: `Page URL: ${p.url}` }, { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.content.data } });
+    } else {
+      content.push({ type: 'text', text: `<page url="${p.url}">\n${p.content.text.slice(0, 200_000)}\n</page>` });
+    }
+  }
+  let result;
+  try {
+    result = await client.beta.messages.parse({
+      model: EXTRACT_MODEL,
+      max_tokens: 16000,
+      output_config: { effort: 'low', format: betaZodOutputFormat(RereadSchema) },
+      system: REREAD_SYSTEM,
+      messages: [{ role: 'user', content }],
+    });
+  } catch (err) {
+    apiError(err);
+  }
+  usage.add(EXTRACT_MODEL, result.usage);
+  if (result.stop_reason === 'refusal' || !result.parsed_output) throw new NotesError(502, 'Could not re-read the changed pages.');
+  const ids = new Set(topics.map((t) => t.id));
+  const urls = new Set(pages.map((p) => normalise(p.url)));
+  return result.parsed_output.items.filter((i) => ids.has(i.question_id) && urls.has(normalise(i.source_url)));
+}
+
+export { normalise as normaliseUrl };

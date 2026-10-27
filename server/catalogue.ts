@@ -93,7 +93,7 @@ const toSuggestion = (r: Record<string, unknown>): Suggestion => ({
 
 export async function createSuggestion(
   db: Queryable,
-  input: { current: Provider | null; proposed: Provider; note: string; applicationId: string; userId: string },
+  input: { current: Provider | null; proposed: Provider; note: string; applicationId: string | null; userId: string | null },
 ): Promise<Suggestion> {
   const id = randomUUID();
   await db.query(
@@ -141,7 +141,7 @@ export async function decideSuggestion(
     if (s.status !== 'pending') return 'decided';
     if (decision.approve) {
       const provider = { ...(decision.provider ?? s.proposed), id: s.provider_id };
-      await upsertCatalogue(tx, provider, adminId, `Approved suggestion from ${s.suggested_by ?? 'a family member'}${s.application_name ? ` (${s.application_name})` : ''}`);
+      await upsertCatalogue(tx, provider, adminId, `Approved suggestion from ${s.suggested_by ?? (s.application_id ? 'a family member' : 'the automatic price check')}${s.application_name ? ` (${s.application_name})` : ''}`);
     }
     await tx.query('UPDATE provider_suggestions SET status = $2, decided_by = $3, decision_note = $4, decided_at = now() WHERE id = $1', [
       id,

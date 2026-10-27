@@ -8,6 +8,7 @@ export const testConfig: Config = {
   rpID: 'assessor.example.test',
   rpName: 'Provider Assessor',
   dataDir: '',
+  enrichMaxResearch: 3,
   production: true,
 };
 

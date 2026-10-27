@@ -45,6 +45,9 @@ export function AdminLayout() {
         <NavLink to="/admin/providers" className={tab}>
           <Icon name="dollar" size={20} /> Provider catalogue
         </NavLink>
+        <NavLink to="/admin/data-checks" className={tab}>
+          <Icon name="search" size={20} /> Data checks
+        </NavLink>
       </nav>
       <Outlet />
     </section>
@@ -449,7 +452,7 @@ function SuggestionCard({ s, onDecide }: { s: Suggestion; onDecide: (approve: bo
         <div>
           <h2 className="text-[1.2rem]">{s.proposed.provider}</h2>
           <p className="small">
-            From {s.suggested_by ?? 'a family member'}
+            From {s.suggested_by ?? (s.application_id ? 'a family member' : 'the automatic price check')}
             {s.application_name && ` (${s.application_name})`} · {formatDateTime(s.created_at)}
           </p>
         </div>

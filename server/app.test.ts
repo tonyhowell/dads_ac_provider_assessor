@@ -11,7 +11,10 @@ import { moveLegacyState } from './state.ts';
 let db: Db;
 let getAnthropic: (() => Anthropic) | undefined;
 const jobs: Promise<void>[] = [];
-const app = () => createApp({ db, config: testConfig, webauthn: fakeWebAuthn(), getAnthropic, background: (w) => void jobs.push(w) }) as never;
+/** Pages the fake web serves; anything else is a 404. Tests never touch the network. */
+const web = new Map<string, string>();
+const fetcher = async (url: string) => (web.has(url) ? new Response(web.get(url), { headers: { 'content-type': 'text/html' } }) : new Response('Not found', { status: 404 }));
+const app = () => createApp({ db, config: testConfig, webauthn: fakeWebAuthn(), getAnthropic, background: (w) => void jobs.push(w), fetcher }) as never;
 
 beforeAll(async () => {
   db = await createPgliteDb();
@@ -20,8 +23,9 @@ beforeAll(async () => {
 afterAll(() => db.close());
 beforeEach(async () => {
   getAnthropic = undefined;
+  web.clear();
   await db.query(
-    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims CASCADE',
+    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs CASCADE',
   );
 });
 
@@ -49,7 +53,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4]);
   });
 });
 
@@ -542,6 +546,33 @@ describe('public claims', () => {
     await admin.post(`/api/applications/${id}/claims/carers-link`, {});
     await Promise.all(jobs.splice(0));
     expect((await admin.get('/api/claims')).json.claims[0]).toMatchObject({ provider_id: 'carers-link', status: 'failed', error: expect.stringMatching(/declined/) });
+  });
+});
+
+describe('data enrichment (admin)', () => {
+  it('lets site admins add sources and start a check, and no one else', async () => {
+    const parse = vi.fn().mockResolvedValue({ stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 }, parsed_output: { summary: 'A register.', mentions: [] } });
+    getAnthropic = () => ({ beta: { messages: { parse } } }) as unknown as Anthropic;
+    const { agent: admin, app: a } = await enrolled();
+    const { agent: sam } = await enrolled(a, 'sam', 'member');
+    expect((await sam.get('/api/admin/enrichment')).status).toBe(403);
+
+    const added = await admin.post('/api/admin/enrichment/sources', { name: 'Register', url: 'https://register.example/list', note: 'Who is registered' });
+    expect(added.status).toBe(201);
+    expect((await admin.post('/api/admin/enrichment/sources', { name: 'Bad', url: 'ftp://x.example' })).status).toBe(400);
+    web.set('https://register.example/list', '<p>Bolton Clarke is registered</p>');
+    expect((await admin.post('/api/admin/enrichment/run', { parts: ['sources'] })).status).toBe(202);
+    await Promise.all(jobs.splice(0));
+
+    const view = (await admin.get('/api/admin/enrichment')).json;
+    expect(view.configured).toBe(true);
+    expect(view.runs[0]).toMatchObject({ trigger: 'admin', status: 'done', stats: { sources: { checked: 1, summarised: 1 } } });
+    expect(view.sources[0]).toMatchObject({ name: 'Register', summary: { summary: 'A register.' } });
+    expect(view.pages.map((p: { url: string }) => p.url)).toEqual(['https://register.example/list']);
+
+    expect((await admin.patch(`/api/admin/enrichment/sources/${added.json.source.id}`, { active: false })).status).toBe(200);
+    expect((await admin.delete(`/api/admin/enrichment/sources/${added.json.source.id}`)).status).toBe(200);
+    expect((await admin.get('/api/admin/enrichment')).json.sources).toEqual([]);
   });
 });
 

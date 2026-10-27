@@ -18,6 +18,8 @@ Set these on the app service (Variables tab):
 | `APP_ORIGIN` | `https://assessor.quantivate.com.au` |
 | `BOOTSTRAP_ADMIN_USERNAME` | your username, e.g. `tony` |
 | `ANTHROPIC_API_KEY` | your Claude API key (needed to draft interview notes) |
+| `ENRICH_EVERY_HOURS` | optional: run the data check automatically, e.g. `24` |
+| `ENRICH_MAX_RESEARCH` | optional: most full web searches per scheduled check (default `3`) |
 
 `NODE_ENV=production` is set by `npm start`. Railway sets `PORT`.
 
@@ -49,6 +51,12 @@ npm run admin:enrol -- tony "Tony"
 ```
 
 It prints a fresh one-time link and re-enables the user if they were disabled.
+
+## Data checks (enrichment)
+
+The data check keeps provider prices and public claims current. Run it from **Site administration → Data checks**, on a schedule with `ENRICH_EVERY_HOURS`, or from the command line (`npm run enrich -- --only prices,claims --max-research 2`), for example as a Railway cron service with the same `DATABASE_URL` and `ANTHROPIC_API_KEY`. Only one check runs at a time.
+
+Cost is kept low by doing the cheap things first: every page is fetched and compared with its last content hash (no Claude call); only changed pages are read, by Claude Haiku 5.5; Claude Sonnet 5.5 searches the web only for claims that can't be confirmed from their pages, at most `ENRICH_MAX_RESEARCH` per run. Each run records its token use and an estimated cost.
 
 ## Data
 

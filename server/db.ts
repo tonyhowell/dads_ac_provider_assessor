@@ -196,6 +196,44 @@ const MIGRATIONS: string[] = [
     finished_at timestamptz
   )
   `,
+  // v4: data enrichment. Pages we check for changes (by content hash), extra sources the admins add, and a log of runs.
+  `
+  CREATE TABLE source_pages (
+    url text PRIMARY KEY,
+    content_hash text,
+    etag text,
+    last_modified text,
+    http_status integer,
+    error text,
+    checked_at timestamptz,
+    changed_at timestamptz
+  );
+  CREATE TABLE enrichment_sources (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    url text NOT NULL,
+    note text NOT NULL DEFAULT '',
+    active boolean NOT NULL DEFAULT true,
+    summary jsonb,
+    summary_at timestamptz,
+    created_by text REFERENCES users(id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE enrichment_runs (
+    id text PRIMARY KEY,
+    trigger text NOT NULL,
+    status text NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+    stats jsonb NOT NULL DEFAULT '{}'::jsonb,
+    usage jsonb NOT NULL DEFAULT '{}'::jsonb,
+    log jsonb NOT NULL DEFAULT '[]'::jsonb,
+    error text,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+  );
+  CREATE INDEX enrichment_runs_started_idx ON enrichment_runs(started_at);
+  ALTER TABLE provider_claims ADD COLUMN researched_at timestamptz;
+  UPDATE provider_claims SET researched_at = finished_at WHERE status = 'ready'
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

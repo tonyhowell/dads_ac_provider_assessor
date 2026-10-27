@@ -6,6 +6,10 @@ import { openDb } from './openDb.ts';
 import { createApp } from './app.ts';
 import { NotesError } from './interviewNotes.ts';
 import { countUsers, createUser, issueEnrolment } from './users.ts';
+import { EnrichmentBusyError, runEnrichment } from './enrich.ts';
+import { effectiveProviders } from '../src/state/reducer.ts';
+import { loadSeedData } from '../src/data/load.ts';
+import { catalogueEdits } from './catalogue.ts';
 
 const config = loadConfig();
 const db = await openDb(config);
@@ -36,6 +40,31 @@ app.get('*', serveStatic({ root: './dist', path: 'index.html' }));
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`Provider Assessor listening on port ${info.port} (${config.origin})`);
 });
+
+// Scheduled data check (ENRICH_EVERY_HOURS). It only spends tokens on pages that changed, so a daily run is cheap.
+if (config.enrichEveryHours && config.anthropicApiKey) {
+  const seed = loadSeedData();
+  const deps = {
+    db,
+    getAnthropic: () => (anthropic ??= new Anthropic({ apiKey: config.anthropicApiKey })),
+    providers: async () => effectiveProviders(seed.providers, (await catalogueEdits(db)).providers),
+    topics: seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text }))),
+  };
+  const tick = async () => {
+    try {
+      const run = await runEnrichment(deps, { trigger: 'schedule', maxResearch: config.enrichMaxResearch });
+      console.log(`[enrich] ${run.status}: ${JSON.stringify(run.stats)} · est. US$${'estimated_cost_usd' in run.usage ? run.usage.estimated_cost_usd : 0}`);
+    } catch (err) {
+      if (!(err instanceof EnrichmentBusyError)) console.error('[enrich]', err);
+    }
+  };
+  // First run 10 minutes after start, so a deploy doesn't pay for a check straight away.
+  setTimeout(() => {
+    void tick();
+    setInterval(() => void tick(), config.enrichEveryHours! * 3_600_000).unref();
+  }, 10 * 60_000).unref();
+  console.log(`[enrich] Data check every ${config.enrichEveryHours} hours.`);
+}
 
 const shutdown = async () => {
   await db.close();

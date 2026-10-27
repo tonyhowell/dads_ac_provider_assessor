@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "admin:enrol": "tsx --env-file-if-exists=.env server/cli/enrol.ts",
+    "enrich": "tsx --env-file-if-exists=.env server/cli/enrich.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

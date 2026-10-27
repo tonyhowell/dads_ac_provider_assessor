@@ -109,6 +109,17 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
 - The old alphabetical list is still under "Look up a provider by name".
 - State v8 adds the per-service picks.
 
+### Data checks (enrichment)
+- **Site administration → Data checks** runs the enrichment service; it can also run on a schedule (`ENRICH_EVERY_HOURS`) or from the command line (`npm run enrich`). See `server/enrich.ts`.
+- **Price lists:** each provider's published price page is fetched and compared with its last content hash. Only a changed page is read by Claude Haiku 5.5. Prices that differ from the catalogue by 50c or more, or a newer "prices as at" date, become a suggested correction for a site admin to approve. Nothing changes automatically.
+- **Extra sources:** admins add public pages to watch (registers, government lists, notices). When one changes, Haiku summarises what it says about catalogue providers.
+- **Public claims after 60 days**, cheapest first:
+  - re-fetch the pages the claims came from; if none changed, the claims are confirmed as current with no model call;
+  - if some changed, Haiku re-reads only those pages;
+  - a full web search (Claude Sonnet 5.5) runs only the first time, when pages are gone, or when the last full search is 180+ days old, and at most `ENRICH_MAX_RESEARCH` (default 3) per run;
+  - "Check again" on a provider page still forces a full search.
+- Each run records what it did, token use by model and an estimated cost. Only one run at a time; a page that couldn't be read is retried next run.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

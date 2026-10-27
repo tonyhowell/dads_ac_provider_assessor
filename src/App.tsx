@@ -26,6 +26,7 @@ import { AppProvider } from './state/AppContext';
 import { HelpProvider } from './components/ui/HelpPanel';
 import { AboutScreen } from './screens/AboutScreen';
 import { DossierScreen } from './screens/DossierScreen';
+import { AdminEnrichmentScreen } from './screens/AdminEnrichmentScreen';
 import type { SeedData } from './data/load';
 import type { ApplicationInfo, Backend, MemberRole } from './backend';
 import { SessionProvider, useSession } from './state/SessionContext';
@@ -70,6 +71,7 @@ function SignedIn({ isAdmin, audio }: { isAdmin: boolean; audio: AudioStore }) {
             <Route path="applications" element={<AdminApplicationsScreen />} />
             <Route path="suggestions" element={<AdminSuggestionsScreen />} />
             <Route path="providers" element={<AdminProvidersScreen />} />
+            <Route path="data-checks" element={<AdminEnrichmentScreen />} />
             <Route path="providers/new" element={<ProviderFormScreen />} />
             <Route path="providers/import" element={<ProviderImportScreen />} />
             <Route path="providers/:id/edit" element={<ProviderFormScreen />} />

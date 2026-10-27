@@ -66,6 +66,20 @@ function stubApi() {
     '/api/admin/applications': {
       applications: [{ id: 'app-1', name: 'Dad', suburb: 'Wynnum', postcode: '4178', status: 'active', created_at: AT, updated_at: AT, last_activity: AT, members: 2, coordinators: [{ user_id: 'u1', display_name: 'Alex', username: 'alex' }] }],
     },
+    '/api/admin/enrichment': {
+      configured: true,
+      schedule_hours: 24,
+      runs: [
+        {
+          id: 'r1', trigger: 'schedule', status: 'done', error: null, started_at: AT, finished_at: AT,
+          stats: { prices: { checked: 4, unchanged: 3, changed: 1, errors: 0, suggestions: 1, matched: 0 }, claims: { due: 2, revalidated: 1, reread: 0, researched: 1, deferred: 0, failed: 0 } },
+          usage: { estimated_cost_usd: 0.21 },
+          log: ['Price list for Bolton Clarke: 1 price differs — suggestion created.'],
+        },
+      ],
+      sources: [{ id: 's1', name: 'Register', url: 'https://register.example/list', note: '', active: true, summary_at: AT, summary: { summary: 'A register.', change: 'new', mentions: [{ provider_id: 'bolton-clarke', provider_name: 'Bolton Clarke', fact: 'Registered', quote: 'Registered' }] } }],
+      pages: [{ url: 'https://register.example/list', http_status: 200, error: null, checked_at: AT, changed_at: AT }],
+    },
     '/api/admin/suggestions?status=pending': {
       suggestions: [
         {
@@ -115,7 +129,7 @@ describe('accessibility (axe)', () => {
     await expectNoViolations();
   }, 20_000);
 
-  const outside = ['/dossier/bolton-clarke', '/about', '/applications', '/admin', '/admin/applications', '/admin/suggestions', '/admin/providers', '/admin/providers/import', '/admin/providers/bolton-clarke/edit'];
+  const outside = ['/dossier/bolton-clarke', '/about', '/applications', '/admin', '/admin/applications', '/admin/suggestions', '/admin/providers', '/admin/providers/import', '/admin/data-checks', '/admin/providers/bolton-clarke/edit'];
   it.each(outside)('%s has no violations', async (route) => {
     stubApi();
     await renderApp(route, { server: memoryServer(populated()), waitForNav: false });
