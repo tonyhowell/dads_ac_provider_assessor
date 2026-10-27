@@ -234,6 +234,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE provider_claims ADD COLUMN researched_at timestamptz;
   UPDATE provider_claims SET researched_at = finished_at WHERE status = 'ready'
   `,
+  // v5: live progress for data checks (items, stages, estimated time), a heartbeat, and stopping a run.
+  `
+  ALTER TABLE enrichment_runs ADD COLUMN progress jsonb NOT NULL DEFAULT '{}'::jsonb;
+  ALTER TABLE enrichment_runs ADD COLUMN heartbeat_at timestamptz;
+  ALTER TABLE enrichment_runs ADD COLUMN cancel_requested boolean NOT NULL DEFAULT false;
+  ALTER TABLE enrichment_runs DROP CONSTRAINT enrichment_runs_status_check;
+  ALTER TABLE enrichment_runs ADD CONSTRAINT enrichment_runs_status_check CHECK (status IN ('running', 'done', 'failed', 'cancelled'))
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

@@ -53,7 +53,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5]);
   });
 });
 

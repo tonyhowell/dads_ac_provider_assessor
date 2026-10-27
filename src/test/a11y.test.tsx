@@ -71,7 +71,21 @@ function stubApi() {
       schedule_hours: 24,
       runs: [
         {
-          id: 'r1', trigger: 'schedule', status: 'done', error: null, started_at: AT, finished_at: AT,
+          id: 'r2', trigger: 'admin', status: 'running', error: null, started_at: new Date(Date.now() - 95_000).toISOString(), finished_at: null, cancel_requested: false,
+          stats: {}, usage: {}, log: [],
+          progress: {
+            eta_seconds: 140, updated_at: new Date().toISOString(), skipped: { claims_current: 3, no_price_list: 1 },
+            items: [
+              { id: '1', part: 'prices', label: 'Price list · Bolton Clarke', url: 'https://example.org/prices.pdf', status: 'done', stage: null, detail: null, outcome: 'Unchanged', error: null, started_at: AT, ms: 1200 },
+              { id: '2', part: 'prices', label: 'Price list · Anglicare', url: 'https://example.org/a.pdf', status: 'failed', stage: null, detail: null, outcome: null, error: { stage: 'Download', message: 'no answer within 20 seconds (tried 3 times)' }, started_at: AT, ms: 64000 },
+              { id: '3', part: 'prices', label: 'Price list · BlueCare', url: 'https://example.org/b.pdf', status: 'running', stage: 'Downloading', detail: 'Downloading 2.1 MB of 4.0 MB', outcome: null, error: null, started_at: new Date(Date.now() - 12_000).toISOString(), ms: null },
+              { id: '4', part: 'claims', label: 'Public claims · Carers Link', url: null, status: 'queued', stage: null, detail: null, outcome: null, error: null, started_at: null, ms: null },
+            ],
+          },
+        },
+        {
+          id: 'r1', trigger: 'schedule', status: 'done', error: null, started_at: AT, finished_at: AT, cancel_requested: false,
+          progress: { items: [{ id: '1', part: 'prices', label: 'Price list · Bolton Clarke', url: 'https://example.org/prices.pdf', status: 'failed', stage: null, detail: null, outcome: null, error: { stage: 'Reading with Claude Haiku', message: 'Claude took too long to answer (tried 4 times)' }, started_at: AT, ms: 300000 }] },
           stats: { prices: { checked: 4, unchanged: 3, changed: 1, errors: 0, suggestions: 1, matched: 0 }, claims: { due: 2, revalidated: 1, reread: 0, researched: 1, deferred: 0, failed: 0 } },
           usage: { estimated_cost_usd: 0.21 },
           log: ['Price list for Bolton Clarke: 1 price differs — suggestion created.'],

@@ -2,8 +2,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 import { createPgliteDb, migrate, type Db } from './db.ts';
-import { EnrichmentBusyError, addSource, listRuns, listSources, priceChanges, runEnrichment, type EnrichDeps, type PriceList } from './enrich.ts';
-import { htmlToText } from './pages.ts';
+import { readFileSync } from 'node:fs';
+import { EnrichmentBusyError, activeRun, addSource, listRuns, listSources, priceChanges, requestCancel, runEnrichment, type EnrichDeps, type PriceList, type RunProgress } from './enrich.ts';
+import { checkPage, htmlToText, type Fetcher } from './pages.ts';
 import { getClaims } from './claims.ts';
 import { listSuggestions } from './catalogue.ts';
 import { UsageTally } from './usage.ts';
@@ -22,7 +23,7 @@ const topics = [
 /** The fake web: url → body. Counts fetches. */
 const web = new Map<string, string>();
 const fetches: string[] = [];
-const fetcher = async (url: string) => {
+const fetcher: Fetcher = async (url) => {
   fetches.push(url);
   return web.has(url) ? new Response(web.get(url), { headers: { 'content-type': 'text/html' } }) : new Response('Not found', { status: 404 });
 };
@@ -41,7 +42,7 @@ function fakeClaude(parsed: unknown[]) {
   return { parse, stream, client: { beta: { messages: { parse, stream } } } as unknown as Anthropic };
 }
 
-const deps = (client: Anthropic, providers: Provider[] = [bolton]): EnrichDeps => ({ db, getAnthropic: () => client, providers: async () => providers, topics, fetcher });
+const deps = (client: Anthropic, providers: Provider[] = [bolton]): EnrichDeps => ({ db, getAnthropic: () => client, providers: async () => providers, topics, fetcher, sleep: async () => {} });
 
 beforeAll(async () => {
   db = await createPgliteDb();
@@ -239,5 +240,108 @@ describe('helpers', () => {
     u.add('claude-haiku-5-5', { input_tokens: 1_000_000, output_tokens: 100_000 });
     u.add('claude-sonnet-5-5', { input_tokens: 100_000, output_tokens: 10_000, server_tool_use: { web_search_requests: 3 } });
     expect(u.estimatedCost()).toBeCloseTo(0.1 + 0.05 + 0.2 + 0.1 + 0.03, 4);
+  });
+});
+
+describe('slow sites and PDFs', () => {
+  const PDF = readFileSync(new URL('./fixtures/price-list.pdf', import.meta.url));
+  const quick = { sleep: async () => {}, timeouts: { responseMs: 50, downloadMs: 100 } };
+
+  it('reads a PDF as text on the server, so Claude gets text rather than the whole document', async () => {
+    const pdfFetcher = async () => new Response(PDF, { headers: { 'content-type': 'application/pdf' } });
+    const fake = fakeClaude([prices({ pc: 126 })]);
+    await runEnrichment({ ...deps(fake.client), fetcher: pdfFetcher }, { trigger: 'cli', parts: ['prices'] });
+    const sent = JSON.stringify(fake.parse.mock.calls[0][0]);
+    expect(sent).toContain('Personal care $126.00 per hour');
+    expect(sent).toContain('pdf_pages=\\"1\\"');
+    expect(sent).not.toContain('"type":"document"');
+  });
+
+  it('retries a site that is slow to answer or has a server error, then succeeds', async () => {
+    let calls = 0;
+    const flaky: Fetcher = async (_url, init) => {
+      calls += 1;
+      if (calls === 1) return new Promise<Response>((_r, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)));
+      if (calls === 2) return new Response('busy', { status: 503 });
+      return new Response('<p>ok</p>', { headers: { 'content-type': 'text/html' } });
+    };
+    const notes: string[] = [];
+    const check = await checkPage(db, 'https://slow.example/prices.pdf', { fetcher: flaky, onProgress: (d) => notes.push(d), ...quick });
+    expect(check).toMatchObject({ status: 'new', attempts: 3 });
+    expect(notes).toContain('No answer within 0.05 seconds — trying again');
+    expect(notes).toContain('HTTP 503: the site had a server error — trying again');
+  });
+
+  it('gives up after three tries with a clear reason, and stops a download that takes too long', async () => {
+    const hang: Fetcher = async (_url, init) => new Promise<Response>((_r, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)));
+    expect(await checkPage(db, 'https://hang.example/a', { fetcher: hang, ...quick })).toMatchObject({ status: 'error', attempts: 3, error: 'no answer within 0.05 seconds (tried 3 times)' });
+
+    const trickle: Fetcher = async (_url, init) =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode('%PDF-'));
+            init?.signal?.addEventListener('abort', () => c.error(init.signal!.reason));
+          },
+        }),
+        { headers: { 'content-type': 'application/pdf' } },
+      );
+    expect(await checkPage(db, 'https://trickle.example/a.pdf', { fetcher: trickle, ...quick })).toMatchObject({ status: 'error', error: 'download took longer than 0.1 seconds (tried 3 times)' });
+
+    const missing = await checkPage(db, 'https://gone.example/a', { fetcher, ...quick });
+    expect(missing).toMatchObject({ status: 'error', attempts: 1, httpStatus: 404, error: 'HTTP 404: page not found — the link may have moved' });
+  });
+});
+
+describe('progress', () => {
+  it('plans every item, records stages, outcomes, errors and timings, and estimates time left', async () => {
+    const anglicare = seed.providers.find((p) => p.id === 'anglicare-southern-queensland')!;
+    web.set(PRICE_URL, '<p>prices</p>');
+    const snapshots: RunProgress[] = [];
+    const fake = fakeClaude([prices()]);
+    const watched: EnrichDeps = {
+      ...deps(fake.client, [bolton, anglicare, { ...anglicare, id: 'no-list', provider: 'No list', source_url: null }]),
+      fetcher: async (url, init) => {
+        const [run] = await listRuns(db, 1);
+        snapshots.push(run.progress as RunProgress);
+        return fetcher(url, init);
+      },
+    };
+    const run = await runEnrichment(watched, { trigger: 'admin', parts: ['prices'] });
+    const items = (run.progress as RunProgress).items;
+    expect(items.map((i) => [i.label, i.status])).toEqual([
+      ['Price list · Bolton Clarke', 'done'],
+      ['Price list · Anglicare Southern Queensland', 'failed'],
+    ]);
+    expect(items[0]).toMatchObject({ outcome: 'Read for the first time; prices match the catalogue', error: null });
+    expect(items[0].ms).toBeGreaterThanOrEqual(0);
+    expect(items[1].error).toEqual({ stage: 'Download', message: 'HTTP 404: page not found — the link may have moved' });
+    expect(run.progress.skipped).toEqual({ claims_current: 0, no_price_list: 1 });
+    expect(run.progress.eta_seconds).toBe(0);
+    // While running, the plan was already saved with an estimate.
+    expect(snapshots[0].items).toHaveLength(2);
+    expect(snapshots[0].eta_seconds).toBeGreaterThan(0);
+  });
+
+  it('stops after the items in hand when an admin asks', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...bolton, id: `p${i}`, provider: `P${i}`, source_url: `https://p${i}.example/prices` }));
+    let asked = false;
+    const stopping: EnrichDeps = {
+      ...deps(fakeClaude([]).client, many),
+      fetcher: async (url, init) => {
+        if (!asked) {
+          asked = true;
+          expect(await requestCancel(db)).toBe(true);
+        }
+        await new Promise((r) => setTimeout(r, 20));
+        return fetcher(url, init);
+      },
+    };
+    const run = await runEnrichment(stopping, { trigger: 'admin', parts: ['prices'] });
+    expect(run).toMatchObject({ status: 'cancelled', error: 'Stopped by an admin' });
+    const statuses = (run.progress as RunProgress).items.map((i) => i.status);
+    expect(statuses.filter((s) => s === 'cancelled').length).toBeGreaterThan(0);
+    expect(statuses).not.toContain('running');
+    expect(await activeRun(db)).toBeUndefined();
   });
 });

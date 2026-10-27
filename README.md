@@ -119,6 +119,8 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
   - a full web search (Claude Sonnet 5.5) runs only the first time, when pages are gone, or when the last full search is 180+ days old, and at most `ENRICH_MAX_RESEARCH` (default 3) per run;
   - "Check again" on a provider page still forces a full search.
 - Each run records what it did, token use by model and an estimated cost. Only one run at a time; a page that couldn't be read is retried next run.
+- **Fetching:** a site has 20 seconds to start answering and 150 seconds to finish a download (up to 25 MB). Timeouts, dropped connections, 429 and 5xx answers are tried 3 times. PDFs are turned into text on the server (`unpdf`) and compared on that text; only a scanned PDF with no text goes to Claude as a document. Claude calls allow 5 minutes and are retried 3 times.
+- **Live view:** every item a run will check is planned first. The admin page shows progress (done of total), an estimated time left (from this run's pace and recent runs), what each item is doing now (connecting, downloading with size, reading with Claude, searching), problems with the stage and reason, and a Stop button that stops after the items in hand. Finished runs list each item with its result and time taken.
 
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.

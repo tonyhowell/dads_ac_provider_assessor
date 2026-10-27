@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Meter } from '../components/ui/Visual';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { formatDateTime } from '../format';
@@ -12,10 +13,26 @@ import { Icon } from '../components/ui/Icon';
 
 type Part = 'prices' | 'sources' | 'claims';
 
+type ItemStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+interface RunItem {
+  id: string;
+  part: Part;
+  label: string;
+  url: string | null;
+  status: ItemStatus;
+  stage: string | null;
+  detail: string | null;
+  outcome: string | null;
+  error: { stage: string; message: string } | null;
+  started_at: string | null;
+  ms: number | null;
+}
+
 interface Run {
   id: string;
   trigger: 'schedule' | 'admin' | 'cli';
-  status: 'running' | 'done' | 'failed';
+  status: 'running' | 'done' | 'failed' | 'cancelled';
   stats: {
     prices?: { checked: number; unchanged: number; changed: number; errors: number; suggestions: number; matched: number };
     sources?: { checked: number; unchanged: number; changed: number; errors: number; summarised: number };
@@ -23,6 +40,8 @@ interface Run {
   };
   usage: { estimated_cost_usd?: number; models?: Record<string, { requests: number; input_tokens: number; output_tokens: number; web_searches: number }> };
   log: string[];
+  progress: { items?: RunItem[]; eta_seconds?: number | null; skipped?: { claims_current: number; no_price_list: number }; updated_at?: string };
+  cancel_requested: boolean;
   error: string | null;
   started_at: string;
   finished_at: string | null;
@@ -60,6 +79,27 @@ const PART_LABELS: Record<Part, { label: string; hint: string }> = {
   claims: { label: 'Public claims older than 60 days', hint: 'Re-checks the pages claims came from; searches the web only when needed.' },
 };
 const TRIGGER: Record<Run['trigger'], string> = { schedule: 'Scheduled', admin: 'Started here', cli: 'Command line' };
+const STATUS_CHIP: Record<Run['status'], [string, string]> = { running: ['chip-info', 'Running'], done: ['chip-good', 'Done'], failed: ['chip-stop', 'Stopped by an error'], cancelled: ['chip-neutral', 'Stopped'] };
+
+/** "45 sec", "3 min", "1 hr 5 min". */
+export function duration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `${s} sec`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}`;
+}
+
+/** Ticks once a second while `on`, so elapsed and remaining times count down smoothly between polls. */
+function useNow(on: boolean) {
+  const [t, setT] = useState(Date.now());
+  useEffect(() => {
+    if (!on) return;
+    const i = setInterval(() => setT(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, [on]);
+  return t;
+}
 const usd = (n: number | undefined) => (n === undefined ? '—' : n < 0.01 ? 'under US$0.01' : `about US$${n.toFixed(2)}`);
 
 function runSummary(r: Run): string {
@@ -93,7 +133,7 @@ export function AdminEnrichmentScreen() {
   const running = view?.runs.some((r) => r.status === 'running') ?? false;
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [running, load]);
 
@@ -135,6 +175,10 @@ export function AdminEnrichmentScreen() {
         </ResolutionCard>
       )}
 
+      {view.runs.filter((r) => r.status === 'running').map((r) => (
+        <LiveRun key={r.id} run={r} reload={load} onError={setError} />
+      ))}
+
       <section className="card space-y-3" aria-labelledby="run-now">
         <h3 id="run-now" className="text-[1.15rem]">
           Run a check now
@@ -165,33 +209,15 @@ export function AdminEnrichmentScreen() {
         <h3 id="runs" className="text-[1.15rem]">
           Recent checks
         </h3>
-        {view.runs.length === 0 ? (
-          <p className="card">No checks yet.</p>
+        {view.runs.filter((r) => r.status !== 'running').length === 0 ? (
+          <p className="card">No finished checks yet.</p>
         ) : (
           <ul className="space-y-2">
-            {view.runs.map((r) => (
-              <li key={r.id} className="card space-y-1">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-semibold">
-                    {formatDateTime(r.started_at)} · {TRIGGER[r.trigger]}
-                  </span>
-                  <span className={`chip ${r.status === 'done' ? 'chip-good' : r.status === 'failed' ? 'chip-stop' : 'chip-info'}`}>{r.status === 'running' ? 'Running' : r.status === 'done' ? 'Done' : 'Stopped'}</span>
-                </div>
-                <p>{runSummary(r)}</p>
-                <p className="small">Claude cost: {usd(r.usage.estimated_cost_usd)} (estimate)</p>
-                {r.error && <p className="text-[var(--stop)]">{r.error}</p>}
-                {r.log.length > 0 && (
-                  <details>
-                    <summary className="cursor-pointer">What it did ({r.log.length})</summary>
-                    <ul className="mt-2 list-disc space-y-1 pl-6 text-[0.95rem]">
-                      {r.log.map((line, i) => (
-                        <li key={i}>{line}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </li>
-            ))}
+            {view.runs
+              .filter((r) => r.status !== 'running')
+              .map((r) => (
+                <PastRun key={r.id} run={r} />
+              ))}
           </ul>
         )}
       </section>
@@ -321,5 +347,227 @@ function Sources({ sources, reload, onError }: { sources: Source[]; reload: () =
         </div>
       </form>
     </section>
+  );
+}
+
+const PART_SHORT: Record<Part, string> = { prices: 'Price lists', sources: 'Extra sources', claims: 'Public claims' };
+
+function counts(items: RunItem[]) {
+  const c = { total: items.length, done: 0, failed: 0, running: 0, queued: 0, cancelled: 0 };
+  for (const i of items) c[i.status === 'done' ? 'done' : i.status === 'failed' ? 'failed' : i.status === 'running' ? 'running' : i.status === 'queued' ? 'queued' : 'cancelled'] += 1;
+  return c;
+}
+
+/** The check that's running now: progress, time left, what it's doing and any problems so far. */
+function LiveRun({ run, reload, onError }: { run: Run; reload: () => Promise<void>; onError: (e: string | null) => void }) {
+  const now = useNow(true);
+  const items = run.progress.items ?? [];
+  const c = counts(items);
+  const finished = c.done + c.failed;
+  const elapsed = (now - new Date(run.started_at).getTime()) / 1000;
+  const sinceSave = run.progress.updated_at ? (now - new Date(run.progress.updated_at).getTime()) / 1000 : 0;
+  const eta = run.progress.eta_seconds == null ? null : Math.max(0, run.progress.eta_seconds - sinceSave);
+  const problems = items.filter((i) => i.status === 'failed');
+  const running = items.filter((i) => i.status === 'running');
+  const stop = async () => {
+    onError(null);
+    try {
+      await api('/api/admin/enrichment/stop', { body: {} });
+      await reload();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not stop the check.');
+    }
+  };
+
+  return (
+    <section className="card space-y-4 border-2 border-[var(--charcoal)]" aria-labelledby="live-run">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="live-run" className="text-[1.25rem]">
+            Checking now
+          </h3>
+          <p className="small">
+            {TRIGGER[run.trigger]} · started {duration(elapsed)} ago
+          </p>
+        </div>
+        {run.cancel_requested ? (
+          <span className="chip chip-caution">Stopping after the items in hand…</span>
+        ) : (
+          <ConfirmButton className="btn" confirmLabel="Stop the check" prompt="Stop after the items it's working on? Anything not started waits for the next check." onConfirm={stop}>
+            Stop
+          </ConfirmButton>
+        )}
+      </div>
+
+      <div aria-live="polite" className="space-y-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[1.1rem] font-semibold">
+            {finished} of {c.total} checked
+          </p>
+          <p className="text-[1.1rem]">
+            {c.total === 0 ? 'Planning…' : eta === null ? 'Estimating time…' : eta < 5 ? 'Finishing…' : <>About <b>{duration(eta)}</b> left</>}
+          </p>
+        </div>
+        <Meter value={finished} max={Math.max(1, c.total)} tone={problems.length ? 'caution' : 'good'} label={`${finished} of ${c.total} checked`} />
+        <p className="small">
+          {c.done} done · {c.failed} with problems · {c.running} in progress · {c.queued} waiting. The time left is an estimate from this check and recent ones.
+        </p>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-3">
+        {(['prices', 'sources', 'claims'] as Part[]).map((part) => {
+          const mine = counts(items.filter((i) => i.part === part));
+          if (!mine.total) return null;
+          return (
+            <div key={part} className="well">
+              <p className="font-semibold">{PART_SHORT[part]}</p>
+              <p className="small">
+                {mine.done + mine.failed} of {mine.total}
+                {mine.failed ? ` · ${mine.failed} problem${mine.failed === 1 ? '' : 's'}` : ''}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {running.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-semibold">Working on</h4>
+          <ul className="space-y-2">
+            {running.map((i) => (
+              <li key={i.id} className="flex flex-wrap items-baseline justify-between gap-2 rounded-[var(--radius-control)] border border-[var(--rule)] p-3">
+                <span className="min-w-0">
+                  <span className="block font-medium">{i.label}</span>
+                  <span className="block text-[0.95rem]">
+                    {i.stage}
+                    {i.detail && ` · ${i.detail}`}
+                  </span>
+                </span>
+                <span className="small whitespace-nowrap">{i.started_at && duration((now - new Date(i.started_at).getTime()) / 1000)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {problems.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-semibold text-[var(--caution)]">Problems so far ({problems.length})</h4>
+          <ItemTable items={problems} />
+        </div>
+      )}
+      {(run.progress.skipped?.claims_current || run.progress.skipped?.no_price_list) ? (
+        <p className="small">
+          Not needed this time:{' '}
+          {[
+            run.progress.skipped?.claims_current && `${run.progress.skipped.claims_current} provider${run.progress.skipped.claims_current === 1 ? "'s" : "s'"} public claims ${run.progress.skipped.claims_current === 1 ? 'are' : 'are'} still current`,
+            run.progress.skipped?.no_price_list && `${run.progress.skipped.no_price_list} provider${run.progress.skipped.no_price_list === 1 ? ' has' : 's have'} no price list link`,
+          ]
+            .filter(Boolean)
+            .join('; ')}
+          .
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ItemTable({ items }: { items: RunItem[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Item</th>
+            <th scope="col">Result</th>
+            <th scope="col">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((i) => (
+            <tr key={i.id}>
+              <td className="min-w-[12rem]">
+                {i.label}
+                {i.url && (
+                  <a href={i.url} target="_blank" rel="noreferrer noopener" className="block max-w-[22rem] truncate text-[0.875rem]">
+                    {i.url}
+                  </a>
+                )}
+              </td>
+              <td>
+                {i.status === 'failed' && i.error ? (
+                  <span className="text-[var(--stop)]">
+                    <b>{i.error.stage}:</b> {i.error.message}
+                  </span>
+                ) : i.status === 'cancelled' ? (
+                  'Not started — the check was stopped'
+                ) : i.status === 'queued' ? (
+                  'Waiting'
+                ) : i.status === 'running' ? (
+                  `${i.stage ?? 'Working'}${i.detail ? ` · ${i.detail}` : ''}`
+                ) : (
+                  i.outcome
+                )}
+              </td>
+              <td className="whitespace-nowrap">{i.ms !== null ? duration(i.ms / 1000) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PastRun({ run }: { run: Run }) {
+  const items = run.progress.items ?? [];
+  const problems = items.filter((i) => i.status === 'failed');
+  const [onlyProblems, setOnlyProblems] = useState(problems.length > 0);
+  const took = run.finished_at ? (new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000 : null;
+  const [chip, word] = STATUS_CHIP[run.status];
+  const shown = onlyProblems ? problems : items;
+  return (
+    <li className="card space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-semibold">
+          {formatDateTime(run.started_at)} · {TRIGGER[run.trigger]}
+          {took !== null && <span className="font-normal"> · took {duration(took)}</span>}
+        </span>
+        <span className={`chip ${chip}`}>{word}</span>
+      </div>
+      <p>{runSummary(run)}</p>
+      <p className="small">
+        {problems.length ? <span className="text-[var(--caution)]">{problems.length} with problems · </span> : null}Claude cost: {usd(run.usage.estimated_cost_usd)} (estimate)
+      </p>
+      {run.error && <p className="text-[var(--stop)]">{run.error}</p>}
+      {items.length > 0 ? (
+        <details>
+          <summary className="cursor-pointer">Each item ({items.length})</summary>
+          <div className="mt-2 space-y-2">
+            {problems.length > 0 && (
+              <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+                <button type="button" className="btn btn-sm" aria-pressed={onlyProblems} onClick={() => setOnlyProblems(true)}>
+                  Problems ({problems.length})
+                </button>
+                <button type="button" className="btn btn-sm" aria-pressed={!onlyProblems} onClick={() => setOnlyProblems(false)}>
+                  All ({items.length})
+                </button>
+              </div>
+            )}
+            <ItemTable items={shown} />
+          </div>
+        </details>
+      ) : (
+        run.log.length > 0 && (
+          <details>
+            <summary className="cursor-pointer">What it did ({run.log.length})</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-6 text-[0.95rem]">
+              {run.log.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </details>
+        )
+      )}
+    </li>
   );
 }

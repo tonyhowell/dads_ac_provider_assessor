@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type Anthropic from '@anthropic-ai/sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import type { Db, Queryable } from './db.ts';
@@ -20,7 +20,7 @@ import {
   type ClaimsRow,
   type Topic,
 } from './claims.ts';
-import { createSuggestion, listSuggestions } from './catalogue.ts';
+import { createSuggestion, listSuggestions, type Suggestion } from './catalogue.ts';
 import { RATE_KEYS } from '../src/schemas.ts';
 import { latestDateIn } from '../src/data/normalise.ts';
 import type { Claims, Provider, RateKey } from '../src/types.ts';
@@ -49,6 +49,8 @@ export interface EnrichDeps {
   providers: () => Promise<Provider[]>;
   topics: Topic[];
   fetcher?: Fetcher;
+  /** Waits between fetch retries; tests pass a no-op. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface EnrichOptions {
@@ -73,23 +75,59 @@ export interface RunStats {
   claims: { due: number; revalidated: number; reread: number; researched: number; deferred: number; failed: number };
 }
 
+export type ItemStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** One thing a run checks: a price list, an extra source, or one provider's public claims. */
+export interface RunItem {
+  id: string;
+  part: EnrichPart;
+  label: string;
+  url: string | null;
+  status: ItemStatus;
+  /** What it's doing now, e.g. "Downloading", "Reading with Claude Haiku". */
+  stage: string | null;
+  /** More about the stage, e.g. "2.1 MB of 4.0 MB". */
+  detail: string | null;
+  /** What happened, in a few words, once done. */
+  outcome: string | null;
+  error: { stage: string; message: string } | null;
+  started_at: string | null;
+  ms: number | null;
+}
+
+export interface RunProgress {
+  items: RunItem[];
+  /** Seconds left, estimated from this run and recent ones. Null before anything can be estimated. */
+  eta_seconds: number | null;
+  /** Things not needed this run. */
+  skipped: { claims_current: number; no_price_list: number };
+  updated_at: string;
+}
+
 export interface EnrichmentRun {
   id: string;
   trigger: string;
-  status: 'running' | 'done' | 'failed';
+  status: 'running' | 'done' | 'failed' | 'cancelled';
   stats: Partial<RunStats>;
   usage: ReturnType<UsageTally['toJSON']> | Record<string, never>;
   log: string[];
+  progress: Partial<RunProgress>;
+  cancel_requested: boolean;
   error: string | null;
   started_at: string;
   finished_at: string | null;
+  heartbeat_at: string | null;
 }
 
 export class EnrichmentBusyError extends Error {}
 
-/** A run still "running" after this long died with a restart. */
-const STALE_RUN_HOURS = 3;
+/** A run that hasn't saved progress for this long died with a restart. */
+const STALE_RUN_MINUTES = 15;
 const MAX_LOG = 300;
+/** Items checked at once, by part. Claims searches are slow and costly, so fewer run together. */
+const CONCURRENCY: Record<EnrichPart, number> = { prices: 4, sources: 3, claims: 2 };
+/** Seconds per item before there's any history to go on. */
+const DEFAULT_SECONDS: Record<EnrichPart, number> = { prices: 20, sources: 20, claims: 60 };
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null));
 const json = <T>(v: unknown): T => (typeof v === 'string' ? JSON.parse(v) : v) as T;
 
@@ -100,13 +138,29 @@ const toRun = (r: Record<string, unknown>): EnrichmentRun => ({
   stats: json(r.stats),
   usage: json(r.usage),
   log: json(r.log),
+  progress: json(r.progress ?? {}),
+  cancel_requested: !!r.cancel_requested,
   error: (r.error as string | null) ?? null,
   started_at: iso(r.started_at)!,
   finished_at: iso(r.finished_at),
+  heartbeat_at: iso(r.heartbeat_at) ?? null,
 });
 
 export async function listRuns(db: Queryable, limit = 20): Promise<EnrichmentRun[]> {
   return (await db.query('SELECT * FROM enrichment_runs ORDER BY started_at DESC LIMIT $1', [limit])).map(toRun);
+}
+
+const ACTIVE = `status = 'running' AND COALESCE(heartbeat_at, started_at) > now() - interval '${STALE_RUN_MINUTES} minutes'`;
+
+/** The run in progress, if any. */
+export async function activeRun(db: Queryable): Promise<EnrichmentRun | undefined> {
+  const [r] = await db.query(`SELECT * FROM enrichment_runs WHERE ${ACTIVE} ORDER BY started_at DESC LIMIT 1`);
+  return r ? toRun(r) : undefined;
+}
+
+/** Asks the running check to stop after the items it's on. */
+export async function requestCancel(db: Queryable): Promise<boolean> {
+  return (await db.query(`UPDATE enrichment_runs SET cancel_requested = true WHERE ${ACTIVE} RETURNING id`)).length > 0;
 }
 
 // ---- Extra sources ----
@@ -199,18 +253,27 @@ export type SourceSummary = z.infer<typeof SourceSummarySchema> & { url: string;
 const SOURCE_SYSTEM = `You read a public page used to check information about Australian Support at Home (aged care) providers: a register, a government list, a notice or a provider page. Summarise in plain words what it says that matters to a family choosing a provider (prices, registration, services offered, areas served, compliance or sanctions, program rule changes). Then list each statement about a provider in the catalogue you're given, with the catalogue id when it clearly matches (otherwise null), the fact in a few words and a short exact quote. Report only what the page says.`;
 
 function pageBlocks(content: PageContent, url: string): Anthropic.Beta.BetaContentBlockParam[] {
-  if (content.kind === 'pdf') return [{ type: 'text', text: `Page URL: ${url}` }, { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.data } }];
-  return [{ type: 'text', text: `<page url="${url}">\n${content.text.slice(0, 300_000)}\n</page>` }];
+  if (content.kind === 'pdf') return [{ type: 'text', text: `Page URL: ${url} (a scanned PDF)` }, { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: content.data } }];
+  return [{ type: 'text', text: `<page url="${url}"${content.pdfPages ? ` pdf_pages="${content.pdfPages}"` : ''}>\n${content.text.slice(0, 300_000)}\n</page>` }];
 }
 
+/** What Claude will read, for the progress view. */
+const readingWhat = (c: PageContent) => (c.kind === 'pdf' ? 'scanned PDF' : c.pdfPages ? `PDF text, ${c.pdfPages} page${c.pdfPages === 1 ? '' : 's'}` : `${Math.round(c.text.length / 1000)}k characters`);
+
+/** Claude calls in a run: generous time for a long PDF, retried on rate limits and server errors. */
+export const CLAUDE_REQUEST = { timeout: 5 * 60_000, maxRetries: 3 };
+
 async function extract<S extends z.ZodType>(client: Anthropic, usage: UsageTally, schema: S, system: string, content: Anthropic.Beta.BetaContentBlockParam[]): Promise<z.infer<S>> {
-  const result = await client.beta.messages.parse({
-    model: EXTRACT_MODEL,
-    max_tokens: 8000,
-    output_config: { effort: 'low', format: betaZodOutputFormat(schema) },
-    system,
-    messages: [{ role: 'user', content }],
-  });
+  const result = await client.beta.messages.parse(
+    {
+      model: EXTRACT_MODEL,
+      max_tokens: 8000,
+      output_config: { effort: 'low', format: betaZodOutputFormat(schema) },
+      system,
+      messages: [{ role: 'user', content }],
+    },
+    CLAUDE_REQUEST,
+  );
   usage.add(EXTRACT_MODEL, result.usage);
   if (result.stop_reason === 'refusal') throw new NotesError(422, 'Claude declined to read this page.');
   if (!result.parsed_output) throw new NotesError(502, 'The page could not be read into structured data.');
@@ -233,157 +296,264 @@ const AUTO_NOTE = 'Automatic price check';
 
 // ---- The run ----
 
+function message(err: unknown): string {
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return 'Claude took too long to answer (tried 4 times)';
+  if (err instanceof Anthropic.RateLimitError) return 'Claude is busy right now (rate limited, tried 4 times)';
+  if (err instanceof Anthropic.AuthenticationError) return 'the Claude API key was rejected';
+  if (err instanceof Anthropic.APIError) return `Claude returned an error (${err.status ?? 'no status'})`;
+  return err instanceof Error ? err.message : 'Unexpected error';
+}
+const now = () => new Date().toISOString();
+
+/** Seconds per item for each part, from recent finished runs, falling back to defaults. */
+async function historicalSeconds(db: Queryable): Promise<Record<EnrichPart, number>> {
+  const rows = await db.query(`SELECT progress FROM enrichment_runs WHERE status <> 'running' ORDER BY started_at DESC LIMIT 5`);
+  const out = { ...DEFAULT_SECONDS };
+  for (const part of ENRICH_PARTS) {
+    const ms = rows.flatMap((r) => (json<Partial<RunProgress>>(r.progress).items ?? []).filter((i) => i.part === part && i.ms !== null).map((i) => i.ms!));
+    if (ms.length >= 2) out[part] = ms.reduce((a, b) => a + b, 0) / ms.length / 1000;
+  }
+  return out;
+}
+
+/** A run's state, saved to the database as it goes (at most every 1.5 seconds) for the live view. */
 class Run {
   readonly usage = new UsageTally();
   readonly log: string[] = [];
+  readonly items: RunItem[] = [];
   readonly stats: RunStats = {
     prices: { checked: 0, unchanged: 0, changed: 0, errors: 0, suggestions: 0, matched: 0 },
     sources: { checked: 0, unchanged: 0, changed: 0, errors: 0, summarised: 0 },
     claims: { due: 0, revalidated: 0, reread: 0, researched: 0, deferred: 0, failed: 0 },
   };
-  constructor(readonly id: string) {}
+  skipped = { claims_current: 0, no_price_list: 0 };
+  cancelled = false;
+  private lastSave = 0;
+  private saving: Promise<void> = Promise.resolve();
+
+  constructor(
+    readonly db: Queryable,
+    readonly id: string,
+    private readonly history: Record<EnrichPart, number>,
+  ) {}
+
   note(line: string) {
     if (this.log.length < MAX_LOG) this.log.push(line);
   }
+
+  add(part: EnrichPart, label: string, url: string | null): RunItem {
+    const item: RunItem = { id: String(this.items.length + 1), part, label, url, status: 'queued', stage: null, detail: null, outcome: null, error: null, started_at: null, ms: null };
+    this.items.push(item);
+    return item;
+  }
+
   count(c: Counts, check: PageCheck) {
     c.checked += 1;
     if (check.status === 'unchanged') c.unchanged += 1;
     else if (check.status === 'error') c.errors += 1;
     else c.changed += 1;
   }
+
+  /** Seconds left: queued work at each part's pace, shared across that part's workers, plus what's running. */
+  eta(): number | null {
+    const at = Date.now();
+    let total = 0;
+    for (const part of ENRICH_PARTS) {
+      const mine = this.items.filter((i) => i.part === part);
+      const finished = mine.filter((i) => i.ms !== null);
+      const per = finished.length >= 2 ? finished.reduce((a, i) => a + i.ms!, 0) / finished.length / 1000 : this.history[part];
+      const queued = mine.filter((i) => i.status === 'queued').length;
+      const running = mine.filter((i) => i.status === 'running').map((i) => Math.max(3, per - (at - new Date(i.started_at!).getTime()) / 1000));
+      if (!queued && !running.length) continue;
+      total += (queued * per + running.reduce((a, b) => a + b, 0)) / Math.min(CONCURRENCY[part], queued + running.length);
+    }
+    return this.items.length ? Math.round(total) : null;
+  }
+
+  progress(): RunProgress {
+    return { items: this.items, eta_seconds: this.eta(), skipped: this.skipped, updated_at: now() };
+  }
+
+  /** Saves progress if it's been a moment since the last save (or always, with `force`), and picks up a stop request. */
+  save(force = false): Promise<void> {
+    if (!force && Date.now() - this.lastSave < 1500) return this.saving;
+    this.lastSave = Date.now();
+    this.saving = this.saving.then(async () => {
+      const [row] = await this.db.query(
+        `UPDATE enrichment_runs SET stats = $2::jsonb, usage = $3::jsonb, log = $4::jsonb, progress = $5::jsonb, heartbeat_at = now() WHERE id = $1 RETURNING cancel_requested`,
+        [this.id, JSON.stringify(this.stats), JSON.stringify(this.usage.toJSON()), JSON.stringify(this.log), JSON.stringify(this.progress())],
+      );
+      if (row?.cancel_requested) this.cancelled = true;
+    });
+    return this.saving;
+  }
+
+  start(item: RunItem, stage: string) {
+    item.status = 'running';
+    item.started_at = now();
+    item.stage = stage;
+    void this.save();
+  }
+  stage(item: RunItem, stage: string, detail: string | null = null) {
+    item.stage = stage;
+    item.detail = detail;
+    void this.save();
+  }
+  detail(item: RunItem, detail: string) {
+    item.detail = detail;
+    void this.save();
+  }
+  done(item: RunItem, outcome: string, line?: string) {
+    item.status = 'done';
+    item.outcome = outcome;
+    item.stage = null;
+    item.detail = null;
+    item.ms = Date.now() - new Date(item.started_at!).getTime();
+    this.note(line ?? `${item.label}: ${outcome}`);
+    return this.save(true);
+  }
+  fail(item: RunItem, stage: string, msg: string) {
+    item.status = 'failed';
+    item.error = { stage, message: msg };
+    item.stage = null;
+    item.detail = null;
+    item.ms = Date.now() - new Date(item.started_at!).getTime();
+    this.note(`${item.label}: ${stage} failed — ${msg}`);
+    return this.save(true);
+  }
+}
+
+/** Runs `work` over `list`, `n` at a time, stopping early when the run is cancelled. */
+async function pool<T>(run: Run, list: T[], n: number, work: (x: T) => Promise<void>) {
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length && !run.cancelled) await work(list[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, worker));
 }
 
 async function startRun(db: Db, trigger: string): Promise<Run> {
   const id = randomUUID();
   await db.transaction(async (tx) => {
     await tx.query('LOCK TABLE enrichment_runs IN EXCLUSIVE MODE');
-    const busy = await tx.query(`SELECT id FROM enrichment_runs WHERE status = 'running' AND started_at > now() - interval '${STALE_RUN_HOURS} hours'`);
+    const busy = await tx.query(`SELECT id FROM enrichment_runs WHERE ${ACTIVE}`);
     if (busy.length) throw new EnrichmentBusyError('A data check is already running.');
-    await tx.query(`UPDATE enrichment_runs SET status = 'failed', error = 'Stopped (server restarted)', finished_at = now() WHERE status = 'running'`);
-    await tx.query(`INSERT INTO enrichment_runs (id, trigger, status) VALUES ($1, $2, 'running')`, [id, trigger]);
+    await tx.query(`UPDATE enrichment_runs SET status = 'failed', error = 'Stopped: the server restarted during the check', finished_at = now() WHERE status = 'running'`);
+    await tx.query(`INSERT INTO enrichment_runs (id, trigger, status, heartbeat_at) VALUES ($1, $2, 'running', now())`, [id, trigger]);
   });
-  return new Run(id);
+  return new Run(db, id, await historicalSeconds(db));
 }
 
-async function saveRun(db: Queryable, run: Run, status: 'running' | 'done' | 'failed', error: string | null = null) {
-  await db.query(`UPDATE enrichment_runs SET status = $2, stats = $3::jsonb, usage = $4::jsonb, log = $5::jsonb, error = $6, finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE now() END WHERE id = $1`, [
-    run.id,
-    status,
-    JSON.stringify(run.stats),
-    JSON.stringify(run.usage.toJSON()),
-    JSON.stringify(run.log),
-    error,
-  ]);
+async function finishRun(run: Run, status: 'done' | 'failed' | 'cancelled', error: string | null = null) {
+  if (status === 'cancelled') for (const i of run.items) if (i.status === 'queued') i.status = 'cancelled';
+  await run.save(true);
+  await run.db.query(`UPDATE enrichment_runs SET status = $2, error = $3, finished_at = now(), progress = $4::jsonb WHERE id = $1`, [run.id, status, error, JSON.stringify({ ...run.progress(), eta_seconds: 0 })]);
 }
 
-const message = (err: unknown) => (err instanceof NotesError || err instanceof Error ? err.message : 'Unexpected error');
+const pageOpts = (deps: EnrichDeps, run: Run, item: RunItem) => ({ fetcher: deps.fetcher, sleep: deps.sleep, onProgress: (d: string) => run.detail(item, d) });
 
-async function checkPrices(deps: EnrichDeps, run: Run, providers: Provider[]) {
+type PriceTarget = { provider: Provider; url: string; item: RunItem };
+
+async function checkPrice(deps: EnrichDeps, run: Run, { provider, url, item }: PriceTarget, pending: Suggestion[]) {
   const { db } = deps;
-  const pending = (await listSuggestions(db, { status: 'pending' })).filter((s) => s.application_id === null && s.note.startsWith(AUTO_NOTE));
-  for (const provider of providers) {
-    if (!provider.source_url) continue;
-    const check = await checkPage(db, provider.source_url, deps.fetcher);
-    run.count(run.stats.prices, check);
-    if (check.status === 'error') {
-      run.note(`Price list for ${provider.provider}: couldn't fetch (${check.error}).`);
-      continue;
+  run.start(item, 'Downloading');
+  const check = await checkPage(db, url, pageOpts(deps, run, item));
+  run.count(run.stats.prices, check);
+  if (check.status === 'error') return run.fail(item, 'Download', check.error);
+  if (check.status === 'unchanged') return run.done(item, check.attempts > 1 ? `Unchanged (after ${check.attempts} tries)` : 'Unchanged');
+  try {
+    run.stage(item, 'Reading with Claude Haiku', readingWhat(check.content));
+    const found = await extract(deps.getAnthropic(), run.usage, PriceListSchema, PRICE_SYSTEM, [
+      { type: 'text', text: `Provider: ${provider.provider}${provider.outlet ? ` (${provider.outlet})` : ''}` },
+      ...pageBlocks(check.content, check.url),
+    ]);
+    if (!found.is_price_list) return run.fail(item, 'Reading with Claude Haiku', "the page doesn't look like a price list any more — check the link");
+    run.stage(item, 'Comparing with the catalogue');
+    const changes = priceChanges(provider, found);
+    // A newer "prices as at" date is worth recording even when every price is the same; an older one isn't.
+    const foundDate = found.prices_as_at ? latestDateIn(found.prices_as_at) : null;
+    const dateChanged = !!foundDate && (!provider.prices_as_at_date || foundDate > provider.prices_as_at_date);
+    const first = check.status === 'new' ? 'Read for the first time' : 'Changed';
+    if (!Object.keys(changes).length && !dateChanged) {
+      run.stats.prices.matched += 1;
+      return run.done(item, `${first}; prices match the catalogue`);
     }
-    if (check.status === 'unchanged') continue;
-    try {
-      const found = await extract(deps.getAnthropic(), run.usage, PriceListSchema, PRICE_SYSTEM, [
-        { type: 'text', text: `Provider: ${provider.provider}${provider.outlet ? ` (${provider.outlet})` : ''}` },
-        ...pageBlocks(check.content, check.url),
-      ]);
-      if (!found.is_price_list) {
-        run.note(`Price list for ${provider.provider}: the page no longer looks like a price list — check the link.`);
-        continue;
-      }
-      const changes = priceChanges(provider, found);
-      // A newer "prices as at" date is worth recording even when every price is the same; an older one isn't.
-      const foundDate = found.prices_as_at ? latestDateIn(found.prices_as_at) : null;
-      const dateChanged = !!foundDate && (!provider.prices_as_at_date || foundDate > provider.prices_as_at_date);
-      if (!Object.keys(changes).length && !dateChanged) {
-        run.stats.prices.matched += 1;
-        run.note(`Price list for ${provider.provider}: ${check.status === 'new' ? 'read for the first time' : 'changed'}; prices match the catalogue.`);
-        continue;
-      }
-      const proposed: Provider = {
-        ...provider,
-        ...Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v!.to])),
-        ...(dateChanged ? { prices_as_at: found.prices_as_at!, prices_as_at_date: foundDate } : {}),
-      };
-      delete proposed.special_rates;
-      const same = pending.find((s) => s.provider_id === provider.id && RATE_KEYS.every((k) => s.proposed[k] === proposed[k]) && s.proposed.prices_as_at === proposed.prices_as_at);
-      if (same) {
-        run.note(`Price list for ${provider.provider}: same change is already waiting for approval.`);
-        continue;
-      }
-      const lines = Object.entries(changes).map(([k, v]) => `${k} ${v!.from === null ? 'not listed' : `$${v!.from}`} → $${v!.to}`);
-      await createSuggestion(db, {
-        current: provider,
-        proposed,
-        note: `${AUTO_NOTE} of ${check.url} on ${new Date().toISOString().slice(0, 10)}, read by Claude: ${[...lines, dateChanged ? `prices as at "${found.prices_as_at}"` : ''].filter(Boolean).join('; ')}.${found.notes.length ? ` Page notes: ${found.notes.join('; ')}.` : ''} Check the page before approving.`,
-        applicationId: null,
-        userId: null,
-      });
-      run.stats.prices.suggestions += 1;
-      run.note(`Price list for ${provider.provider}: ${lines.length} price${lines.length === 1 ? '' : 's'} differ — suggestion created.`);
-    } catch (err) {
-      run.stats.prices.errors += 1;
-      await forgetPage(db, check.url);
-      run.note(`Price list for ${provider.provider}: couldn't read it (${message(err)}). Will try again next run.`);
-    }
+    const proposed: Provider = {
+      ...provider,
+      ...Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v!.to])),
+      ...(dateChanged ? { prices_as_at: found.prices_as_at!, prices_as_at_date: foundDate } : {}),
+    };
+    delete proposed.special_rates;
+    const same = pending.find((s) => s.provider_id === provider.id && RATE_KEYS.every((k) => s.proposed[k] === proposed[k]) && s.proposed.prices_as_at === proposed.prices_as_at);
+    if (same) return run.done(item, `${first}; the same change is already waiting for approval`);
+    const lines = Object.entries(changes).map(([k, v]) => `${k} ${v!.from === null ? 'not listed' : `$${v!.from}`} → $${v!.to}`);
+    await createSuggestion(db, {
+      current: provider,
+      proposed,
+      note: `${AUTO_NOTE} of ${check.url} on ${now().slice(0, 10)}, read by Claude: ${[...lines, dateChanged ? `prices as at "${found.prices_as_at}"` : ''].filter(Boolean).join('; ')}.${found.notes.length ? ` Page notes: ${found.notes.join('; ')}.` : ''} Check the page before approving.`,
+      applicationId: null,
+      userId: null,
+    });
+    run.stats.prices.suggestions += 1;
+    return run.done(item, `${first}; ${lines.length || 'no'} price${lines.length === 1 ? '' : 's'} differ${lines.length === 1 ? 's' : ''}${dateChanged ? ', newer date' : ''} — suggestion created`);
+  } catch (err) {
+    run.stats.prices.errors += 1;
+    await forgetPage(db, check.url);
+    return run.fail(item, 'Reading with Claude Haiku', `${message(err)}. It will be read again next run`);
   }
 }
 
-async function checkSources(deps: EnrichDeps, run: Run, providers: Provider[]) {
+async function checkSource(deps: EnrichDeps, run: Run, source: EnrichmentSource, item: RunItem, providers: Provider[]) {
   const { db } = deps;
-  const catalogue = providers.map((p) => `${p.id}: ${p.provider}${p.outlet ? ` (${p.outlet})` : ''}`).join('\n');
-  for (const source of (await listSources(db)).filter((s) => s.active)) {
-    const check = await checkPage(db, source.url, deps.fetcher);
-    run.count(run.stats.sources, check);
-    if (check.status === 'error') {
-      run.note(`${source.name}: couldn't fetch (${check.error}).`);
-      continue;
-    }
-    if (check.status === 'unchanged') continue;
-    try {
-      const found = await extract(deps.getAnthropic(), run.usage, SourceSummarySchema, SOURCE_SYSTEM, [
-        { type: 'text', text: `Source: ${source.name}${source.note ? ` — ${source.note}` : ''}\n\nCatalogue (id: provider):\n${catalogue}` },
-        ...pageBlocks(check.content, check.url),
-      ]);
-      const ids = new Set(providers.map((p) => p.id));
-      const summary: SourceSummary = { ...found, mentions: found.mentions.map((m) => ({ ...m, provider_id: m.provider_id && ids.has(m.provider_id) ? m.provider_id : null })), url: check.url, change: check.status };
-      await db.query('UPDATE enrichment_sources SET summary = $2::jsonb, summary_at = now() WHERE id = $1', [source.id, JSON.stringify(summary)]);
-      run.stats.sources.summarised += 1;
-      run.note(`${source.name}: ${check.status === 'new' ? 'read for the first time' : 'changed'} — ${summary.mentions.length} mention${summary.mentions.length === 1 ? '' : 's'} of providers.`);
-    } catch (err) {
-      run.stats.sources.errors += 1;
-      await forgetPage(db, check.url);
-      run.note(`${source.name}: couldn't read it (${message(err)}). Will try again next run.`);
-    }
+  run.start(item, 'Downloading');
+  const check = await checkPage(db, source.url, pageOpts(deps, run, item));
+  run.count(run.stats.sources, check);
+  if (check.status === 'error') return run.fail(item, 'Download', check.error);
+  if (check.status === 'unchanged') return run.done(item, 'Unchanged');
+  try {
+    run.stage(item, 'Summarising with Claude Haiku', readingWhat(check.content));
+    const catalogue = providers.map((p) => `${p.id}: ${p.provider}${p.outlet ? ` (${p.outlet})` : ''}`).join('\n');
+    const found = await extract(deps.getAnthropic(), run.usage, SourceSummarySchema, SOURCE_SYSTEM, [
+      { type: 'text', text: `Source: ${source.name}${source.note ? ` — ${source.note}` : ''}\n\nCatalogue (id: provider):\n${catalogue}` },
+      ...pageBlocks(check.content, check.url),
+    ]);
+    const ids = new Set(providers.map((p) => p.id));
+    const summary: SourceSummary = { ...found, mentions: found.mentions.map((m) => ({ ...m, provider_id: m.provider_id && ids.has(m.provider_id) ? m.provider_id : null })), url: check.url, change: check.status };
+    await db.query('UPDATE enrichment_sources SET summary = $2::jsonb, summary_at = now() WHERE id = $1', [source.id, JSON.stringify(summary)]);
+    run.stats.sources.summarised += 1;
+    return run.done(item, `${check.status === 'new' ? 'Read for the first time' : 'Changed'} — ${summary.mentions.length} mention${summary.mentions.length === 1 ? '' : 's'} of providers`);
+  } catch (err) {
+    run.stats.sources.errors += 1;
+    await forgetPage(db, check.url);
+    return run.fail(item, 'Summarising with Claude Haiku', `${message(err)}. It will be read again next run`);
   }
 }
 
 export type ClaimsOutcome = 'revalidated' | 'reread' | 'researched' | 'deferred';
 
 /**
- * Brings one provider's claims up to date, cheapest way first. `allowResearch` false means a full web search
- * isn't allowed (budget used up), and the provider is deferred instead.
+ * Brings one provider's claims up to date, cheapest way first. `takeResearch` is asked just before a full web
+ * search and returns false when the run's budget is used up, in which case the provider is deferred.
  */
 export async function refreshClaims(
   deps: EnrichDeps,
   provider: Provider,
   before: ClaimsRow | undefined,
-  opts: { force: boolean; allowResearch: boolean; usage: UsageTally },
+  opts: { force: boolean; takeResearch: () => boolean; usage: UsageTally; onStage?: (stage: string, detail?: string | null) => void; onDetail?: (detail: string) => void },
 ): Promise<ClaimsOutcome> {
   const { db } = deps;
-  const now = Date.now();
-  const recentResearch = !!before?.researched_at && now - new Date(before.researched_at).getTime() < FULL_RESEARCH_DAYS * 86_400_000;
+  const recentResearch = !!before?.researched_at && Date.now() - new Date(before.researched_at).getTime() < FULL_RESEARCH_DAYS * 86_400_000;
   if (!opts.force && before?.claims && recentResearch) {
     const urls = [...new Map(before.claims.items.map((i) => [normaliseUrl(i.source_url), i.source_url])).values()];
-    const checks = await Promise.all(urls.map((u) => checkPage(db, u, deps.fetcher)));
+    opts.onStage?.(`Checking ${urls.length} source page${urls.length === 1 ? '' : 's'}`);
+    let done = 0;
+    const checks = await Promise.all(
+      urls.map(async (u) => {
+        const c = await checkPage(db, u, { fetcher: deps.fetcher, sleep: deps.sleep });
+        opts.onDetail?.(`${++done} of ${urls.length} checked`);
+        return c;
+      }),
+    );
     if (urls.length > 0 && checks.every((c) => c.status !== 'error')) {
       const changed = checks.filter((c): c is Extract<PageCheck, { content: PageContent }> => c.status === 'changed' || c.status === 'new');
       if (!changed.length) {
@@ -391,6 +561,7 @@ export async function refreshClaims(
         return 'revalidated';
       }
       try {
+        opts.onStage?.('Re-reading changed pages with Claude Haiku', `${changed.length} of ${urls.length} page${urls.length === 1 ? '' : 's'}`);
         const fresh = await rereadClaimPages(deps.getAnthropic(), provider, deps.topics, changed, opts.usage);
         const changedUrls = new Set(changed.map((c) => normaliseUrl(c.url)));
         const kept = before.claims.items.filter((i) => !changedUrls.has(normaliseUrl(i.source_url)));
@@ -401,44 +572,50 @@ export async function refreshClaims(
         throw err;
       }
     }
+    const broken = checks.filter((c) => c.status === 'error').length;
+    if (broken) opts.onStage?.(`${broken} source page${broken === 1 ? '' : 's'} couldn't be fetched — a full search is needed`);
   }
-  if (!opts.allowResearch) return 'deferred';
+  if (!opts.takeResearch()) return 'deferred';
+  opts.onStage?.('Searching the web with Claude Sonnet', 'usually 1–3 minutes');
   const claims: Claims = await researchClaims(deps.getAnthropic(), provider, deps.topics, opts.usage);
   await finishSearch(db, provider.id, { claims, researched: true });
   // Record the cited pages now, so the next check can tell whether they changed without a search.
-  for (const url of new Set(claims.items.map((i) => i.source_url))) await checkPage(db, url, deps.fetcher);
+  const cited = [...new Set(claims.items.map((i) => i.source_url))];
+  opts.onStage?.('Recording the pages it cited', `${cited.length} page${cited.length === 1 ? '' : 's'}`);
+  await Promise.all(cited.map((url) => checkPage(db, url, { fetcher: deps.fetcher, sleep: deps.sleep })));
   return 'researched';
 }
 
-async function checkClaims(deps: EnrichDeps, run: Run, providers: Provider[], maxResearch: number) {
+const CLAIMS_WORDS: Record<Exclude<ClaimsOutcome, 'deferred'>, string> = {
+  revalidated: 'Pages unchanged — confirmed as current',
+  reread: 'Some pages changed and were re-read',
+  researched: 'Searched the web',
+};
+
+async function checkClaimsFor(deps: EnrichDeps, run: Run, provider: Provider, before: ClaimsRow | undefined, item: RunItem, budget: { left: number }) {
   const { db } = deps;
-  let researchLeft = maxResearch;
-  for (const provider of providers) {
-    const before = await getClaims(db, provider.id);
-    if (before && before.claims && isFresh(before)) continue;
-    run.stats.claims.due += 1;
-    const { start } = await claimSearch(db, provider.id, null, false);
-    if (!start) continue; // a search is already running
-    try {
-      const outcome = await refreshClaims(deps, provider, before, { force: false, allowResearch: researchLeft > 0, usage: run.usage });
-      if (outcome === 'deferred') {
-        await releaseSearch(db, provider.id, before);
-        run.stats.claims.deferred += 1;
-        run.note(`Public claims for ${provider.provider}: needs a full search — left for the next run.`);
-        continue;
-      }
-      if (outcome === 'researched') researchLeft -= 1;
-      run.stats.claims[outcome] += 1;
-      run.note(
-        `Public claims for ${provider.provider}: ${
-          outcome === 'revalidated' ? 'pages unchanged, confirmed as current' : outcome === 'reread' ? 'some pages changed and were re-read' : 'searched the web'
-        }.`,
-      );
-    } catch (err) {
-      run.stats.claims.failed += 1;
-      await finishSearch(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error checking this provider.' });
-      run.note(`Public claims for ${provider.provider}: failed (${message(err)}).`);
+  run.start(item, 'Starting');
+  const { start } = await claimSearch(db, provider.id, null, false);
+  if (!start) return run.done(item, 'Skipped — a search was already running for this provider');
+  try {
+    const outcome = await refreshClaims(deps, provider, before, {
+      force: false,
+      takeResearch: () => (budget.left > 0 ? (budget.left--, true) : false),
+      usage: run.usage,
+      onStage: (stage, detail = null) => run.stage(item, stage, detail),
+      onDetail: (d) => run.detail(item, d),
+    });
+    if (outcome === 'deferred') {
+      await releaseSearch(db, provider.id, before);
+      run.stats.claims.deferred += 1;
+      return run.done(item, 'Needs a full web search — left for the next run (search limit reached)');
     }
+    run.stats.claims[outcome] += 1;
+    return run.done(item, CLAIMS_WORDS[outcome]);
+  } catch (err) {
+    run.stats.claims.failed += 1;
+    await finishSearch(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error checking this provider.' });
+    return run.fail(item, item.stage ?? 'Checking', message(err));
   }
 }
 
@@ -450,15 +627,44 @@ export async function runEnrichment(deps: EnrichDeps, opts: EnrichOptions): Prom
     deps.getAnthropic(); // fail early if Claude isn't configured
     const all = await deps.providers();
     const providers = opts.providerIds ? all.filter((p) => opts.providerIds!.includes(p.id)) : all;
-    if (parts.has('prices')) await checkPrices(deps, run, providers);
-    await saveRun(deps.db, run, 'running');
-    if (parts.has('sources')) await checkSources(deps, run, all);
-    await saveRun(deps.db, run, 'running');
-    if (parts.has('claims')) await checkClaims(deps, run, providers, opts.maxResearch ?? 3);
-    await saveRun(deps.db, run, 'done');
+
+    // Plan every item first, so the live view can show what's coming and estimate the time.
+    const prices: PriceTarget[] = [];
+    if (parts.has('prices')) {
+      const seen = new Set<string>();
+      for (const p of providers) {
+        if (!p.source_url) run.skipped.no_price_list += 1;
+        else if (!seen.has(p.source_url)) {
+          seen.add(p.source_url);
+          prices.push({ provider: p, url: p.source_url, item: run.add('prices', `Price list · ${p.provider}`, p.source_url) });
+        }
+      }
+    }
+    const sources = parts.has('sources') ? (await listSources(deps.db)).filter((s) => s.active).map((s) => ({ source: s, item: run.add('sources', `Source · ${s.name}`, s.url) })) : [];
+    const claims: { provider: Provider; before: ClaimsRow | undefined; item: RunItem }[] = [];
+    if (parts.has('claims')) {
+      for (const p of providers) {
+        const before = await getClaims(deps.db, p.id);
+        if (before?.claims && isFresh(before)) run.skipped.claims_current += 1;
+        else claims.push({ provider: p, before, item: run.add('claims', `Public claims · ${p.provider}`, p.source_url) });
+      }
+      run.stats.claims.due = claims.length;
+    }
+    await run.save(true);
+
+    const pending = (await listSuggestions(deps.db, { status: 'pending' })).filter((s) => s.application_id === null && s.note.startsWith(AUTO_NOTE));
+    await pool(run, prices, CONCURRENCY.prices, (t) => checkPrice(deps, run, t, pending));
+    await pool(run, sources, CONCURRENCY.sources, ({ source, item }) => checkSource(deps, run, source, item, all));
+    const budget = { left: opts.maxResearch ?? 3 };
+    await pool(run, claims, CONCURRENCY.claims, ({ provider, before, item }) => checkClaimsFor(deps, run, provider, before, item, budget));
+
+    if (run.cancelled) {
+      run.note('Stopped by an admin.');
+      await finishRun(run, 'cancelled', 'Stopped by an admin');
+    } else await finishRun(run, 'done');
   } catch (err) {
     run.note(`Stopped: ${message(err)}`);
-    await saveRun(deps.db, run, 'failed', message(err));
+    await finishRun(run, 'failed', message(err));
   }
   return toRun((await deps.db.query('SELECT * FROM enrichment_runs WHERE id = $1', [run.id]))[0]);
 }

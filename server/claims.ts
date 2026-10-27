@@ -18,6 +18,8 @@ import type { PageContent } from './pages.ts';
 export const CLAIMS_MAX_AGE_DAYS = 60;
 /** A full web search runs at least this often, to find pages the earlier search didn't. */
 export const FULL_RESEARCH_DAYS = 180;
+/** Time and retries for each Claude call: a long PDF or a slow search shouldn't fail the check. */
+const CLAUDE_TIMEOUTS = { timeout: 5 * 60_000, maxRetries: 3 };
 /** A search still "running" after this long died with a server restart; it can be started again. */
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 
@@ -119,6 +121,7 @@ const normalise = (u: string) => u.trim().replace(/#.*$/, '').replace(/\/+$/, ''
 function apiError(err: unknown): never {
   if (err instanceof Anthropic.AuthenticationError) throw new NotesError(503, 'Research is not configured: check ANTHROPIC_API_KEY on the server.');
   if (err instanceof Anthropic.RateLimitError) throw new NotesError(429, 'The research service is busy. Try again in a few minutes.');
+  if (err instanceof Anthropic.APIConnectionTimeoutError) throw new NotesError(504, 'Claude took too long to answer (tried 4 times).');
   if (err instanceof Anthropic.APIConnectionError) throw new NotesError(502, 'Could not reach the research service.');
   if (err instanceof Anthropic.APIError) throw new NotesError(502, `The research service returned an error (${err.status ?? 'unknown'}).`);
   throw err;
@@ -145,7 +148,7 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
             { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 10 },
           ],
           messages,
-        })
+        }, { timeout: 10 * 60_000, maxRetries: 3 })
         .finalMessage();
       usage.add(RESEARCH_MODEL, message.usage);
       for (const block of message.content) {
@@ -180,7 +183,7 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
           content: `Topic ids: ${topics.map((t) => t.id).join(', ')}\n\nRetrieved pages:\n${[...seen].map(([u, t]) => `- ${u} (${t})`).join('\n') || '(none)'}\n\n<notes>\n${notes}\n</notes>`,
         },
       ],
-    });
+    }, CLAUDE_TIMEOUTS);
   } catch (err) {
     apiError(err);
   }
@@ -220,7 +223,7 @@ export async function rereadClaimPages(client: Anthropic, provider: Provider, to
       output_config: { effort: 'low', format: betaZodOutputFormat(RereadSchema) },
       system: REREAD_SYSTEM,
       messages: [{ role: 'user', content }],
-    });
+    }, CLAUDE_TIMEOUTS);
   } catch (err) {
     apiError(err);
   }
