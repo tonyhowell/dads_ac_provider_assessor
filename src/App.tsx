@@ -11,7 +11,8 @@ import { InterviewPackScreen } from './screens/InterviewPackScreen';
 import { ScoringScreen } from './screens/ScoringScreen';
 import { PrintPackScreen } from './screens/PrintPackScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
-import { ProvidersScreen } from './screens/ProvidersScreen';
+import { FindProvidersScreen } from './screens/FindProvidersScreen';
+import { CompareScreen } from './screens/CompareScreen';
 import { ProviderDetailScreen } from './screens/ProviderDetailScreen';
 import { SelectionScreen } from './screens/SelectionScreen';
 import { InterviewsScreen } from './screens/InterviewsScreen';
@@ -120,7 +121,8 @@ function ApplicationRoutes() {
         <Route index element={<ParticipantScreen />} />
         <Route path="overview" element={<OverviewScreen />} />
         <Route path="costs" element={<CostsScreen />} />
-        <Route path="providers" element={<ProvidersScreen />} />
+        <Route path="providers" element={<FindProvidersScreen />} />
+        <Route path="compare" element={<CompareScreen />} />
         <Route path="providers/new" element={<ProviderFormScreen />} />
         <Route path="providers/:id" element={<ProviderDetailScreen />} />
         <Route path="providers/:id/edit" element={<ProviderFormScreen />} />

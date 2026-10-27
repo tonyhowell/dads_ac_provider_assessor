@@ -23,7 +23,7 @@ import type {
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 7;
+  version: 8;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -53,6 +53,8 @@ export interface AppState {
   decisionNotes: string;
   /** Notes left on screens for the family. */
   screenNotes: ScreenNote[];
+  /** "Best provider for each service" (v8): the provider the family picked for each service. */
+  servicePicks: Partial<Record<RateKey, string>>;
 }
 
 /** Fields added in v4, at their starting values. */
@@ -67,7 +69,7 @@ const V4_DEFAULTS = {
   weights: {},
   decisionNotes: '',
   screenNotes: [],
-} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections'>;
+} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections' | 'servicePicks'>;
 
 export type { Action };
 
@@ -108,7 +110,7 @@ export const emptyProfile = (): ApplicantProfile => ({
   anything_else: '',
 });
 
-export const emptyState = (): AppState => ({ version: 7, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS });
+export const emptyState = (): AppState => ({ version: 8, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {} });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -119,7 +121,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 7, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS };
+  return { version: 8, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {} };
 }
 
 interface StateV1 {
@@ -154,11 +156,13 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * v5 → v6: provider edits leave the family's state for the common catalogue (the server moves them first;
  * see `legacyProviderEdits`), and special rates are added.
  * v6 → v7: the applicant profile, the "What I'm looking for" summary and dossier choices are added.
+ * v7 → v8: picks for "the best provider for each service" are added, empty.
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 7) return s as AppState;
-  if (s?.version === 6) return { ...V7_DEFAULTS, ...(s as unknown as Omit<AppState, 'version'>), version: 7 };
+  if (s?.version === 8) return s as AppState;
+  if (s?.version === 7) return { ...(s as unknown as Omit<AppState, 'version' | 'servicePicks'>), servicePicks: {}, version: 8 };
+  if (s?.version === 6) return migrate({ ...V7_DEFAULTS, ...(s as object), version: 7 });
   if (s?.version === 5) {
     const { providerEdits: _moved, ...rest } = s as unknown as Omit<AppState, 'version' | 'specialRates'> & { providerEdits?: Provider[] };
     return migrate({ ...rest, specialRates: {}, version: 6 });
@@ -208,6 +212,10 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case 'selection/remove':
       return { ...state, selection: state.selection.filter((e) => e.provider_id !== action.providerId) };
+    case 'servicePick/set': {
+      const { [action.key]: _old, ...rest } = state.servicePicks;
+      return { ...state, servicePicks: action.providerId ? { ...rest, [action.key]: action.providerId } : rest };
+    }
     case 'selection/restore': {
       if (state.selection.some((e) => e.provider_id === action.entry.provider_id)) return state;
       const selection = [...state.selection];

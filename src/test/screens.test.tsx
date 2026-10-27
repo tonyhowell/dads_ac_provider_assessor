@@ -18,7 +18,7 @@ describe('Provider selection', () => {
 
   it('adds providers to the initial scan from the full list', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers');
+    const { server } = await renderApp('/providers?view=all');
 
     const card = await add(user, 'Bolton Clarke');
     expect(within(card).getByText('Step 1: Initial scan')).toBeInTheDocument();
@@ -28,7 +28,7 @@ describe('Provider selection', () => {
 
   it('filters by search and by stage', async () => {
     const user = userEvent.setup();
-    await renderApp('/providers');
+    await renderApp('/providers?view=all');
     await user.type(screen.getByLabelText('Search by name'), 'anglicare');
     expect(screen.getByText(/Showing 1 of 7 providers/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Search by name'));
@@ -42,9 +42,10 @@ describe('Provider selection', () => {
 
   it('moves providers through scan → refinement → interview list, with undo', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers');
+    const { server } = await renderApp('/providers?view=all');
     for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)', 'Anglicare Southern Queensland']) await add(user, name);
-    await user.click(screen.getByRole('link', { name: 'Continue to choose who to meet' }));
+    await user.click(screen.getByRole('link', { name: 'Compare your shortlist' }));
+    await user.click(await screen.findByRole('link', { name: 'Rank and add reasons on the selection board' }));
     expect(await screen.findByRole('link', { name: 'Step 1: Initial scan, 3 providers' })).toHaveAttribute('aria-current', 'page');
 
     // Drop one at the scan stage (and undo it once), move the other two on.

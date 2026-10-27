@@ -210,8 +210,8 @@ export function ProviderDetailScreen() {
       <NextStepCard
         done={selected ? `${provider.provider} is on your list.` : `Add ${provider.provider} to your list if it's worth a closer look.`}
         next="choose who to meet"
-        back={{ to: '/providers', label: 'All providers' }}
-        forward={{ to: '/selection', label: 'Continue to choose who to meet' }}
+        back={{ to: '/providers', label: 'Find providers' }}
+        forward={{ to: '/compare', label: 'Compare your shortlist' }}
         primary={selected}
       />
     </section>

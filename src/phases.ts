@@ -38,13 +38,16 @@ export const PHASES: Phase[] = [
     name: 'Compare',
     screens: [
       { id: 'costs', label: 'Compare costs', to: '/costs', match: ['/costs'], done: (s) => !!s.participant },
-      { id: 'providers', label: 'Providers', to: '/providers', match: ['/providers'], done: (s) => s.selection.length > 0 },
+      { id: 'providers', label: 'Find providers', to: '/providers', match: ['/providers'], done: (s) => s.selection.length > 0 },
     ],
   },
   {
     n: 3,
     name: 'Choose who to meet',
-    screens: [{ id: 'selection', label: 'Choose who to meet', to: '/selection', match: ['/selection'], done: (s) => entriesAt(s, 'interview').length >= 2 }],
+    screens: [
+      { id: 'compare', label: 'Compare your shortlist', to: '/compare', match: ['/compare'], done: (s) => entriesAt(s, 'interview').length >= 2 },
+      { id: 'selection', label: 'Selection board', to: '/selection', match: ['/selection'], done: (s) => entriesAt(s, 'interview').length >= 2 },
+    ],
   },
   {
     n: 4,

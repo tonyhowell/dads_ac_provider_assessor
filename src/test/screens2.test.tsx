@@ -175,7 +175,7 @@ describe('Providers: add, edit, import', () => {
       { ...bolton, postcodes_served: ['4100-4120'] },
       { ...carers, postcodes_served: ['4178'] },
     ];
-    await renderApp('/providers', { backend });
+    await renderApp('/providers?view=all', { backend });
     expect(screen.queryByRole('heading', { name: 'Bolton Clarke' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('heading', { name: 'Carers Link' }).closest('li')!).getByText('Serves 4178')).toBeInTheDocument();
     expect(within(screen.getByRole('heading', { name: 'Envigor Brisbane Bayside' }).closest('li')!).getByText('Area not confirmed')).toBeInTheDocument();
@@ -184,7 +184,7 @@ describe('Providers: add, edit, import', () => {
   });
 
   it('flags providers that mention travel or admin fees', async () => {
-    await renderApp('/providers');
+    await renderApp('/providers?view=all');
     const card = screen.getByRole('heading', { name: 'Right at Home Brisbane Bayside South' }).closest('li')!;
     expect(within(card).getByText('Possible extra fee')).toBeInTheDocument();
   });

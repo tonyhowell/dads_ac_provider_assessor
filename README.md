@@ -93,6 +93,22 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
   - Results are cached for each provider for every application, and searched again after 60 days or on request.
   - Each family sees the claims for the topics their answers keep in. Claims also show under the matching interview questions ("They say: …").
 
+### Finding providers (v4)
+- **Find providers** starts with two ways to look, on one set of pages:
+  - **One provider for my whole plan:** providers ranked by fit, best first, each with the reasons why and where each reason came from.
+  - **The best provider for each service:** pick one service or several. Providers are ranked for those services, with hourly prices against the price guide, "Choose for …" picks for each service, and "best combinations" (one provider against the cheapest mix). Support at Home pays one provider, so a mix needs one provider to subcontract the others; the page says so.
+- **How the fit is worked out** (`src/matching.ts`):
+  - points for the family's top three priorities from "What I'm looking for" (30, 25, 20), for published prices for their services (15) and for price against the guide (10);
+  - each priority scores from reviewed provider data, published prices or the provider's public claims, with the source shown;
+  - anything not found scores nothing but never counts against the provider; when more than half the priority weight is unknown the verdict is "Not enough known";
+  - providers with no published prices go in a "needs a quote" group;
+  - fee flags are marked as a deal-breaker when the family named unexpected fees. Filtering them out is opt-in (Refine).
+- **Insight panel:** beside the list on wide screens, its own page below 1024px. Tabs: why it fits, cost, public claims, notes. Includes "How the score is worked out" and Next provider.
+- **Compare your shortlist** (`/compare`): the shortlist side by side, the same for both ways of looking. "Interview them?" moves a provider to the interview list. The selection board is still there for ranking and reasons.
+- **Phones (under 768px)** get a reduced version: one thing per screen, verdict words instead of scores, the top three first, three quick filters, one service at a time and stacked cards instead of the comparison table. Scores, the comparison table and combinations stay on bigger screens, with one line saying so.
+- The old alphabetical list is still under "Look up a provider by name".
+- State v8 adds the per-service picks.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

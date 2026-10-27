@@ -43,7 +43,7 @@ export function Layout() {
       )}
 
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[var(--wrap)] min-w-0 flex-1 px-4 py-6">
-        <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="no-print mb-4 hidden flex-wrap items-center justify-between gap-2 md:flex">
           <nav aria-label="Breadcrumb" className="text-[0.95rem]">
             {here ? (
               <ol className="flex flex-wrap items-center gap-1">

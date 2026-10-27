@@ -259,7 +259,7 @@ export function CostsScreen() {
         done={priced.length ? `You've compared ${priced.length} provider${priced.length === 1 ? '' : 's'} on cost.` : 'Look through the providers near you.'}
         next="look at providers' details, flags and notes"
         back={{ to: '/bounding', label: "What I'm looking for" }}
-        forward={{ to: '/providers', label: 'Continue to providers' }}
+        forward={{ to: '/providers', label: 'Continue to find providers' }}
       />
     </section>
   );

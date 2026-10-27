@@ -413,7 +413,7 @@ describe('moving v1 data', () => {
     expect(mine).toMatchObject([{ id, name: 'First application', role: 'contributor' }]);
     const state = (await sam.get(`/api/applications/${id}/state`)).json;
     expect(state.version).toBe(7);
-    expect(state.state).toMatchObject({ version: 7, specialRates: {}, profile: null, selection: [{ provider_id: 'carers-link' }] });
+    expect(state.state).toMatchObject({ version: 8, specialRates: {}, profile: null, selection: [{ provider_id: 'carers-link' }] });
     expect(state.state.providerEdits).toBeUndefined();
     expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'new-co', pc: 101 }]);
     const [{ n }] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions WHERE application_id = $1', [id]);

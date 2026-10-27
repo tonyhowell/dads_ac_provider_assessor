@@ -14,6 +14,7 @@ import {
   ApplicantProfileSchema,
   StoredSummarySchema,
   DossierSectionSchema,
+  RateKeySchema,
 } from '../schemas';
 import { CRITERION_IDS } from '../scoring';
 
@@ -30,6 +31,8 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('note/delete'), id }),
   z.object({ type: z.literal('selection/add'), providerId: id, at }),
   z.object({ type: z.literal('selection/remove'), providerId: id }),
+  /** The provider picked for one service; null clears the pick. */
+  z.object({ type: z.literal('servicePick/set'), key: RateKeySchema, providerId: id.nullable() }),
   /** Undo of a drop: puts the entry back at its old position. */
   z.object({ type: z.literal('selection/restore'), entry: SelectionEntrySchema, index: z.number().int().min(0).max(10_000) }),
   z.object({ type: z.literal('selection/stage'), providerId: id, stage: SelectionStageSchema, at }),

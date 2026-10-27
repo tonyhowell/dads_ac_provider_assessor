@@ -56,6 +56,9 @@ export function ProvidersScreen() {
 
   return (
     <section className="space-y-6">
+      <Link to="/providers" className="btn-quiet">
+        <Icon name="arrowLeft" size={20} /> Find providers that fit
+      </Link>
       <ScreenHeader title="Look up providers near you" purpose="Check each provider's prices and notes, and add the ones worth a closer look to your list." helpTopic="providers">
         {user?.role === 'admin' ? (
           <Link to="/admin/providers" className="btn">
@@ -165,7 +168,7 @@ export function ProvidersScreen() {
         done={`${state.selection.length} provider${state.selection.length === 1 ? ' is' : 's are'} on your list.`}
         next="narrow your list down to the ones you'll interview"
         back={{ to: '/costs', label: 'Compare costs' }}
-        forward={{ to: '/selection', label: 'Continue to choose who to meet' }}
+        forward={{ to: '/compare', label: 'Compare your shortlist' }}
       />
     </section>
   );

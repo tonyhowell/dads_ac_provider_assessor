@@ -41,7 +41,7 @@ describe('applications', () => {
 
   it('shows viewers everything but lets them change nothing', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers', { user: sam, role: 'viewer' });
+    const { server } = await renderApp('/providers?view=all', { user: sam, role: 'viewer' });
     expect(screen.getByText('You can view this application')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add to my list/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Suggest a provider/ })).not.toBeInTheDocument();

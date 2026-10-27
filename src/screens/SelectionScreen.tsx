@@ -143,7 +143,7 @@ export function SelectionScreen() {
       <NextStepCard
         done={`${interviewCount} provider${interviewCount === 1 ? ' is' : 's are'} ready to interview.`}
         next="use your interview questions with each provider"
-        back={{ to: '/providers', label: 'Providers' }}
+        back={{ to: '/compare', label: 'Compare your shortlist' }}
         forward={{ to: '/interview-pack', label: 'Continue to interview questions' }}
       />
     </section>
