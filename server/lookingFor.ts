@@ -6,6 +6,7 @@ import { answeredQuestions } from '../src/lookingFor.ts';
 import type { AppState } from '../src/state/reducer.ts';
 import type { SeedData } from '../src/data/load.ts';
 import { MODEL, NotesError } from './interviewNotes.ts';
+import { apiMessage, withFallbacks } from './fallbacks.ts';
 
 export type LookingForSummary = z.infer<typeof LookingForSummarySchema>;
 
@@ -58,21 +59,23 @@ export async function generateLookingForSummary(client: Anthropic, input: string
   if (input.trim().length < 40) throw new NotesError(400, 'Answer a few questions first, so there is something to summarise.');
   let response;
   try {
-    response = await client.beta.messages.parse({
+    response = await withFallbacks((extra) => client.beta.messages.parse({
       model: MODEL,
       max_tokens: 16000,
-      // Re-run on Anthropic's recommended model if a safety classifier declines.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      // Re-run on Anthropic's recommended model if a safety classifier declines (when the account has it).
+      ...extra,
       output_config: { effort: 'medium', format: betaZodOutputFormat(LookingForSummarySchema) },
       system: SYSTEM,
       messages: [{ role: 'user', content: `<recorded>\n${input}\n</recorded>` }],
-    });
+    }));
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) throw new NotesError(503, 'Drafting is not configured: check ANTHROPIC_API_KEY on the server.');
     if (err instanceof Anthropic.RateLimitError) throw new NotesError(429, 'The drafting service is busy. Wait a minute and try again.');
     if (err instanceof Anthropic.APIConnectionError) throw new NotesError(502, 'Could not reach the drafting service. Check your internet connection.');
-    if (err instanceof Anthropic.APIError) throw new NotesError(502, `The drafting service returned an error (${err.status ?? 'unknown'}).`);
+    if (err instanceof Anthropic.APIError) {
+      console.error('[claude]', err.status, apiMessage(err));
+      throw new NotesError(502, `Claude returned an error (${err.status ?? 'unknown'}): ${apiMessage(err)}`);
+    }
     throw err;
   }
   if (response.stop_reason === 'refusal') throw new NotesError(422, 'The drafting service declined to write this summary.');

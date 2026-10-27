@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { NotesError } from './interviewNotes.ts';
 import { EXTRACT_MODEL, RESEARCH_MODEL, UsageTally } from './usage.ts';
 import { normaliseUrl } from './claims.ts';
+import { withFallbacks } from './fallbacks.ts';
 import type { Provider } from '../src/types.ts';
 
 // Finding providers: a web search (Claude Sonnet 5.5, the cheapest model with web search and fetch) for
@@ -46,13 +47,12 @@ async function searchAndStructure(client: Anthropic, system: string, prompt: str
   const seen = new Map<string, string>();
   let notes = '';
   for (let turn = 0; turn < 5; turn++) {
-    const message = await client.beta.messages
+    const message = await withFallbacks((extra) => client.beta.messages
       .stream(
         {
           model: RESEARCH_MODEL,
           max_tokens: 16000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
+          ...extra,
           output_config: { effort: 'low' },
           system,
           tools: [
@@ -63,7 +63,7 @@ async function searchAndStructure(client: Anthropic, system: string, prompt: str
         },
         REQUEST,
       )
-      .finalMessage();
+      .finalMessage());
     usage.add(RESEARCH_MODEL, message.usage);
     for (const block of message.content) {
       if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { InterviewNotesSchema } from '../src/schemas.ts';
+import { apiMessage, withFallbacks } from './fallbacks.ts';
 import type { InterviewNotes } from '../src/types.ts';
 
 export const MODEL = 'claude-opus-5-5';
@@ -44,16 +45,15 @@ function userPrompt(req: NotesRequest): string {
 export async function generateInterviewNotes(client: Anthropic, req: NotesRequest): Promise<InterviewNotes> {
   let response;
   try {
-    response = await client.beta.messages.parse({
+    response = await withFallbacks((extra) => client.beta.messages.parse({
       model: MODEL,
       max_tokens: 16000,
-      // Re-run on Anthropic's recommended model if a safety classifier declines.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      // Re-run on Anthropic's recommended model if a safety classifier declines (when the account has it).
+      ...extra,
       output_config: { effort: 'medium', format: betaZodOutputFormat(InterviewNotesSchema) },
       system: SYSTEM,
       messages: [{ role: 'user', content: userPrompt(req) }],
-    });
+    }));
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
       throw new NotesError(503, 'Notes generation is not configured: check ANTHROPIC_API_KEY in .env.');
@@ -65,7 +65,8 @@ export async function generateInterviewNotes(client: Anthropic, req: NotesReques
       throw new NotesError(502, 'Could not reach the notes service. Check your internet connection.');
     }
     if (err instanceof Anthropic.APIError) {
-      throw new NotesError(502, `The notes service returned an error (${err.status ?? 'unknown'}).`);
+      console.error('[claude]', err.status, apiMessage(err));
+      throw new NotesError(502, `Claude returned an error (${err.status ?? 'unknown'}): ${apiMessage(err)}`);
     }
     throw err;
   }

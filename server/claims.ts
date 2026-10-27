@@ -4,6 +4,7 @@ import type { Db, Queryable } from './db.ts';
 import { ClaimsSchema } from '../src/schemas.ts';
 import type { Claims, ClaimItem, Provider } from '../src/types.ts';
 import { NotesError } from './interviewNotes.ts';
+import { apiMessage, withFallbacks } from './fallbacks.ts';
 import { EXTRACT_MODEL, RESEARCH_MODEL, UsageTally } from './usage.ts';
 import { z } from 'zod';
 import { ClaimItemSchema } from '../src/schemas.ts';
@@ -123,7 +124,10 @@ function apiError(err: unknown): never {
   if (err instanceof Anthropic.RateLimitError) throw new NotesError(429, 'The research service is busy. Try again in a few minutes.');
   if (err instanceof Anthropic.APIConnectionTimeoutError) throw new NotesError(504, 'Claude took too long to answer (tried 4 times).');
   if (err instanceof Anthropic.APIConnectionError) throw new NotesError(502, 'Could not reach the research service.');
-  if (err instanceof Anthropic.APIError) throw new NotesError(502, `The research service returned an error (${err.status ?? 'unknown'}).`);
+  if (err instanceof Anthropic.APIError) {
+    console.error('[claude]', err.status, apiMessage(err));
+    throw new NotesError(502, `Claude returned an error (${err.status ?? 'unknown'}): ${apiMessage(err)}`);
+  }
   throw err;
 }
 
@@ -135,21 +139,25 @@ export async function researchClaims(client: Anthropic, provider: Provider, topi
   try {
     // Server tools run on Anthropic's side; a long search can pause, so resume a few times.
     for (let turn = 0; turn < 5; turn++) {
-      const message = await client.beta.messages
-        .stream({
-          model: RESEARCH_MODEL,
-          max_tokens: 32000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
-          output_config: { effort: 'medium' },
-          system: RESEARCH_SYSTEM,
-          tools: [
-            { type: 'web_search_20260209', name: 'web_search', max_uses: 8, user_location: { type: 'approximate', country: 'AU' } },
-            { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 10 },
-          ],
-          messages,
-        }, { timeout: 10 * 60_000, maxRetries: 3 })
-        .finalMessage();
+      const message = await withFallbacks((extra) =>
+        client.beta.messages
+          .stream(
+            {
+              model: RESEARCH_MODEL,
+              max_tokens: 32000,
+              ...extra,
+              output_config: { effort: 'medium' },
+              system: RESEARCH_SYSTEM,
+              tools: [
+                { type: 'web_search_20260209', name: 'web_search', max_uses: 8, user_location: { type: 'approximate', country: 'AU' } },
+                { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 10 },
+              ],
+              messages,
+            },
+            { timeout: 10 * 60_000, maxRetries: 3 },
+          )
+          .finalMessage(),
+      );
       usage.add(RESEARCH_MODEL, message.usage);
       for (const block of message.content) {
         if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
