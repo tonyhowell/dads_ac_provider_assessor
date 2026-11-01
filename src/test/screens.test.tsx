@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { memoryServer, renderApp } from './renderApp';
+import { memoryServer, renderApp, gathered } from './renderApp';
 import { emptyState } from '../state/reducer';
 
 afterEach(() => {
@@ -18,7 +18,7 @@ describe('Provider selection', () => {
 
   it('adds providers to the initial scan from the full list', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers?view=all');
+    const { server } = await renderApp('/providers?view=all', { server: memoryServer(gathered()) });
 
     const card = await add(user, 'Bolton Clarke');
     expect(within(card).getByText('Step 1: Initial scan')).toBeInTheDocument();
@@ -28,7 +28,7 @@ describe('Provider selection', () => {
 
   it('filters by search and by stage', async () => {
     const user = userEvent.setup();
-    await renderApp('/providers?view=all');
+    await renderApp('/providers?view=all', { server: memoryServer(gathered()) });
     await user.type(screen.getByLabelText('Search by name'), 'anglicare');
     expect(screen.getByText(/Showing 1 of 7 providers/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText('Search by name'));
@@ -42,7 +42,7 @@ describe('Provider selection', () => {
 
   it('moves providers through scan → refinement → interview list, with undo', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers?view=all');
+    const { server } = await renderApp('/providers?view=all', { server: memoryServer(gathered()) });
     for (const name of ['Bolton Clarke', 'BlueCare (UnitingCare QLD)', 'Anglicare Southern Queensland']) await add(user, name);
     await user.click(screen.getByRole('link', { name: 'Compare your shortlist' }));
     await user.click(await screen.findByRole('link', { name: 'Rank and add reasons on the selection board' }));

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DictateButton } from './Dictation';
 
 /**
  * Textarea that saves when the user leaves it, not on every keystroke, so shared state
@@ -26,18 +27,28 @@ export function CommitTextarea({
     if (!editing) setDraft(value);
   }, [value, editing]);
   return (
-    <textarea
-      id={id}
-      className={className}
-      value={draft}
-      autoFocus={autoFocus}
-      onFocus={() => setEditing(true)}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        setEditing(false);
-        if (draft !== value) onCommit(draft);
-        onDone?.();
-      }}
-    />
+    <>
+      <textarea
+        id={id}
+        className={className}
+        value={draft}
+        autoFocus={autoFocus}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          if (draft !== value) onCommit(draft);
+          onDone?.();
+        }}
+      />
+      <DictateButton
+        label="this answer"
+        onText={(t) => {
+          const next = [draft.trim(), t].filter(Boolean).join(' ');
+          setDraft(next);
+          onCommit(next);
+        }}
+      />
+    </>
   );
 }

@@ -31,6 +31,13 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('note/delete'), id }),
   z.object({ type: z.literal('selection/add'), providerId: id, at }),
   z.object({ type: z.literal('selection/remove'), providerId: id }),
+  /** Gather stage (v9). */
+  z.object({ type: z.literal('gather/applicant'), userId: id.nullable() }),
+  z.object({ type: z.literal('gather/assign'), step: z.enum(['situation', 'money', 'plan', 'needs', 'matters', 'about', 'brief']), userId: id.nullable() }),
+  z.object({ type: z.literal('gather/planSource'), source: z.enum(['support_plan', 'manual']).nullable() }),
+  /** The server sets `at` and `by`. */
+  z.object({ type: z.literal('gather/briefConfirm'), at, by: z.string().max(200) }),
+  z.object({ type: z.literal('gather/briefComment'), comment: z.object({ id, author: z.string().max(200), text: text.min(1).max(4000), at }) }),
   /** The provider picked for one service; null clears the pick. */
   z.object({ type: z.literal('servicePick/set'), key: RateKeySchema, providerId: id.nullable() }),
   /** Undo of a drop: puts the entry back at its old position. */

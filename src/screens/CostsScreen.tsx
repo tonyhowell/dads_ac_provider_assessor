@@ -3,7 +3,6 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { usePlanCosts, type ProviderCost } from '../components/usePlanCosts';
-import { PlanEditor } from '../components/PlanEditor';
 import { PriceCell, PriceProvenance } from '../components/Price';
 import { headline, type PlanCost } from '../calc';
 import { RATE_KEYS } from '../schemas';
@@ -51,7 +50,7 @@ export function CostsScreen() {
       <ScreenHeader title="Compare the cost of your care plan" purpose="See what your care plan would cost at each provider, and what you'd pay yourself." helpTopic="costs" />
 
       {!state.participant && (
-        <DependencyCard to="/" action="Add your details" minutes={2}>
+        <DependencyCard to="/gather/situation" action="Add your details" minutes={2}>
           To compare costs with your budget, we need your level and pension. Until then, costs show the full range of what people pay.
         </DependencyCard>
       )}
@@ -130,7 +129,14 @@ export function CostsScreen() {
         />
       )}
 
-      <PlanEditor />
+      <p className="card flex flex-wrap items-center justify-between gap-3">
+        <span>
+          Costed on your care plan: {plan.filter((i) => i.hours_per_week > 0).length} services, {Math.round(plan.reduce((t, i) => t + i.hours_per_week, 0) * 10) / 10} hours a week.
+        </span>
+        <Link to="/gather/plan" className="btn">
+          Change your care plan
+        </Link>
+      </p>
 
       <section className="card space-y-3" aria-labelledby="pay-heading">
         <h2 id="pay-heading">What you'd pay</h2>
@@ -258,7 +264,7 @@ export function CostsScreen() {
       <NextStepCard
         done={priced.length ? `You've compared ${priced.length} provider${priced.length === 1 ? '' : 's'} on cost.` : 'Look through the providers near you.'}
         next="look at providers' details, flags and notes"
-        back={{ to: '/bounding', label: "What I'm looking for" }}
+        back={{ to: '/providers', label: 'Find providers' }}
         forward={{ to: '/providers', label: 'Continue to find providers' }}
       />
     </section>

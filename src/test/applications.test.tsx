@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderApp } from './renderApp';
+import { renderApp, gathered, memoryServer } from './renderApp';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -35,13 +35,13 @@ describe('applications', () => {
     const card = screen.getByRole('heading', { name: 'Dad – Wynnum' }).closest('li')!;
     expect(within(card).getByText(/you're coordinator/)).toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: /Continue/ }));
-    expect(await screen.findByRole('heading', { name: 'Tell us about your situation' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Situation' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Application: Dad – Wynnum/ })).toBeInTheDocument();
   });
 
   it('shows viewers everything but lets them change nothing', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers?view=all', { user: sam, role: 'viewer' });
+    const { server } = await renderApp('/providers?view=all', { user: sam, role: 'viewer', server: memoryServer(gathered()) });
     expect(screen.getByText('You can view this application')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add to my list/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Suggest a provider/ })).not.toBeInTheDocument();

@@ -1,9 +1,10 @@
-import { isAnswered } from './lookingFor';
+import { GATHER, stepPath } from './gather';
 import type { SeedData } from './data/load';
 import { entriesAt, type AppState } from './state/reducer';
 import { CRITERIA, failedMustQuestions, scoreKey } from './scoring';
 
-// Four phases the user can name out loud (UI-SPEC §4.2). Never locked: completion only informs.
+// Three stages the user can name out loud (improvement plan): Gather, Find, and Select, prep & interview.
+// Find opens once Gather has the essentials (see `missingForFind`); completion otherwise only informs.
 
 export interface Screen {
   id: string;
@@ -20,39 +21,26 @@ export interface Phase {
   screens: Screen[];
 }
 
-const allAnswered = (s: AppState, seed: SeedData) =>
-  seed.boundingGroups.flatMap((g) => g.questions).every((q) => isAnswered(s.answers[q.id]));
-
 export const PHASES: Phase[] = [
   {
     n: 1,
-    name: 'Your situation',
-    screens: [
-      { id: 'about', label: 'About you', to: '/', match: ['/'], done: (s) => !!s.participant },
-      { id: 'budget', label: 'Your budget', to: '/overview', match: ['/overview'], done: (s) => !!s.participant },
-      { id: 'matters', label: "What I'm looking for", to: '/bounding', match: ['/bounding'], done: allAnswered },
-    ],
+    name: 'Gather',
+    screens: GATHER.map((g) => ({ id: g.step, label: g.label, to: stepPath(g.step), match: g.step === 'situation' ? ['/', stepPath(g.step)] : [stepPath(g.step)], done: g.done })),
   },
   {
     n: 2,
-    name: 'Compare',
+    name: 'Find',
     screens: [
-      { id: 'costs', label: 'Compare costs', to: '/costs', match: ['/costs'], done: (s) => !!s.participant },
       { id: 'providers', label: 'Find providers', to: '/providers', match: ['/providers'], done: (s) => s.selection.length > 0 },
+      { id: 'costs', label: 'Compare costs', to: '/costs', match: ['/costs'], done: (s) => s.selection.length > 0 },
     ],
   },
   {
     n: 3,
-    name: 'Choose who to meet',
+    name: 'Select, prep & interview',
     screens: [
-      { id: 'compare', label: 'Compare your shortlist', to: '/compare', match: ['/compare'], done: (s) => entriesAt(s, 'interview').length >= 2 },
+      { id: 'compare', label: 'Compare shortlist', to: '/compare', match: ['/compare'], done: (s) => entriesAt(s, 'interview').length >= 2 },
       { id: 'selection', label: 'Selection board', to: '/selection', match: ['/selection'], done: (s) => entriesAt(s, 'interview').length >= 2 },
-    ],
-  },
-  {
-    n: 4,
-    name: 'Interview & decide',
-    screens: [
       {
         id: 'pack',
         label: 'Interview questions',

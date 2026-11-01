@@ -63,6 +63,7 @@ import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, getClaims, listClaims }
 import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, listSources, refreshClaims, removeSource, requestCancel, runEnrichment, updateSource, type EnrichDeps } from './enrich.ts';
 import { listPages, type Fetcher } from './pages.ts';
 import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
+import { readSupportPlan, suggestAnswers } from './gatherAi.ts';
 import { UsageTally } from './usage.ts';
 
 export type WebAuthn = Pick<
@@ -352,6 +353,35 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     // Shortlisting a provider reads its prices (finding the price list first if needed).
     if (body.action.type === 'selection/add' && getAnthropic) await startPriceCheck(body.action.providerId, false);
     return c.json(result);
+  });
+
+  /** Gather: Claude reads an uploaded support plan and suggests the care plan. The file isn't stored. */
+  member.post('/support-plan', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ name: z.string().max(300), mime: z.string().max(100), data: z.string().min(10).max(20 * 1024 * 1024) }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    try {
+      return c.json({ plan: await readSupportPlan(getAnthropic(), body) });
+    } catch (err) {
+      if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
+      console.error('[support-plan]', err);
+      return c.json({ error: 'Unexpected error reading the document.' }, 500);
+    }
+  });
+
+  /** Gather: Claude suggests questionnaire answers from a family conversation's transcript. Nothing is saved. */
+  member.post('/gather/conversation', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ transcript: z.string().trim().min(40, 'The recording is too short to suggest answers from.').max(400_000), groups: z.array(z.string().max(200)).min(1).max(20) }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    try {
+      const groups = seed.boundingGroups.filter((g) => body.groups.includes(g.group));
+      return c.json({ suggestions: await suggestAnswers(getAnthropic(), body.transcript, groups) });
+    } catch (err) {
+      if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
+      console.error('[conversation]', err);
+      return c.json({ error: 'Unexpected error reading the conversation.' }, 500);
+    }
   });
 
   /** Reads a shortlisted provider's prices again (or for the first time). */

@@ -11,14 +11,16 @@ import { Explain } from '../components/ui/Help';
 import { Icon } from '../components/ui/Icon';
 import type { BoundingAnswer } from '../types';
 
-export function BoundingScreen() {
+/** `groups`: only these question groups (a Gather step). `embedded`: the step supplies the heading and next step. */
+export function BoundingScreen({ groups, embedded = false }: { groups?: string[]; embedded?: boolean } = {}) {
   const { seed, state, dispatch, canEdit } = useApp();
   const included = includedSections(seed.boundingGroups, seed.interviewSections, state.answers);
   const pack = interviewPack(seed.interviewSections, included, state.customQuestions);
   const count = packQuestionCount(pack);
   const sectionName = new Map(seed.interviewSections.map((s) => [s.code, s.section]));
   const isAnswered = (id: string) => answered(state.answers[id]);
-  const [open, setOpen] = useState<Set<string>>(() => new Set([seed.boundingGroups[0]?.group]));
+  const shownGroups = groups ? seed.boundingGroups.filter((g) => groups.includes(g.group)) : seed.boundingGroups;
+  const [open, setOpen] = useState<Set<string>>(() => new Set(shownGroups.length <= 1 ? shownGroups.map((g) => g.group) : [shownGroups[0]?.group]));
 
   const save = (questionId: string, patch: Partial<BoundingAnswer>) => {
     const prev = state.answers[questionId] ?? { answer: '', notes: '', not_relevant: false };
@@ -34,11 +36,13 @@ export function BoundingScreen() {
 
   return (
     <section className="space-y-6">
-      <ScreenHeader
-        title="What I'm looking for in a provider"
-        purpose="Choose the answers that fit, and add detail in your own words. Your interview questions follow from these."
-        helpTopic="what-matters"
-      />
+      {!embedded && (
+        <ScreenHeader
+          title="What I'm looking for in a provider"
+          purpose="Choose the answers that fit, and add detail in your own words. Your interview questions follow from these."
+          helpTopic="what-matters"
+        />
+      )}
 
       <div className="card sticky top-2 z-10 flex flex-wrap items-center gap-2 border-2 border-[var(--charcoal)]/20" aria-live="polite">
         <Icon name="note" />
@@ -48,10 +52,10 @@ export function BoundingScreen() {
         </p>
       </div>
 
-      <LookingForSummary />
+      {(!groups || groups.includes('What matters most')) && <LookingForSummary />}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn" onClick={() => setOpen(new Set(seed.boundingGroups.map((g) => g.group)))}>
+        <button type="button" className="btn" onClick={() => setOpen(new Set(shownGroups.map((g) => g.group)))}>
           Open all
         </button>
         <button type="button" className="btn" onClick={() => setOpen(new Set())}>
@@ -60,7 +64,7 @@ export function BoundingScreen() {
       </div>
 
       <div className="space-y-3">
-        {seed.boundingGroups.map((g) => {
+        {shownGroups.map((g) => {
           const done = g.questions.filter((q) => isAnswered(q.id)).length;
           const isOpen = open.has(g.group);
           const panelId = `group-${g.group.replace(/\W+/g, '-')}`;
@@ -134,12 +138,14 @@ export function BoundingScreen() {
         })}
       </div>
 
-      <NextStepCard
-        done={`You've answered ${seed.boundingGroups.flatMap((g) => g.questions).filter((q) => isAnswered(q.id)).length} of ${seed.boundingGroups.reduce((n, g) => n + g.questions.length, 0)} questions.`}
-        next="compare what your care plan would cost at each provider"
-        back={{ to: '/overview', label: 'Your budget' }}
-        forward={{ to: '/costs', label: 'Continue to compare costs' }}
-      />
+      {!embedded && (
+        <NextStepCard
+          done={`You've answered ${seed.boundingGroups.flatMap((g) => g.questions).filter((q) => isAnswered(q.id)).length} of ${seed.boundingGroups.reduce((n, g) => n + g.questions.length, 0)} questions.`}
+          next="find providers that fit"
+          back={{ to: '/gather/money', label: 'Your budget' }}
+          forward={{ to: '/providers', label: 'Continue to find providers' }}
+        />
+      )}
     </section>
   );
 }

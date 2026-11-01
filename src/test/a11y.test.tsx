@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { memoryServer, renderApp } from './renderApp';
+import { loadSeedData } from '../data/load';
 import { emptyState, type AppState } from '../state/reducer';
 
 // Automated accessibility check on every screen (UI-SPEC §11). jsdom has no layout, so colour contrast is checked
@@ -41,7 +42,8 @@ const populated = (): AppState => ({
     { provider_id: 'bluecare-unitingcare-qld', stage: 'scan', why: '', watch: '', added_at: AT, stage_changed_at: AT },
   ],
   notes: [{ id: 'n1', provider_id: 'bolton-clarke', text: 'Rang intake, call back Tuesday', created_at: AT, source: 'manual' }],
-  answers: { 'B1.1': { answer: 'yes', notes: '', not_relevant: false }, 'B8.1': { answer: '', choices: ['continuity', 'veteran', 'local'], notes: '', not_relevant: false } },
+  answers: { 'B1.1': { answer: 'yes', notes: '', not_relevant: false }, 'B8.1': { answer: '', choices: ['continuity', 'veteran', 'local'], notes: '', not_relevant: false }, 'B8.3': { answer: '', choices: ['late'], notes: '', not_relevant: false } },
+  plan: loadSeedData().samplePlan.map((i) => ({ ...i })),
   responses: { 'bolton-clarke::A1': { text: 'Two weeks', rating: 'yes', in_writing: true } },
   scores: { 'bolton-clarke::veteran': 4, 'bolton-clarke::price': 2 },
   interviews: [
@@ -113,8 +115,12 @@ afterEach(() => {
 describe('accessibility (axe)', () => {
   const routes = [
     '/',
-    '/overview',
-    '/bounding',
+    '/gather/money',
+    '/gather/plan',
+    '/gather/needs',
+    '/gather/matters',
+    '/gather/about',
+    '/gather/brief',
     '/costs',
     '/providers',
     '/providers?view=plan',

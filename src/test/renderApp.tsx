@@ -183,3 +183,31 @@ export async function renderApp(
   else if (user) await screen.findAllByRole('heading', { level: 1 });
   return result;
 }
+
+/** A family that has finished the Gather essentials (so Find is open): details, care plan, priorities and deal-breakers. */
+export function gathered(over: Partial<AppState> = {}): AppState {
+  const seed = loadSeedData();
+  return {
+    ...emptyState(),
+    participant: {
+      id: 'p1',
+      name: '',
+      suburb: 'Exampleton',
+      postcode: '4000',
+      classification: '5',
+      nwop: false,
+      pension_status: 'full_pensioner',
+      ind_rate: null,
+      ev_rate: null,
+      dva_card: 'none',
+      lifetime_contributions_paid: 0,
+    } as AppState['participant'],
+    plan: seed.samplePlan.map((i) => ({ ...i })),
+    answers: {
+      'B8.1': { answer: '', choices: ['continuity'], notes: '', not_relevant: false },
+      'B8.3': { answer: '', choices: ['late'], notes: '', not_relevant: false },
+    },
+    ...over,
+    gather: { ...emptyState().gather, planSource: 'manual', ...over.gather },
+  };
+}

@@ -24,7 +24,7 @@ const RECENT_RULES = [
   },
 ];
 
-export function OverviewScreen() {
+export function OverviewScreen({ embedded = false }: { embedded?: boolean }) {
   const { seed, serviceDate } = useApp();
   const { participant, budget, benchmark, rates } = usePlanCosts([]);
   const cap = lifetimeCap(participant, serviceDate);
@@ -37,10 +37,12 @@ export function OverviewScreen() {
 
   return (
     <section className="space-y-6">
-      <ScreenHeader title="See your budget and the rules" purpose="How much you have for services each quarter, what you pay, and the rules behind those numbers." helpTopic="budget" />
+      {!embedded && (
+        <ScreenHeader title="See your budget and the rules" purpose="How much you have for services each quarter, what you pay, and the rules behind those numbers." helpTopic="budget" />
+      )}
 
       {!budget ? (
-        <DependencyCard to="/" action="Add your level" minutes={2}>
+        <DependencyCard to="/gather/situation" action="Add your level" minutes={2}>
           To show your budget we need your level from your My Aged Care approval letter.
         </DependencyCard>
       ) : (
@@ -161,7 +163,9 @@ export function OverviewScreen() {
         </Expander>
       </section>
 
-      <NextStepCard done="You've seen your budget and the rules." next="answer a few questions about what matters to you" back={{ to: '/', label: 'About you' }} forward={{ to: '/bounding', label: 'Continue to what matters' }} />
+      {!embedded && (
+        <NextStepCard done="You've seen your budget and the rules." next="set up your care plan" back={{ to: '/gather/situation', label: 'Situation' }} forward={{ to: '/gather/plan', label: 'Continue to your care plan' }} />
+      )}
     </section>
   );
 }

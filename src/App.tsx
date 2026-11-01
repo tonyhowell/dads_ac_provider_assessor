@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { ParticipantScreen } from './screens/ParticipantScreen';
-import { OverviewScreen } from './screens/OverviewScreen';
+import { GatherScreen } from './screens/GatherScreen';
 import { CostsScreen } from './screens/CostsScreen';
 import { ProviderFormScreen } from './screens/ProviderFormScreen';
 import { ProviderImportScreen } from './screens/ProviderImportScreen';
-import { BoundingScreen } from './screens/BoundingScreen';
 import { InterviewPackScreen } from './screens/InterviewPackScreen';
 import { ScoringScreen } from './screens/ScoringScreen';
 import { PrintPackScreen } from './screens/PrintPackScreen';
@@ -122,8 +120,10 @@ function ApplicationRoutes() {
       <Route path="interview-pack/print" element={<PrintPackScreen />} />
       <Route path="dossier/:providerId" element={<DossierScreen />} />
       <Route element={<Layout />}>
-        <Route index element={<ParticipantScreen />} />
-        <Route path="overview" element={<OverviewScreen />} />
+        <Route index element={<GatherScreen />} />
+        <Route path="gather" element={<Navigate to="/gather/situation" replace />} />
+        <Route path="gather/:step" element={<GatherScreen />} />
+        <Route path="overview" element={<Navigate to="/gather/money" replace />} />
         <Route path="costs" element={<CostsScreen />} />
         <Route path="providers" element={<FindProvidersScreen />} />
         <Route path="compare" element={<CompareScreen />} />
@@ -133,7 +133,7 @@ function ApplicationRoutes() {
         <Route path="selection" element={<Navigate to="/selection/scan" replace />} />
         <Route path="selection/:stage" element={<SelectionScreen />} />
         <Route path="shortlist" element={<Navigate to="/selection/interview" replace />} />
-        <Route path="bounding" element={<BoundingScreen />} />
+        <Route path="bounding" element={<Navigate to="/gather/needs" replace />} />
         <Route path="interview-pack" element={<InterviewPackScreen />} />
         <Route path="interviews" element={<InterviewsScreen />} />
         <Route path="interviews/new/:providerId" element={<InterviewCaptureScreen />} />

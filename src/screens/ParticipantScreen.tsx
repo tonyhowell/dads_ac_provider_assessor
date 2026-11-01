@@ -68,13 +68,14 @@ function toParticipant(d: Draft, needsRates: boolean): Participant {
 
 type FieldKey = 'suburb' | 'postcode' | 'classification' | 'rates' | 'paid';
 
-export function ParticipantScreen() {
+export function ParticipantScreen({ embedded = false }: { embedded?: boolean }) {
   const [firstRun, startApp] = useFirstRun();
   if (firstRun) return <WelcomeScreen onStart={startApp} />;
-  return <ParticipantForm />;
+  return <ParticipantForm embedded={embedded} />;
 }
 
-function ParticipantForm() {
+/** `embedded`: shown as a Gather step, which supplies its own heading and next step. */
+function ParticipantForm({ embedded }: { embedded: boolean }) {
   const { state, seed, dispatch, plan, serviceDate, canEdit } = useApp();
   const fh = useFieldHelp();
   const [draft, setDraft] = useState<Draft>(() => toDraft(state.participant));
@@ -128,7 +129,7 @@ function ParticipantForm() {
 
   return (
     <section className="space-y-6">
-      <ScreenHeader title="Tell us about your situation" purpose="So we can work out your budget and what you'll pay." helpTopic="about-you" />
+      {!embedded && <ScreenHeader title="Tell us about your situation" purpose="So we can work out your budget and what you'll pay." helpTopic="about-you" />}
 
       <ResolutionCard
         status="info"
@@ -395,14 +396,16 @@ function ParticipantForm() {
         </aside>
       </div>
 
-      {state.participant && <ProfileEditor />}
+      {!embedded && state.participant && <ProfileEditor />}
 
-      <NextStepCard
-        done={state.participant ? 'Your details are saved.' : 'Save your details to work out your budget.'}
-        next="see your budget and the rules that affect it"
-        forward={{ to: '/overview', label: 'Continue to your budget' }}
-        primary={!!unchanged}
-      />
+      {!embedded && (
+        <NextStepCard
+          done={state.participant ? 'Your details are saved.' : 'Save your details to work out your budget.'}
+          next="see your budget and the rules that affect it"
+          forward={{ to: '/gather/money', label: 'Continue to your budget' }}
+          primary={!!unchanged}
+        />
+      )}
     </section>
   );
 }

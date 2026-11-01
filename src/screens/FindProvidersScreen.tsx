@@ -76,7 +76,7 @@ function Start() {
 function RankedOn({ priorities }: { priorities: string[] }) {
   if (priorities.length === 0)
     return (
-      <ResolutionCard status="info" title="Tell us what matters most" actions={<Link to="/bounding" className="btn">Choose what matters most</Link>}>
+      <ResolutionCard status="info" title="Tell us what matters most" actions={<Link to="/gather/matters" className="btn">Choose what matters most</Link>}>
         <p>We rank providers on your top three priorities. Until you choose them, we rank on prices only.</p>
       </ResolutionCard>
     );
@@ -88,7 +88,7 @@ function RankedOn({ priorities }: { priorities: string[] }) {
           <b>{w.toLowerCase()}</b>
         </span>
       ))}
-      . <Link to="/bounding">Change</Link>
+      . <Link to="/gather/matters">Change</Link>
     </p>
   );
 }

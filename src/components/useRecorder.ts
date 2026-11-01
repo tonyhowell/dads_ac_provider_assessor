@@ -21,7 +21,7 @@ interface SpeechRecognitionLike {
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
-function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
+export function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
   const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 }

@@ -132,6 +132,20 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
   - It isn't repeated within a week unless someone asks ("Try again").
 - **"What we know"** box (provider page and insight panel, shortlisted providers only) shows the price read and offers **Enrich this provider** (check what they say publicly), or **Update** when that's been done before.
 
+### Gather (improvement plan, package 1 — `docs/IMPROVEMENT-PLAN.md`)
+- **Three stages:** the journey is now Gather → Find → Select, prep & interview.
+- **Gather is a seven-step wizard:** Situation, Money, Care plan, Needs and home, What matters, About me, Brief. It shows progress, who's doing each step, and back/next. See `src/screens/GatherScreen.tsx` and `src/gather.ts`.
+- **Find opens once Gather has the essentials:** level, budget and pension; the care plan; priorities and deal-breakers. Until then the Find screens list what's missing, with links.
+- **Care plan:**
+  - Upload the support plan or Notice of Decision, after a consent tick. Claude Haiku reads services, hours and level; a PDF is read as text first. The family ticks and corrects each service before anything is saved, and can update the level. The file isn't stored.
+  - With no plan yet, services are entered by hand and marked unconfirmed.
+  - Costs are now edited only here; Compare costs links back to it.
+- **Family conversation:** record a conversation (or type notes). Only the transcript is sent to Claude Haiku, which suggests answers with the quote each came from. The family accepts or skips each one.
+- **The applicant:** the coordinator marks which member is being assessed. That member sees only What matters, About me and the brief, in larger text, with "Speak instead" buttons (browser speech recognition, en-AU) on text boxes.
+- **Assigned steps:** the coordinator assigns steps to members.
+- **Assessment brief:** one printable page covering situation, money, care plan, priorities, must-haves and deal-breakers. The coordinator confirms it; anyone with edit access can comment.
+- State v9 adds `gather`.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

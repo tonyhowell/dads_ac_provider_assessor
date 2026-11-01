@@ -37,7 +37,7 @@ export function InterviewPackScreen() {
       </ScreenHeader>
 
       <p>
-        {total} questions in {pack.length} sections, from your answers to <Link to="/bounding">what matters to you</Link>.{' '}
+        {total} questions in {pack.length} sections, from your answers to <Link to="/gather/needs">what matters to you</Link>.{' '}
         <span className="chip chip-outline">■ Must ask</span> = get it in writing (<Term id="must-question">why?</Term>).
       </p>
 

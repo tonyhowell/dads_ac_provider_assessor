@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DictateButton } from './Dictation';
 import { useApp } from '../state/AppContext';
 import { emptyProfile } from '../state/reducer';
 import { COMMUNICATION_NEEDS, DVA_CONDITIONS, DVA_SERVICES } from '../schemas';
@@ -114,7 +115,17 @@ function TextField({
     <Field label={label} hint={hint}>
       {({ id, describedBy }) =>
         multiline ? (
-          <textarea id={id} aria-describedby={describedBy} className="input min-h-20" value={draft} onFocus={() => setEditing(true)} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
+          <>
+            <textarea id={id} aria-describedby={describedBy} className="input min-h-20" value={draft} onFocus={() => setEditing(true)} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
+            <DictateButton
+              label={typeof label === 'string' ? label : 'this answer'}
+              onText={(t) => {
+                const next = [draft.trim(), t].filter(Boolean).join(' ');
+                setDraft(next);
+                save({ [k]: next } as Partial<ApplicantProfile>);
+              }}
+            />
+          </>
         ) : (
           <input id={id} aria-describedby={describedBy} type={type} className="input" value={draft} onFocus={() => setEditing(true)} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
         )

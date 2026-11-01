@@ -1,15 +1,16 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { memoryServer, renderApp } from './renderApp';
-import { emptyState, type AppState } from '../state/reducer';
+import { gathered, memoryServer, renderApp } from './renderApp';
+import type { AppState } from '../state/reducer';
 
 const AT = '2026-10-20T00:00:00.000Z';
-const lookingFor = (over: Partial<AppState> = {}): AppState => ({
-  ...emptyState(),
-  answers: { 'B8.1': { answer: '', choices: ['veteran', 'continuity'], notes: '', not_relevant: false }, 'B8.3': { answer: '', choices: ['fees'], notes: '', not_relevant: false } },
-  ...over,
-});
+const lookingFor = (over: Partial<AppState> = {}): AppState =>
+  gathered({
+    answers: { 'B8.1': { answer: '', choices: ['veteran', 'continuity'], notes: '', not_relevant: false }, 'B8.3': { answer: '', choices: ['fees'], notes: '', not_relevant: false } },
+    ...over,
+  });
+const dealBreaker = { 'B8.3': { answer: '', choices: ['late'], notes: '', not_relevant: false } };
 
 /** Pretends the window is a phone: every min-width query is false. */
 function asPhone() {
@@ -64,16 +65,18 @@ describe('Find providers: whole plan', () => {
     expect(screen.queryByRole('region', { name })).not.toBeInTheDocument();
   });
 
-  it('asks for priorities when none are chosen', async () => {
+  it('stays closed until Gather has the essentials, saying what is missing', async () => {
     await renderApp('/providers?view=plan');
-    expect(screen.getByText('Tell us what matters most')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Find opens when Gather has the essentials' })).toBeInTheDocument();
+    for (const item of ['Your level, budget and pension', 'Your care plan', 'Your top priorities', 'Your deal-breakers']) expect(screen.getByText(item)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Go to What matters/ })[0]).toHaveAttribute('href', '/gather/matters');
   });
 });
 
 describe('Find providers: by service', () => {
   it('ranks for the chosen services, compares combinations and records picks', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/providers?view=service&s=pc,gardening', { server: memoryServer(lookingFor({ answers: {} })) });
+    const { server } = await renderApp('/providers?view=service&s=pc,gardening', { server: memoryServer(lookingFor({ answers: { 'B8.1': { answer: '', choices: ['price'], notes: '', not_relevant: false }, ...dealBreaker } })) });
     expect(screen.getByRole('button', { name: /Personal care/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /Gardening/ })).toHaveAttribute('aria-pressed', 'true');
     const combos = screen.getByRole('region', { name: 'Best combinations' });
@@ -108,7 +111,7 @@ describe('Find providers on a phone', () => {
   it('shows a reduced list, the top three first, and one provider per screen', async () => {
     asPhone();
     const user = userEvent.setup();
-    await renderApp('/providers?view=plan', { server: memoryServer(lookingFor({ answers: { 'B8.1': { answer: '', choices: ['veteran'], notes: '', not_relevant: false } } })) });
+    await renderApp('/providers?view=plan', { server: memoryServer(lookingFor({ answers: { 'B8.1': { answer: '', choices: ['veteran'], notes: '', not_relevant: false }, ...dealBreaker } })) });
     expect(screen.getByRole('heading', { level: 1, name: 'Your best matches' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Refine/ })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Quick filters' })).toBeInTheDocument();

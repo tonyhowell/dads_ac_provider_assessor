@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { memoryBackend, memoryServer, renderApp, testApplication } from './renderApp';
+import { memoryBackend, memoryServer, renderApp, testApplication, gathered } from './renderApp';
 import { loadSeedData } from '../data/load';
 import { emptyState, type AppState } from '../state/reducer';
 
@@ -43,7 +43,7 @@ describe('For providers (profile)', () => {
   it('saves profile details as you go, and shows DVA details for card holders', async () => {
     const user = userEvent.setup();
     const participant = { id: 'p', name: '', suburb: 'Wynnum', postcode: '4178', pension_status: 'full_pensioner' as const, ind_rate: null, ev_rate: null, dva_card: 'gold' as const, nwop: false, classification: '5', lifetime_contributions_paid: 0 };
-    const { server } = await renderApp('/', { server: memoryServer({ ...emptyState(), participant }) });
+    const { server } = await renderApp('/gather/about', { server: memoryServer({ ...emptyState(), participant }) });
     await user.type(screen.getByLabelText('Preferred name'), 'Bill');
     await user.tab();
     await waitFor(() => expect(server.state.profile?.preferred_name).toBe('Bill'));
@@ -56,7 +56,7 @@ describe('For providers (profile)', () => {
 
 describe('Relative costs', () => {
   it('shows the headline, plan costs and contributions for the reference plan', async () => {
-    const server = memoryServer({ ...emptyState(), serviceDate: '2026-10-25' });
+    const server = memoryServer(gathered({ serviceDate: '2026-10-25' }));
     await renderApp('/costs', { server });
     await userEvent.setup().selectOptions(screen.getByLabelText('Providers to compare'), 'all');
 
@@ -66,13 +66,15 @@ describe('Relative costs', () => {
     const pay = screen.getByRole('region', { name: "What you'd pay" });
     const bolton = within(within(pay).getByRole('table')).getAllByRole('row').find((r) => r.textContent?.startsWith('Bolton Clarke'))!;
     expect(bolton).toHaveTextContent('$12,701');
-    expect(bolton).toHaveTextContent('$784 to $4,373');
+    // A full pensioner pays the lowest contribution rates.
+    expect(bolton).toHaveTextContent('$784');
+    expect(bolton).not.toHaveTextContent('$784 to');
     expect(screen.getByText(/They're left out of the comparison/)).toHaveTextContent('Five Good Friends (Brisbane East & Bayside), Carers Link, Envigor Brisbane Bayside');
   });
 
   it('saves plan edits for everyone', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/costs');
+    const { server } = await renderApp('/gather/plan', { server: memoryServer(gathered()) });
     const plan = screen.getByRole('button', { name: /Your care plan/ });
     expect(plan).toHaveTextContent('5 services');
     await user.click(plan);
@@ -168,14 +170,16 @@ describe('Providers: add, edit, import', () => {
 
   it("hides providers outside the applicant's postcode unless asked", async () => {
     const user = userEvent.setup();
-    const backend = memoryBackend(memoryServer(), 'coordinator', { ...testApplication, postcode: '4178' });
+    const local = gathered();
+    const server = memoryServer({ ...local, participant: { ...local.participant!, postcode: '4178' } });
+    const backend = memoryBackend(server, 'coordinator', { ...testApplication, postcode: '4178' });
     const bolton = loadSeedData().providers.find((p) => p.id === 'bolton-clarke')!;
     const carers = loadSeedData().providers.find((p) => p.id === 'carers-link')!;
     backend.edits = [
       { ...bolton, postcodes_served: ['4100-4120'] },
       { ...carers, postcodes_served: ['4178'] },
     ];
-    await renderApp('/providers?view=all', { backend });
+    await renderApp('/providers?view=all', { backend, server });
     expect(screen.queryByRole('heading', { name: 'Bolton Clarke' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('heading', { name: 'Carers Link' }).closest('li')!).getByText('Serves 4178')).toBeInTheDocument();
     expect(within(screen.getByRole('heading', { name: 'Envigor Brisbane Bayside' }).closest('li')!).getByText('Area not confirmed')).toBeInTheDocument();
@@ -184,7 +188,7 @@ describe('Providers: add, edit, import', () => {
   });
 
   it('flags providers that mention travel or admin fees', async () => {
-    await renderApp('/providers?view=all');
+    await renderApp('/providers?view=all', { server: memoryServer(gathered()) });
     const card = screen.getByRole('heading', { name: 'Right at Home Brisbane Bayside South' }).closest('li')!;
     expect(within(card).getByText('Possible extra fee')).toBeInTheDocument();
   });
@@ -193,7 +197,7 @@ describe('Providers: add, edit, import', () => {
 describe("What I'm looking for", () => {
   it('drops a section when the chosen answer rules it out, or when marked not relevant', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/bounding');
+    const { server } = await renderApp('/gather/needs');
     const counter = () => screen.getByText(/Your interview pack:/);
     expect(counter()).toHaveTextContent('74 questions');
     // Section O (respite and carer support, 3 should questions) is covered only by B6.1.
@@ -216,8 +220,7 @@ describe("What I'm looking for", () => {
 
   it('takes several answers where allowed, up to a limit, plus detail in your own words', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/bounding');
-    await user.click(screen.getByRole('button', { name: /What matters most/ }));
+    const { server } = await renderApp('/gather/matters');
     const b81 = screen.getByText(/Which of these matter most to you/).closest('li')!;
     for (const label of ['The same workers', 'Understanding of veterans', 'A local organisation']) await user.click(within(b81).getByLabelText(label));
     expect(within(b81).getByLabelText('The lowest price')).toBeDisabled();
@@ -232,7 +235,7 @@ describe("What I'm looking for", () => {
 
   it('drafts a summary with Claude, which the family can edit', async () => {
     const user = userEvent.setup();
-    const { server } = await renderApp('/bounding', {
+    const { server } = await renderApp('/gather/matters', {
       server: memoryServer({
         ...emptyState(),
         answers: { 'B3.2': { answer: 'essential', not_relevant: false }, 'B1.4': { answer: 'no', not_relevant: false }, 'B6.3': { answer: 'family', not_relevant: false } },

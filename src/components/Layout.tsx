@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { pricesMissing } from '../data/load';
 import { locate, PHASES, phaseState, type PhaseState } from '../phases';
+import { missingForFind, stepInfo, stepPath } from '../gather';
 import { Icon } from './ui/Icon';
 import { useHelp } from './ui/HelpPanel';
 import { Footer, Header, ReadOnlyNotice } from './Shell';
@@ -65,7 +66,7 @@ export function Layout() {
         </div>
         <WelcomeBack />
         <ScreenNotes />
-        <Outlet />
+        <Gate />
       </main>
 
       <Footer />
@@ -73,8 +74,36 @@ export function Layout() {
   );
 }
 
+/** Find opens once Gather has the essentials; until then its screens explain what's missing (improvement plan 1.4). */
+function Gate() {
+  const { state } = useApp();
+  const { pathname } = useLocation();
+  const missing = missingForFind(state);
+  if (!missing.length || !(pathname === '/providers' || pathname === '/costs')) return <Outlet />;
+  return (
+    <section className="space-y-6" aria-labelledby="find-locked">
+      <h1 id="find-locked">Find opens when Gather has the essentials</h1>
+      <p>To find and rank providers for you, we need {missing.length === 1 ? 'one more thing' : `${missing.length} more things`} from Gather:</p>
+      <ul className="space-y-3">
+        {missing.map((m) => (
+          <li key={m.label} className="card flex flex-wrap items-center justify-between gap-3">
+            <span>
+              <span className="block font-semibold">{m.label}</span>
+              <span className="block">Needed {m.why}.</span>
+            </span>
+            <Link to={stepPath(m.step)} className="btn">
+              Go to {stepInfo(m.step).label} <Icon name="arrowRight" size={20} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function JourneyBar() {
   const { state, seed } = useApp();
+  const locked = missingForFind(state).length > 0;
   const location = useLocation();
   const here = locate(location.pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -86,7 +115,7 @@ function JourneyBar() {
         {/* Phones: one button that opens the full list (UI-SPEC §4.2). */}
         <div className="py-2 min-[721px]:hidden">
           <button type="button" className="btn w-full justify-between" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}>
-            <span>{here ? `Step ${here.phase.n} of 4 · ${here.phase.name}` : 'All steps'}</span>
+            <span>{here ? `Stage ${here.phase.n} of ${PHASES.length} · ${here.phase.name}` : 'All stages'}</span>
             <Icon name="chevronDown" size={20} />
           </button>
           {mobileOpen && (
@@ -94,7 +123,7 @@ function JourneyBar() {
               {PHASES.map((p) => (
                 <li key={p.n}>
                   <p className="font-semibold">
-                    {p.n}. {p.name} <span className="font-normal">· {STATE_WORDS[phaseState(p, state, seed)]}</span>
+                    {p.n}. {p.name} <span className="font-normal">· {p.n === 2 && locked ? 'Opens after Gather' : STATE_WORDS[phaseState(p, state, seed)]}</span>
                   </p>
                   <ul className="mt-1 space-y-1">
                     {p.screens.map((sc) => (
@@ -109,7 +138,7 @@ function JourneyBar() {
           )}
         </div>
 
-        {/* Wider screens: four phases, then the current phase's screens. */}
+        {/* Wider screens: the three stages, then the current stage's screens. */}
         <div className="hidden min-[721px]:block">
           <ol className="flex gap-2 overflow-x-auto py-2">
             {PHASES.map((p) => {
@@ -132,7 +161,7 @@ function JourneyBar() {
                     </span>
                     <span className="min-w-0 leading-tight">
                       <span className="block font-semibold">{p.name}</span>
-                      <span className="block text-[0.875rem]">{STATE_WORDS[st]}</span>
+                      <span className="block text-[0.875rem]">{p.n === 2 && locked ? 'Opens after Gather' : STATE_WORDS[st]}</span>
                     </span>
                   </Link>
                 </li>
