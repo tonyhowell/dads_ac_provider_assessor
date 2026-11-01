@@ -146,6 +146,21 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
 - **Assessment brief:** one printable page covering situation, money, care plan, priorities, must-haves and deal-breakers. The coordinator confirms it; anyone with edit access can comment.
 - State v9 adds `gather`.
 
+### Find (improvement plan, package 2)
+- **Map and list:** Find opens on the ranked list beside a map (Leaflet, OpenStreetMap tiles) showing home and providers' outlets at suburb level. Each card shows the distance ("4 km away · outlet in Manly"). Suburb centres come from `data/postcodes.csv` (Matthew Proctor's Australian Postcodes) via `/api/geo`; only postcodes are sent. On phones there's a List / Map switch. Providers appear on the map once their outlet suburbs (from the government list) or service postcodes are known.
+- **Insight tabs:** Why it fits, Cost, Quality, Public claims, Ask, Notes.
+  - **Cost** adds your contribution and how much of the plan the budget covers.
+  - **Quality:** when shortlisted (or on request), Claude Sonnet searches only `agedcarequality.gov.au` for sanctions, non-compliance and audit findings, and Haiku structures them, keeping only links it retrieved. The result is shared across applications and refreshed after 60 days. Cards warn about sanctions or non-compliance.
+  - **Ask:** a question gets a fresh web search (Sonnet) and an answer with its sources, kept for the family.
+- **Filtered out** (`/providers?view=filtered`): providers hidden by filters (and which), with deal-breakers found (with evidence), outside the area (with distance), and low matches. **Bring back** shows one in the list whatever the filters, marked "Brought back". Filters are kept for the browser session.
+- **Shortlisting:**
+  - A target (default 5) with progress in the bottom bar; Find counts as done when it's reached.
+  - Quick reasons on each shortlisted card ("Why?"), saved as the shortlist reason and shown on the comparison.
+  - Family thumbs up or down with a comment.
+  - "I rang them" call notes (saved as notes).
+  - Shortlisting also reads prices, checks public claims and checks compliance.
+- State v10 adds `find`. DB migration 7 adds provider compliance and questions.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

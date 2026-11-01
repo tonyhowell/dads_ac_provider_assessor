@@ -25,7 +25,7 @@ beforeEach(async () => {
   getAnthropic = undefined;
   web.clear();
   await db.query(
-    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs, provider_price_checks CASCADE',
+    'TRUNCATE users, credentials, enrolments, sessions, auth_challenges, app_state, state_actions, applications, application_members, application_state, membership_log, provider_catalogue, provider_history, provider_suggestions, provider_claims, source_pages, enrichment_sources, enrichment_runs, provider_price_checks, provider_compliance, provider_questions CASCADE',
   );
 });
 
@@ -53,7 +53,7 @@ describe('migrations', () => {
   it('can be re-run safely', async () => {
     await migrate(db);
     const rows = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });
 
@@ -417,7 +417,7 @@ describe('moving v1 data', () => {
     expect(mine).toMatchObject([{ id, name: 'First application', role: 'contributor' }]);
     const state = (await sam.get(`/api/applications/${id}/state`)).json;
     expect(state.version).toBe(7);
-    expect(state.state).toMatchObject({ version: 9, specialRates: {}, profile: null, selection: [{ provider_id: 'carers-link' }] });
+    expect(state.state).toMatchObject({ version: 10, specialRates: {}, profile: null, selection: [{ provider_id: 'carers-link' }] });
     expect(state.state.providerEdits).toBeUndefined();
     expect((await sam.get('/api/providers')).json.providers).toMatchObject([{ id: 'new-co', pc: 101 }]);
     const [{ n }] = await db.query<{ n: string }>('SELECT count(*) AS n FROM state_actions WHERE application_id = $1', [id]);
@@ -606,15 +606,18 @@ describe('loading providers and reading prices on shortlist', () => {
     const id = await newApplication(admin, alex.id);
 
     await admin.post(`/api/applications/${id}/actions`, add('bayside-care'));
-    expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ provider_id: 'bayside-care', status: 'running' });
+    expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ provider_id: 'bayside-care' });
     await Promise.all(jobs.splice(0));
     expect((await admin.get('/api/price-checks')).json.checks[0]).toMatchObject({ status: 'done', outcome: '1 price read into the catalogue' });
     expect((await admin.get('/api/providers')).json.providers.find((p: { id: string }) => p.id === 'bayside-care').pc).toBe(118);
 
-    // Shortlisted again (another application, or removed and re-added): not read again this week.
+    // Shortlisting also checked public claims and compliance (they failed here: the fake Claude can't search).
+    expect((await admin.get('/api/compliance')).json.compliance[0]).toMatchObject({ provider_id: 'bayside-care', status: 'failed' });
+    // Shortlisted again (another application, or removed and re-added): prices aren't read again this week.
     await admin.post(`/api/applications/${id}/actions`, { action: { type: 'selection/remove', providerId: 'bayside-care' } });
     await admin.post(`/api/applications/${id}/actions`, add('bayside-care'));
-    expect(jobs).toHaveLength(0);
+    await Promise.all(jobs.splice(0));
+    expect(parse).toHaveBeenCalledTimes(1);
     // Asked for: read again.
     expect((await admin.post(`/api/applications/${id}/prices/bayside-care`, {})).json.check.status).toBe('running');
     await Promise.all(jobs.splice(0));

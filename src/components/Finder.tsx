@@ -24,6 +24,7 @@ import { ClaimsPanel } from './Claims';
 import { ProviderNotes } from './ProviderNotes';
 import { usePhone } from './useMinWidth';
 import { ProviderDataBox } from './ProviderData';
+import { AskPanel, QualityPanel } from './Insights';
 
 // Shared pieces of "Find providers" (v4): the ranked matches, the insight panel and the shortlist bar.
 
@@ -148,7 +149,7 @@ export function useParamLink() {
   };
 }
 
-type Tab = 'why' | 'cost' | 'claims' | 'notes';
+type Tab = 'why' | 'cost' | 'quality' | 'claims' | 'ask' | 'notes';
 
 /**
  * The insight panel: why a provider fits, what it costs, what it says publicly and the family's notes.
@@ -156,7 +157,7 @@ type Tab = 'why' | 'cost' | 'claims' | 'notes';
  */
 export function InsightPanel({ match, position, next, closeTo, compact = false, extra }: { match: Match; position?: string; next?: Match; closeTo: string; compact?: boolean; extra?: ReactNode }) {
   const { state } = useApp();
-  const { claims } = useSession();
+  const { claims, compliance } = useSession();
   const link = useParamLink();
   const [tab, setTab] = useState<Tab>('why');
   const p = match.provider;
@@ -169,6 +170,12 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
       <p className="font-semibold">{formatAud(match.cost.quarterly_cost)} a quarter</p>
       {over !== null && <p className={over > 0 ? 'text-[var(--caution)]' : 'text-[var(--good)]'}>{over > 0 ? `${formatAud(over)} more than your budget` : `${formatAud(-over)} within your budget`}</p>}
       {match.missing.length > 0 && <p className="text-[0.95rem]">Includes price-guide rates for {match.missing.join(', ').toLowerCase()}: no published price.</p>}
+      <p className="mt-1">
+        <b>Your contribution:</b> about {Math.round(match.cost.contrib_low) === Math.round(match.cost.contrib_high) ? formatAud(match.cost.contrib_low) : `${formatAud(match.cost.contrib_low)}–${formatAud(match.cost.contrib_high)}`} a quarter, at your contribution rates.
+      </p>
+      {over !== null && match.cost.quarterly_cost > 0 && (
+        <p className="text-[0.95rem]">Your budget covers {Math.min(100, Math.round(((match.cost.quarterly_cost - Math.max(0, over)) / match.cost.quarterly_cost) * 100))}% of this plan here.</p>
+      )}
     </div>
   );
 
@@ -220,10 +227,13 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
     );
   }
 
+  const findings = compliance.get(p.id)?.result?.findings.length ?? 0;
   const tabs: [Tab, string][] = [
     ['why', 'Why it fits'],
     ['cost', 'Cost'],
+    ['quality', `Quality${findings ? ` ${findings}` : ''}`],
     ['claims', `Public claims${claimCount ? ` ${claimCount}` : ''}`],
+    ['ask', 'Ask'],
     ['notes', `Notes${noteCount ? ` ${noteCount}` : ''}`],
   ];
   return (
@@ -315,7 +325,9 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
             </table>
           </>
         )}
+        {tab === 'quality' && <QualityPanel provider={p} />}
         {tab === 'claims' && <ClaimsPanel provider={p} />}
+        {tab === 'ask' && <AskPanel provider={p} />}
         {tab === 'notes' && <ProviderNotes providerId={p.id} />}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -335,13 +347,40 @@ export function InsightPanel({ match, position, next, closeTo, compact = false, 
 
 /** Sticky bar with the shortlist count and the way on. */
 export function ShortlistBar({ children }: { children?: ReactNode }) {
-  const { state } = useApp();
+  const { state, dispatch, canEdit } = useApp();
   const n = state.selection.length;
+  const target = state.find.target;
   const phone = usePhone();
+  const progress = (
+    <>
+      <span>
+        <b>
+          {n} of {target}
+        </b>{' '}
+        shortlisted
+      </span>
+      <span className="h-2 w-24 overflow-hidden rounded-full bg-[var(--on-dark-quiet)]" role="img" aria-label={`${Math.min(n, target)} of ${target}`}>
+        <span className="block h-2 bg-[var(--amber)]" style={{ width: `${Math.min(100, (n / target) * 100)}%` }} />
+      </span>
+      {n >= target && <span className="chip chip-good">Target reached</span>}
+      {canEdit && !phone && (
+        <label className="flex items-center gap-1 text-[0.9rem]">
+          Aim for
+          <select className="rounded border border-[var(--on-dark-quiet)] bg-transparent px-1 text-[var(--on-dark)]" value={target} onChange={(e) => dispatch({ type: 'find/target', target: Number(e.target.value) })}>
+            {[2, 3, 4, 5, 6, 8, 10].map((t) => (
+              <option key={t} value={t} className="text-[var(--charcoal)]">
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </>
+  );
   return (
     <div className="sticky bottom-0 z-10 -mx-4 mt-6 bg-[var(--header-bg)] px-4 py-3 text-[var(--on-dark)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children ?? <span><b>{n}</b> shortlisted</span>}</div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children ?? progress}</div>
         <Link to="/compare" className="btn btn-primary">
           {phone ? 'Compare' : 'Compare and choose who to meet'} <Icon name="arrowRight" size={20} />
         </Link>

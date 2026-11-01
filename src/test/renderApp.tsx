@@ -5,7 +5,7 @@ import { loadSeedData, type SeedData } from '../data/load';
 import { AuthProvider, type SessionUser } from '../auth/AuthContext';
 import { emptyState, reducer, type AppState } from '../state/reducer';
 import type { StateSync } from '../state/sync';
-import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, MemberRole, PriceCheckRow, Suggestion } from '../backend';
+import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, ComplianceRow, MemberRole, PriceCheckRow, ProviderQuestion, Suggestion } from '../backend';
 import type { Provider } from '../types';
 import type { AudioStore } from '../storage/audioStore';
 
@@ -60,6 +60,8 @@ export interface MemoryBackend extends Backend {
   claimRequests: { providerId: string; refresh: boolean }[];
   priceRows: PriceCheckRow[];
   priceRequests: string[];
+  complianceRows: ComplianceRow[];
+  questions: ProviderQuestion[];
 }
 
 /** Stands in for the server: one application (with the given role) and the common catalogue. */
@@ -71,6 +73,20 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
     claimRequests: [],
     priceRows: [],
     priceRequests: [],
+    complianceRows: [],
+    questions: [],
+    listCompliance: async () => backend.complianceRows,
+    startCompliance: async (_app, providerId) => {
+      const row: ComplianceRow = { provider_id: providerId, status: 'running', result: null, error: null, started_at: new Date().toISOString(), finished_at: null };
+      backend.complianceRows = [...backend.complianceRows.filter((r) => r.provider_id !== providerId), row];
+      return row;
+    },
+    listQuestions: async (_app, providerId) => backend.questions.filter((q) => q.provider_id === providerId),
+    askQuestion: async (_app, providerId, question) => {
+      const q: ProviderQuestion = { id: `q${backend.questions.length + 1}`, provider_id: providerId, question, answer: 'They offer weekend visits at a higher rate.', sources: [{ url: 'https://example.org/prices', title: 'Price list' }], asked_by: 'Alex', created_at: new Date().toISOString() };
+      backend.questions.push(q);
+      return q;
+    },
     listPriceChecks: async () => backend.priceRows,
     startPriceCheck: async (_app, providerId) => {
       backend.priceRequests.push(providerId);

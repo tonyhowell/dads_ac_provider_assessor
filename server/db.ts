@@ -254,6 +254,28 @@ const MIGRATIONS: string[] = [
     finished_at timestamptz
   )
   `,
+  // v7: quality and compliance findings per provider (shared, like public claims), and questions families ask Claude.
+  `
+  CREATE TABLE provider_compliance (
+    provider_id text PRIMARY KEY,
+    status text NOT NULL CHECK (status IN ('running', 'ready', 'failed')),
+    result jsonb,
+    error text,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+  );
+  CREATE TABLE provider_questions (
+    id text PRIMARY KEY,
+    application_id text NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    provider_id text NOT NULL,
+    question text NOT NULL,
+    answer text NOT NULL,
+    sources jsonb NOT NULL DEFAULT '[]'::jsonb,
+    asked_by text,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX provider_questions_app_idx ON provider_questions(application_id, provider_id, created_at)
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

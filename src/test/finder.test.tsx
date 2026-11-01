@@ -17,15 +17,18 @@ function asPhone() {
   vi.stubGlobal('matchMedia', (q: string) => ({ matches: !/min-width/.test(q), media: q, addEventListener: () => {}, removeEventListener: () => {} }));
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  sessionStorage.removeItem('sah-assessor:find-filters');
+});
 
 describe('Find providers: whole plan', () => {
-  it('starts with the two ways to look and ranks on what the family chose', async () => {
+  it('opens on the ranked list beside a map, and ranks on what the family chose', async () => {
     const user = userEvent.setup();
     await renderApp('/providers', { server: memoryServer(lookingFor()) });
-    expect(screen.getByRole('heading', { level: 1, name: 'Find providers that fit' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Providers that fit your plan' })).toBeInTheDocument();
     expect(screen.getByText(/Ranked on/)).toHaveTextContent('Ranked on understanding of veterans and the same workers. Change');
-    await user.click(screen.getByRole('link', { name: /One provider for my whole plan/ }));
+    expect(screen.getByRole('region', { name: 'Map of providers near home' })).toBeInTheDocument();
 
     const cards = await screen.findAllByRole('article');
     expect(within(cards[0]).getByRole('heading')).toHaveTextContent('1Bolton Clarke');
@@ -35,11 +38,27 @@ describe('Find providers: whole plan', () => {
     await user.click(screen.getByRole('button', { name: /Refine/ }));
     await user.click(screen.getByLabelText('With none of your deal-breakers found'));
     expect(screen.queryByRole('article', { name: 'Bolton Clarke' })).not.toBeInTheDocument();
-    expect(screen.getByText(/hidden by your filters/)).toHaveTextContent('3 hidden by your filters');
-    await user.click(screen.getByRole('button', { name: 'Show them' }));
-    expect(screen.getByRole('article', { name: 'Bolton Clarke' })).toBeInTheDocument();
+    expect(screen.getByText(/not shown/)).toHaveTextContent('3 providers are not shown');
     // Providers with no published prices sit in their own group.
     expect(screen.getByText(/need a quote —/)).toHaveTextContent('3 need a quote — Five Good Friends');
+  });
+
+  it("shows who's filtered out and why, and brings one back", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem('sah-assessor:find-filters', JSON.stringify({ noDealBreakers: true }));
+    const { server } = await renderApp('/providers', { server: memoryServer(lookingFor()) });
+    await user.click(screen.getByRole('link', { name: 'See who and why' }));
+    expect(screen.getByRole('heading', { level: 1, name: "Who's not in your list, and why" })).toBeInTheDocument();
+    const filters = screen.getByRole('region', { name: /Hidden by your filters/ });
+    expect(within(filters).getByText('Bolton Clarke').parentElement).toHaveTextContent('Hidden because a deal-breaker was found');
+    const deal = screen.getByRole('region', { name: /Deal-breakers found/ });
+    expect(within(deal).getByText('Bolton Clarke').parentElement).toHaveTextContent('Mentions extra fees');
+    await user.click(within(filters).getByRole('button', { name: /Bring back\s*: Bolton Clarke/ }));
+    await waitFor(() => expect(server.state.find.broughtBack).toEqual(['bolton-clarke']));
+    expect(screen.getByRole('region', { name: /Brought back \(1\)/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: /Providers that fit/ }));
+    expect(within(screen.getByRole('article', { name: 'Bolton Clarke' })).getByText('Brought back')).toBeInTheDocument();
+    sessionStorage.removeItem('sah-assessor:find-filters');
   });
 
   it('shortlists from the list and explains a provider in the insight panel', async () => {

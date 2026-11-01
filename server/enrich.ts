@@ -188,6 +188,7 @@ export async function recoverAfterRestart(db: Queryable): Promise<void> {
   await reapStaleRuns(db, true);
   await db.query(`UPDATE provider_price_checks SET status = 'failed', stage = NULL, error = 'Interrupted by a server restart — try again', finished_at = now() WHERE status = 'running'`);
   await db.query(`UPDATE provider_claims SET status = 'failed', error = 'Interrupted by a server restart — try again', finished_at = now() WHERE status = 'running'`);
+  await db.query(`UPDATE provider_compliance SET status = 'failed', error = 'Interrupted by a server restart — try again', finished_at = now() WHERE status = 'running'`);
 }
 
 export async function listRuns(db: Queryable, limit = 20): Promise<EnrichmentRun[]> {

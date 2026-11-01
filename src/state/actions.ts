@@ -31,6 +31,15 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('note/delete'), id }),
   z.object({ type: z.literal('selection/add'), providerId: id, at }),
   z.object({ type: z.literal('selection/remove'), providerId: id }),
+  /** Find stage (v10). */
+  z.object({ type: z.literal('find/target'), target: z.number().int().min(1).max(20) }),
+  z.object({ type: z.literal('find/bringBack'), providerId: id, back: z.boolean() }),
+  /** One reaction per person: the server sets user_id, name and at. A null value removes it. */
+  z.object({
+    type: z.literal('find/react'),
+    providerId: id,
+    reaction: z.object({ user_id: z.string().max(100), name: z.string().max(200), value: z.enum(['up', 'down']).nullable(), comment: z.string().max(1000), at }),
+  }),
   /** Gather stage (v9). */
   z.object({ type: z.literal('gather/applicant'), userId: id.nullable() }),
   z.object({ type: z.literal('gather/assign'), step: z.enum(['situation', 'money', 'plan', 'needs', 'matters', 'about', 'brief']), userId: id.nullable() }),

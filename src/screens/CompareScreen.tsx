@@ -156,6 +156,21 @@ export function CompareScreen() {
                 ) : null;
               }),
             )}
+            {row('Why shortlisted', (m) => state.selection.find((e) => e.provider_id === m.provider.id)?.why || <span className="small">Not given</span>)}
+            {row('Family reactions', (m) => {
+              const list = state.find.reactions[m.provider.id] ?? [];
+              if (!list.length) return <span className="small">None yet</span>;
+              return (
+                <ul className="space-y-0.5 text-[0.95rem]">
+                  {list.map((r) => (
+                    <li key={r.user_id}>
+                      {r.value === 'up' ? 'Up' : 'Down'} · {r.name}
+                      {r.comment && `: “${r.comment}”`}
+                    </li>
+                  ))}
+                </ul>
+              );
+            })}
             {row('Watch out for', (m) => (m.cautions.length ? m.cautions.map((c) => <span key={c.text} className="block text-[var(--caution)]">{c.text}</span>) : 'None found'))}
             {row('Public claims', (m) => (claims.get(m.provider.id)?.claims ? `${relevantClaims(m)} of ${relevantTopics} topics` : 'Not checked yet'))}
             {row('Your notes', (m) => {

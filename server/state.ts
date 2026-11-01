@@ -33,6 +33,8 @@ export function stampAction(action: Action, user: User, now: Date): Action {
       return { ...action, note: { ...action.note, created_at: at, author: user.display_name } };
     case 'specialRate/set':
       return { ...action, rate: { ...action.rate, recorded_at: at, author: user.display_name } };
+    case 'find/react':
+      return { ...action, reaction: { ...action.reaction, user_id: user.id, name: user.display_name, at } };
     case 'gather/briefConfirm':
       return { ...action, at, by: user.display_name };
     case 'gather/briefComment':

@@ -23,7 +23,7 @@ import type {
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 9;
+  version: 10;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -57,7 +57,28 @@ export interface AppState {
   servicePicks: Partial<Record<RateKey, string>>;
   /** The Gather stage (v9): who's the applicant, who does which step, the brief and where the care plan came from. */
   gather: GatherState;
+  /** The Find stage (v10): shortlist target, providers brought back from the filtered-out list, family reactions. */
+  find: FindState;
 }
+
+export interface Reaction {
+  user_id: string;
+  name: string;
+  value: 'up' | 'down';
+  comment: string;
+  at: string;
+}
+
+export interface FindState {
+  /** How many providers the family aims to shortlist. */
+  target: number;
+  /** Providers brought back from the filtered-out snapshot: shown whatever the filters. */
+  broughtBack: string[];
+  /** Family reactions by provider id, one per person. */
+  reactions: Record<string, Reaction[]>;
+}
+
+export const emptyFind = (): FindState => ({ target: 5, broughtBack: [], reactions: {} });
 
 export const GATHER_STEPS = ['situation', 'money', 'plan', 'needs', 'matters', 'about', 'brief'] as const;
 export type GatherStep = (typeof GATHER_STEPS)[number];
@@ -86,7 +107,7 @@ const V4_DEFAULTS = {
   weights: {},
   decisionNotes: '',
   screenNotes: [],
-} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections' | 'servicePicks' | 'gather'>;
+} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections' | 'servicePicks' | 'gather' | 'find'>;
 
 export type { Action };
 
@@ -127,7 +148,7 @@ export const emptyProfile = (): ApplicantProfile => ({
   anything_else: '',
 });
 
-export const emptyState = (): AppState => ({ version: 9, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather() });
+export const emptyState = (): AppState => ({ version: 10, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind() });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -138,7 +159,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 9, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather() };
+  return { version: 10, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind() };
 }
 
 interface StateV1 {
@@ -176,13 +197,15 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * v7 → v8: picks for "the best provider for each service" are added, empty.
  * v8 → v9: the Gather stage (applicant, step assignments, brief, care plan source) is added, empty. A care plan
  * the family already set counts as entered by hand.
+ * v9 → v10: the Find stage (shortlist target of 5, brought-back providers, reactions) is added, empty.
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 9) return s as AppState;
+  if (s?.version === 10) return s as AppState;
+  if (s?.version === 9) return { ...(s as unknown as Omit<AppState, 'version' | 'find'>), find: emptyFind(), version: 10 };
   if (s?.version === 8) {
-    const v8 = s as unknown as Omit<AppState, 'version' | 'gather'>;
-    return { ...v8, gather: { ...emptyGather(), planSource: v8.plan ? 'manual' : null }, version: 9 };
+    const v8 = s as unknown as Omit<AppState, 'version' | 'gather' | 'find'>;
+    return migrate({ ...v8, gather: { ...emptyGather(), planSource: v8.plan ? 'manual' : null }, version: 9 });
   }
   if (s?.version === 7) return migrate({ ...(s as object), servicePicks: {}, version: 8 });
   if (s?.version === 6) return migrate({ ...V7_DEFAULTS, ...(s as object), version: 7 });
@@ -235,6 +258,18 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case 'selection/remove':
       return { ...state, selection: state.selection.filter((e) => e.provider_id !== action.providerId) };
+    case 'find/target':
+      return { ...state, find: { ...state.find, target: action.target } };
+    case 'find/bringBack':
+      return {
+        ...state,
+        find: { ...state.find, broughtBack: action.back ? [...new Set([...state.find.broughtBack, action.providerId])] : state.find.broughtBack.filter((id) => id !== action.providerId) },
+      };
+    case 'find/react': {
+      const others = (state.find.reactions[action.providerId] ?? []).filter((r) => r.user_id !== action.reaction.user_id);
+      const list = action.reaction.value ? [...others, action.reaction as Reaction] : others;
+      return { ...state, find: { ...state.find, reactions: { ...state.find.reactions, [action.providerId]: list } } };
+    }
     case 'gather/applicant':
       return { ...state, gather: { ...state.gather, applicantUserId: action.userId } };
     case 'gather/assign': {

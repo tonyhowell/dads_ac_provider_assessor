@@ -77,6 +77,33 @@ export interface PriceCheckRow {
   finished_at: string | null;
 }
 
+export interface ComplianceFinding {
+  kind: 'sanction' | 'non_compliance' | 'notice' | 'audit' | 'other';
+  date: string | null;
+  text: string;
+  source_url: string;
+  source_title: string;
+}
+
+export interface ComplianceRow {
+  provider_id: string;
+  status: 'running' | 'ready' | 'failed';
+  result: { summary: string; none_found: boolean; findings: ComplianceFinding[]; checked_pages: number } | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface ProviderQuestion {
+  id: string;
+  provider_id: string;
+  question: string;
+  answer: string;
+  sources: { url: string; title: string }[];
+  asked_by: string | null;
+  created_at: string;
+}
+
 export interface Backend {
   listApplications(): Promise<ApplicationSummary[]>;
   getApplication(id: string): Promise<{ application: ApplicationInfo; role: MemberRole }>;
@@ -98,6 +125,12 @@ export interface Backend {
   /** Price reads started by shortlisting (or by asking again). */
   listPriceChecks(): Promise<PriceCheckRow[]>;
   startPriceCheck(applicationId: string, providerId: string): Promise<PriceCheckRow>;
+  /** Quality and compliance findings (shared), and starting a check. */
+  listCompliance(): Promise<ComplianceRow[]>;
+  startCompliance(applicationId: string, providerId: string, refresh: boolean): Promise<ComplianceRow>;
+  /** Questions this family asked Claude about a provider, and asking a new one (waits for the answer). */
+  listQuestions(applicationId: string, providerId: string): Promise<ProviderQuestion[]>;
+  askQuestion(applicationId: string, providerId: string, question: string): Promise<ProviderQuestion>;
 }
 
 export const httpBackend: Backend = {
@@ -119,6 +152,13 @@ export const httpBackend: Backend = {
   startClaims: async (applicationId, providerId, refresh) =>
     (await api<{ claims: ClaimsRow }>(`/api/applications/${encodeURIComponent(applicationId)}/claims/${encodeURIComponent(providerId)}`, { body: { refresh } })).claims,
   listPriceChecks: async () => (await api<{ checks: PriceCheckRow[] }>('/api/price-checks')).checks,
+  listCompliance: async () => (await api<{ compliance: ComplianceRow[] }>('/api/compliance')).compliance,
+  startCompliance: async (applicationId, providerId, refresh) =>
+    (await api<{ compliance: ComplianceRow }>(`/api/applications/${encodeURIComponent(applicationId)}/compliance/${encodeURIComponent(providerId)}`, { body: { refresh } })).compliance,
+  listQuestions: async (applicationId, providerId) =>
+    (await api<{ questions: ProviderQuestion[] }>(`/api/applications/${encodeURIComponent(applicationId)}/questions?provider=${encodeURIComponent(providerId)}`)).questions,
+  askQuestion: async (applicationId, providerId, question) =>
+    (await api<{ question: ProviderQuestion }>(`/api/applications/${encodeURIComponent(applicationId)}/questions`, { body: { provider_id: providerId, question } })).question,
   startPriceCheck: async (applicationId, providerId) =>
     (await api<{ check: PriceCheckRow }>(`/api/applications/${encodeURIComponent(applicationId)}/prices/${encodeURIComponent(providerId)}`, { body: {} })).check,
 };

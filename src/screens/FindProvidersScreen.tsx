@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { useSession } from '../state/SessionContext';
 import { benchmarkCard } from '../calc';
@@ -7,70 +7,31 @@ import { bestCombinations, passes, rankForServices, VERDICT_SHORT, type Match, t
 import { formatAud, formatRate } from '../format';
 import { hoursText } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
-import { NextStepCard, ResolutionCard, ScreenHeader } from '../components/ui/Cards';
+import { NextStepCard, ResolutionCard } from '../components/ui/Cards';
 import { CheckAllClaims } from '../components/Claims';
 import { FitMeter, InsightPanel, LevelIcon, priorityWords, ShortlistBar, ShortlistButton, useMatches, useParamLink, VerdictText } from '../components/Finder';
 import { SIDE_PANEL_MIN, useMinWidth, usePhone } from '../components/useMinWidth';
 import { ProvidersScreen } from './ProvidersScreen';
+import { servesArea } from '../area';
+import { distanceText, useDistances, type Nearest } from '../geo';
+import { MapView } from '../components/MapView';
+import { QuickReasons } from '../components/Shortlisting';
 import type { PlanItem, RateKey } from '../types';
 
 // "Find providers" (v4): one page, two ways to look — one provider for the whole plan, or the best provider
 // for each service — with the insight panel beside every list. Phones get a reduced version: one thing per
 // screen, words instead of scores, the top three first.
 
-type View = 'plan' | 'service' | 'all';
+type View = 'plan' | 'service' | 'all' | 'filtered';
 
 export function FindProvidersScreen() {
   const [params] = useSearchParams();
   const view = params.get('view') as View | null;
   if (view === 'all') return <ProvidersScreen />;
-  if (view === 'plan') return <WholePlan />;
   if (view === 'service') return <ByService />;
-  return <Start />;
-}
-
-function Start() {
-  const { plan, areaPostcode } = useApp();
-  const phone = usePhone();
-  const { matches, priorities, outside } = useMatches();
-  const services = plan.filter((i) => i.hours_per_week > 0);
-  return (
-    <section className="space-y-6">
-      {phone ? (
-        <h1>Find providers</h1>
-      ) : (
-        <ScreenHeader title="Find providers that fit" purpose="Tell us how you'd like to look, and we'll rank providers against what you're looking for." helpTopic="providers" />
-      )}
-      <p>
-        {matches.length} provider{matches.length === 1 ? '' : 's'} {areaPostcode ? `serve near ${areaPostcode}` : 'to look at'}
-        {outside > 0 && !phone && ` (${outside} more outside your area)`}. How do you want to look?
-      </p>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Link to="?view=plan" className="card btn-selected flex flex-col gap-1 no-underline">
-          <span className="text-[1.25rem] font-bold">{phone ? 'One provider for everything' : 'One provider for my whole plan'}</span>
-          <span>{phone ? `Best matches for all ${services.length} services` : `Providers that offer all or most of your ${services.length} services, best fit first, with the reasons why.`}</span>
-          <span className="font-semibold text-[var(--good)]">{phone ? 'Recommended' : 'Recommended: Support at Home pays one provider'}</span>
-        </Link>
-        <Link to="?view=service" className="card flex flex-col gap-1 no-underline">
-          <span className="text-[1.25rem] font-bold">{phone ? 'Best for one service' : 'The best provider for each service'}</span>
-          <span>{phone ? 'Like personal care, one at a time' : 'Pick one or more services, compare who does each best, then build your list.'}</span>
-        </Link>
-      </div>
-      {!phone && (
-        <div className="card space-y-2">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-[1.2rem]">Your services</h2>
-            <Link to="/costs">Change your plan</Link>
-          </div>
-          <p>{services.map((i) => `${i.service} ${hoursText(i.hours_per_week)}`).join(' · ')}</p>
-        </div>
-      )}
-      <RankedOn priorities={priorities} />
-      <p className="text-[0.95rem]">
-        <Link to="?view=all">Look up a provider by name</Link>
-      </p>
-    </section>
-  );
+  if (view === 'filtered') return <FilteredOut />;
+  // Find opens on the map and the ranked list (improvement plan 2.1).
+  return <WholePlan />;
 }
 
 function RankedOn({ priorities }: { priorities: string[] }) {
@@ -201,13 +162,34 @@ function QuickToggles({ filters, setFilters, anyWithinBudget }: Pick<RefineProps
   );
 }
 
-function useFinderState() {
-  const [filters, setFilters] = useState<MatchFilters>(DEFAULT_FILTERS);
+const FILTERS_KEY = 'sah-assessor:find-filters';
+function readFilters(): MatchFilters {
+  try {
+    return { ...DEFAULT_FILTERS, ...JSON.parse(sessionStorage.getItem(FILTERS_KEY) ?? '{}') };
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+}
+
+/** Filters (kept for this browser session, so the list and the filtered-out page agree) and what they leave. */
+export function useFinderState() {
+  const { state, areaPostcode } = useApp();
+  const [filters, setFiltersState] = useState<MatchFilters>(readFilters);
+  const setFilters = (f: MatchFilters) => {
+    setFiltersState(f);
+    try {
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+    } catch {
+      /* private mode: filters just don't persist */
+    }
+  };
   const [showOutside, setShowOutside] = useState(false);
-  const found = useMatches(showOutside);
+  const back = useMemo(() => new Set(state.find.broughtBack), [state.find.broughtBack]);
+  const found = useMatches(showOutside || back.size > 0);
   const anyWithinBudget = found.matches.some((m) => m.verdict !== 'quote' && m.cost.over_budget !== null && m.cost.over_budget <= 0);
-  const shown = found.matches.filter((m) => passes(m, filters));
-  return { ...found, filters, setFilters, showOutside, setShowOutside, anyWithinBudget, shown, outside: found.outside };
+  const inArea = (m: Match) => showOutside || servesArea(m.provider, areaPostcode) !== 'outside';
+  const shown = found.matches.filter((m) => back.has(m.provider.id) || (passes(m, filters) && inArea(m)));
+  return { ...found, filters, setFilters, showOutside, setShowOutside, anyWithinBudget, shown, outside: found.outside, back };
 }
 
 /** The selected provider (from `?p=`), its place in the list and the next one. */
@@ -222,35 +204,66 @@ function WholePlan() {
   const phone = usePhone();
   const side = useMinWidth(SIDE_PANEL_MIN);
   const link = useParamLink();
+  const { state, areaPostcode } = useApp();
   const f = useFinderState();
   const [showAll, setShowAll] = useState(false);
+  const [phoneMap, setPhoneMap] = useState(false);
   const ranked = f.shown.filter((m) => m.verdict !== 'quote');
   const quotes = f.shown.filter((m) => m.verdict === 'quote');
-  const hidden = f.matches.length - f.shown.length;
+  const hidden = f.matches.length - f.shown.length + f.outside;
   const selected = useSelected(f.shown);
   const closeTo = link({ p: null });
+  const providers = useMemo(() => f.shown.map((m) => m.provider), [f.shown]);
+  const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, providers);
+  const mapProviders = useMemo(
+    () => f.shown.map((m) => ({ id: m.provider.id, name: m.provider.provider, places: dist.places.get(m.provider.id) ?? [], selected: selected?.match.provider.id === m.provider.id })),
+    [f.shown, dist.places, selected],
+  );
+  const navigate = useNavigate();
+  const onSelect = useCallback((id: string) => navigate(link({ p: id })), [navigate, link]);
+  const onMap = mapProviders.filter((p) => p.places.length).length;
 
   if (selected && !side) {
     // One thing per screen below the side-panel width; phones get the reduced version.
     return <InsightPanel match={selected.match} position={selected.position} next={selected.next} closeTo={closeTo} compact={phone} />;
   }
 
+  const map = (
+    <div className="space-y-2">
+      <MapView home={dist.home} providers={mapProviders} onSelect={onSelect} label="Map of providers near home" />
+      <p className="small">
+        {onMap} of {f.shown.length} providers on the map, placed by suburb. {dist.home ? 'The white circle is home.' : 'Add your suburb and postcode in Gather to show home.'}
+      </p>
+    </div>
+  );
   const visible = phone && !showAll ? ranked.slice(0, 3) : ranked;
+  const card = (m: Match, rank?: number) =>
+    phone ? (
+      <PhoneCard match={m} distance={dist.near.get(m.provider.id) ?? null} broughtBack={f.back.has(m.provider.id)} />
+    ) : (
+      <MatchCard match={m} rank={rank} selected={selected?.match.provider.id === m.provider.id} distance={dist.near.get(m.provider.id) ?? null} broughtBack={f.back.has(m.provider.id)} />
+    );
+
   return (
     <section className="space-y-4">
       <div className="space-y-1">
-        {!phone && (
-          <Link to="?" className="btn-quiet">
-            <Icon name="arrowLeft" size={20} /> How you look
-          </Link>
-        )}
-        <h1>{phone ? 'Your best matches' : 'Your best matches for the whole plan'}</h1>
+        <h1>{phone ? 'Your best matches' : 'Providers that fit your plan'}</h1>
         {!phone && <RankedOn priorities={f.priorities} />}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {!phone && <ViewSwitch view="plan" />}
         {phone ? <QuickToggles {...f} /> : <Refine {...f} />}
         {!phone && <CheckAllClaims providerIds={f.matches.map((m) => m.provider.id)} />}
+        {phone && (
+          <div role="group" aria-label="Show as" className="inline-flex">
+            <button type="button" className="btn btn-sm rounded-r-none" aria-pressed={!phoneMap} onClick={() => setPhoneMap(false)}>
+              List
+            </button>
+            <button type="button" className="btn btn-sm -ml-px rounded-l-none" aria-pressed={phoneMap} onClick={() => setPhoneMap(true)}>
+              Map
+            </button>
+          </div>
+        )}
       </div>
       {!phone && f.priorities.length > 0 && ranked.filter((m) => !m.checked).length * 2 > ranked.length && (
         <p className="tone-info rounded-[var(--radius-control)] p-3">
@@ -259,52 +272,63 @@ function WholePlan() {
       )}
       {!f.anyWithinBudget && !phone && f.budget && <p className="text-[0.95rem]">All of them cost more than your budget at your planned hours.</p>}
 
-      <div className={selected && side ? 'grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]' : ''}>
-        <div className="space-y-3">
-          <ol className="space-y-3" aria-label="Matches">
-            {visible.map((m, i) => (
-              <li key={m.provider.id}>{phone ? <PhoneCard match={m} /> : <MatchCard match={m} rank={i + 1} selected={selected?.match.provider.id === m.provider.id} />}</li>
-            ))}
-          </ol>
-          {phone && !showAll && ranked.length > 3 && (
-            <button type="button" className="btn w-full" onClick={() => setShowAll(true)}>
-              Show {ranked.length - 3} more
-            </button>
-          )}
-          {quotes.length > 0 && (phone ? showAll || ranked.length <= 3 : true) && (
-            <details className="card" open={!phone && ranked.length === 0}>
-              <summary className="cursor-pointer font-semibold">
-                {quotes.length} need{quotes.length === 1 ? 's' : ''} a quote — {quotes.map((m) => m.provider.provider).join(', ')}
-              </summary>
-              <ul className="mt-3 space-y-3">
-                {quotes.map((m) => (
-                  <li key={m.provider.id}>{phone ? <PhoneCard match={m} /> : <MatchCard match={m} selected={selected?.match.provider.id === m.provider.id} />}</li>
-                ))}
-              </ul>
-            </details>
-          )}
-          {ranked.length + quotes.length === 0 && <p className="card">No providers match these filters.</p>}
-          {hidden > 0 && (
-            <p className="text-[0.95rem]">
-              {hidden} hidden by your filters.{' '}
-              <button type="button" className="btn-quiet" onClick={() => f.setFilters({ coverage: null, noDealBreakers: false, withinBudget: false, veteran: false })}>
-                Show them
+      {phone && phoneMap ? (
+        map
+      ) : (
+        <div className={!phone ? 'grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]' : ''}>
+          <div className="space-y-3">
+            <ol className="space-y-3" aria-label="Matches">
+              {visible.map((m, i) => (
+                <li key={m.provider.id}>{card(m, i + 1)}</li>
+              ))}
+            </ol>
+            {phone && !showAll && ranked.length > 3 && (
+              <button type="button" className="btn w-full" onClick={() => setShowAll(true)}>
+                Show {ranked.length - 3} more
               </button>
-            </p>
+            )}
+            {quotes.length > 0 && (phone ? showAll || ranked.length <= 3 : true) && (
+              <details className="card" open={!phone && ranked.length === 0}>
+                <summary className="cursor-pointer font-semibold">
+                  {quotes.length} need{quotes.length === 1 ? 's' : ''} a quote — {quotes.map((m) => m.provider.provider).join(', ')}
+                </summary>
+                <ul className="mt-3 space-y-3">
+                  {quotes.map((m) => (
+                    <li key={m.provider.id}>{card(m)}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {ranked.length + quotes.length === 0 && <p className="card">No providers match these filters.</p>}
+            {hidden > 0 && (
+              <p className="card flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {hidden} provider{hidden === 1 ? ' is' : 's are'} not shown: filtered out, outside your area, or a low match.
+                </span>
+                <Link to={link({ view: 'filtered', p: null })} className="btn">
+                  See who and why
+                </Link>
+              </p>
+            )}
+            {!phone && (
+              <p className="text-[0.95rem]">
+                <Link to="?view=all">Look up a provider by name</Link>
+              </p>
+            )}
+          </div>
+          {!phone && (
+            <div className="space-y-3 lg:sticky lg:top-4">
+              {selected && side ? <InsightPanel match={selected.match} position={selected.position} next={selected.next} closeTo={closeTo} /> : map}
+            </div>
           )}
         </div>
-        {selected && side && (
-          <div className="sticky top-4">
-            <InsightPanel match={selected.match} position={selected.position} next={selected.next} closeTo={closeTo} />
-          </div>
-        )}
-      </div>
+      )}
 
       {!phone && (
         <NextStepCard
           done="Shortlist the providers worth a closer look."
           next="compare your shortlist and choose who to meet"
-          back={{ to: '/costs', label: 'Compare costs' }}
+          back={{ to: '/gather/brief', label: 'Your brief' }}
           forward={{ to: '/compare', label: 'Compare your shortlist' }}
         />
       )}
@@ -330,9 +354,10 @@ function ServiceChips({ match }: { match: Match }) {
   );
 }
 
-function MatchCard({ match, rank, selected }: { match: Match; rank?: number; selected: boolean }) {
+function MatchCard({ match, rank, selected, distance = null, broughtBack = false }: { match: Match; rank?: number; selected: boolean; distance?: Nearest | null; broughtBack?: boolean }) {
   const link = useParamLink();
   const p = match.provider;
+  const where = distanceText(distance);
   return (
     <article className={`card space-y-2 ${selected ? 'border-2 border-[var(--charcoal)] shadow-[inset_4px_0_0_var(--amber)]' : ''}`} aria-label={p.provider}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -342,6 +367,16 @@ function MatchCard({ match, rank, selected }: { match: Match; rank?: number; sel
         </h2>
         <FitMeter match={match} />
       </div>
+      {(where || broughtBack) && (
+        <p className="flex flex-wrap items-center gap-2 text-[0.95rem]">
+          {where && (
+            <span className="inline-flex items-center gap-1">
+              <Icon name="pin" size={16} /> {where}
+            </span>
+          )}
+          {broughtBack && <span className="chip chip-outline">Brought back</span>}
+        </p>
+      )}
       {match.reasons.length > 0 && (
         <ul className="flex flex-wrap gap-x-4 gap-y-1">
           {match.reasons.map((r) => (
@@ -356,7 +391,9 @@ function MatchCard({ match, rank, selected }: { match: Match; rank?: number; sel
           <Icon name="triangle" size={18} /> {c.dealBreaker ? 'One of your deal-breakers: extra fees' : 'Mentions extra fees'}
         </p>
       ))}
+      <ComplianceLine providerId={p.id} />
       <ServiceChips match={match} />
+      <QuickReasons providerId={p.id} compact />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>{match.verdict === 'quote' ? 'No published prices' : <><b>{formatAud(match.cost.quarterly_cost)}</b> a quarter</>}</span>
         <div className="flex flex-wrap gap-2">
@@ -370,7 +407,8 @@ function MatchCard({ match, rank, selected }: { match: Match; rank?: number; sel
   );
 }
 
-function PhoneCard({ match }: { match: Match }) {
+function PhoneCard({ match, distance = null, broughtBack = false }: { match: Match; distance?: Nearest | null; broughtBack?: boolean }) {
+  const where = distanceText(distance);
   const link = useParamLink();
   const { state } = useApp();
   const on = state.selection.some((e) => e.provider_id === match.provider.id);
@@ -386,7 +424,9 @@ function PhoneCard({ match }: { match: Match }) {
       <span className="text-[0.95rem]">
         {match.verdict === 'quote' ? 'Needs a quote' : `${formatAud(match.cost.quarterly_cost)} a quarter`}
         {on && ' · Shortlisted'}
+        {broughtBack && ' · Brought back'}
       </span>
+      {where && <span className="text-[0.95rem]">{where}</span>}
     </Link>
   );
 }
@@ -692,5 +732,157 @@ function ServiceCard({
         </Link>
       </div>
     </article>
+  );
+}
+
+// ---- Who's not in the list, and why (improvement plan 2.3) ----
+
+const FILTER_REASON: { key: keyof MatchFilters; test: (m: Match, f: MatchFilters) => boolean; words: string }[] = [
+  { key: 'coverage', test: (m, f) => !passes(m, { coverage: f.coverage }), words: 'No published price for some of your services' },
+  { key: 'noDealBreakers', test: (m, f) => !!f.noDealBreakers && !passes(m, { noDealBreakers: true }), words: 'Hidden because a deal-breaker was found' },
+  { key: 'withinBudget', test: (m, f) => !!f.withinBudget && !passes(m, { withinBudget: true }), words: 'Costs more than your budget' },
+  { key: 'veteran', test: (m, f) => !!f.veteran && !passes(m, { veteran: true }), words: 'No veteran experience found' },
+];
+
+function FilteredOut() {
+  const { state, dispatch, canEdit, areaPostcode } = useApp();
+  const link = useParamLink();
+  const f = useFinderState();
+  const all = useMatches(true).matches;
+  const shownIds = new Set(f.shown.map((m) => m.provider.id));
+  const providers = useMemo(() => all.map((m) => m.provider), [all]);
+  const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, providers);
+  const bringBack = (id: string, back: boolean) => dispatch({ type: 'find/bringBack', providerId: id, back });
+
+  const groups: { id: string; title: string; why: string; rows: { m: Match; detail: string }[] }[] = [
+    {
+      id: 'filters',
+      title: 'Hidden by your filters',
+      why: 'The filters you set in Refine.',
+      rows: all
+        .filter((m) => !shownIds.has(m.provider.id))
+        .flatMap((m) => {
+          const why = FILTER_REASON.filter((r) => r.test(m, f.filters)).map((r) => r.words);
+          return why.length ? [{ m, detail: why.join('; ') }] : [];
+        }),
+    },
+    {
+      id: 'dealbreakers',
+      title: 'Deal-breakers found',
+      why: 'Something you said would end it. Read the evidence and judge for yourself.',
+      rows: all.flatMap((m) => {
+        const c = m.cautions.filter((x) => x.dealBreaker);
+        return c.length ? [{ m, detail: c.map((x) => x.text).join('; ') }] : [];
+      }),
+    },
+    {
+      id: 'outside',
+      title: 'Outside your area',
+      why: "Their service area doesn't include your postcode.",
+      rows: all
+        .filter((m) => servesArea(m.provider, areaPostcode) === 'outside')
+        .map((m) => ({ m, detail: distanceText(dist.near.get(m.provider.id) ?? null) ?? `Doesn't list ${areaPostcode}` })),
+    },
+    {
+      id: 'low',
+      title: 'Low match',
+      why: 'Ranked weak, or too little is known yet. A promising one may just need checking.',
+      rows: all.filter((m) => m.verdict === 'weak' || m.verdict === 'unclear').map((m) => ({ m, detail: m.summary })),
+    },
+  ];
+
+  return (
+    <section className="space-y-6">
+      <Link to={link({ view: null })} className="btn-quiet">
+        <Icon name="arrowLeft" size={20} /> Providers that fit
+      </Link>
+      <div className="space-y-1">
+        <h1>Who's not in your list, and why</h1>
+        <p>Bring a provider back to put it in your list whatever the filters, so you can look closer or shortlist it.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-4">
+        {groups.map((g) => (
+          <a key={g.id} href={`#group-${g.id}`} className="well no-underline">
+            <span className="block text-[1.5rem] font-bold">{g.rows.length}</span>
+            <span className="block">{g.title}</span>
+          </a>
+        ))}
+      </div>
+      {state.find.broughtBack.length > 0 && (
+        <section aria-labelledby="group-back" className="card space-y-2">
+          <h2 id="group-back" className="text-[1.2rem]">
+            Brought back ({state.find.broughtBack.length})
+          </h2>
+          <ul className="space-y-2">
+            {state.find.broughtBack.map((id) => {
+              const m = all.find((x) => x.provider.id === id);
+              if (!m) return null;
+              return (
+                <li key={id} className="flex flex-wrap items-center justify-between gap-2">
+                  <Link to={link({ view: null, p: id })}>{m.provider.provider}</Link>
+                  {canEdit && (
+                    <button type="button" className="btn btn-sm" onClick={() => bringBack(id, false)}>
+                      Let the filters decide again <span className="sr-only">: {m.provider.provider}</span>
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+      {groups.map((g) => (
+        <section key={g.id} id={`group-${g.id}`} aria-labelledby={`h-${g.id}`} className="space-y-2">
+          <h2 id={`h-${g.id}`} className="text-[1.2rem]">
+            {g.title} ({g.rows.length})
+          </h2>
+          <p>{g.why}</p>
+          {g.rows.length === 0 ? (
+            <p className="card">None.</p>
+          ) : (
+            <ul className="space-y-2">
+              {g.rows.map(({ m, detail }) => {
+                const inList = shownIds.has(m.provider.id);
+                return (
+                  <li key={m.provider.id} className="card flex flex-wrap items-start justify-between gap-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">{m.provider.provider}</span>
+                      <span className="block">{detail}</span>
+                      <span className="small block">
+                        <VerdictText verdict={m.verdict} />
+                        {m.verdict !== 'quote' && ` · ${formatAud(m.cost.quarterly_cost)} a quarter`}
+                      </span>
+                    </span>
+                    {inList ? (
+                      <Link to={link({ view: null, p: m.provider.id })} className="btn btn-sm">
+                        In your list — open <span className="sr-only">: {m.provider.provider}</span>
+                      </Link>
+                    ) : (
+                      canEdit && (
+                        <button type="button" className="btn btn-sm" onClick={() => bringBack(m.provider.id, true)}>
+                          Bring back <span className="sr-only">: {m.provider.provider}</span>
+                        </button>
+                      )
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ))}
+    </section>
+  );
+}
+
+/** A warning on the card when the Commission's record shows sanctions or non-compliance. */
+function ComplianceLine({ providerId }: { providerId: string }) {
+  const { compliance } = useSession();
+  const serious = (compliance.get(providerId)?.result?.findings ?? []).filter((f) => f.kind === 'sanction' || f.kind === 'non_compliance').length;
+  if (!serious) return null;
+  return (
+    <p className="flex items-center gap-1 text-[var(--caution)]">
+      <Icon name="triangle" size={18} /> {serious} compliance finding{serious === 1 ? '' : 's'} from the Quality and Safety Commission
+    </p>
   );
 }

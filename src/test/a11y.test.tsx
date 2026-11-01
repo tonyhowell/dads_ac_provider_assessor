@@ -128,6 +128,7 @@ describe('accessibility (axe)', () => {
     '/providers?view=service&s=pc,gardening',
     '/providers?view=service&s=pc&p=bolton-clarke',
     '/providers?view=all',
+    '/providers?view=filtered',
     '/compare',
     '/providers/bolton-clarke',
     '/providers/bolton-clarke/edit',

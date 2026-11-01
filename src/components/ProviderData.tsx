@@ -4,6 +4,7 @@ import { useSession } from '../state/SessionContext';
 import { formatDate } from '../format';
 import type { Provider } from '../types';
 import { Icon } from './ui/Icon';
+import { CallNote, QuickReasons, Reactions } from './Shortlisting';
 
 // What we know about a shortlisted provider, and how to get more. Shortlisting reads the provider's prices
 // automatically; checking what they say publicly ("enriching") is offered here, or updating it if done before.
@@ -92,6 +93,9 @@ export function ProviderDataBox({ provider }: { provider: Provider }) {
       )}
       {priceLine && <div className="flex flex-wrap items-center gap-2">{priceLine}</div>}
       <div className="flex flex-wrap items-center gap-2">{enrichLine}</div>
+      <QuickReasons providerId={provider.id} />
+      <Reactions providerId={provider.id} />
+      <CallNote providerId={provider.id} providerName={provider.provider} />
       {error && (
         <p role="alert" className="text-[var(--stop)]">
           {error}

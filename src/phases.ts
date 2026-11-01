@@ -31,8 +31,8 @@ export const PHASES: Phase[] = [
     n: 2,
     name: 'Find',
     screens: [
-      { id: 'providers', label: 'Find providers', to: '/providers', match: ['/providers'], done: (s) => s.selection.length > 0 },
-      { id: 'costs', label: 'Compare costs', to: '/costs', match: ['/costs'], done: (s) => s.selection.length > 0 },
+      { id: 'providers', label: 'Find providers', to: '/providers', match: ['/providers'], done: (s) => s.selection.length >= s.find.target },
+      { id: 'costs', label: 'Compare costs', to: '/costs', match: ['/costs'], done: (s) => s.selection.length >= s.find.target },
     ],
   },
   {

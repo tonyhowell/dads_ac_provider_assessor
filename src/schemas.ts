@@ -169,7 +169,7 @@ export const ProviderNoteSchema = z.object({
   text: z.string().min(1),
   created_at: z.string(),
   updated_at: z.string().optional(),
-  source: z.enum(['manual', 'interview']),
+  source: z.enum(['manual', 'interview', 'call']),
   interview_id: z.string().optional(),
   /** Display name of the family member who wrote it. Set by the server. */
   author: z.string().optional(),

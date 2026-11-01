@@ -64,6 +64,8 @@ import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, list
 import { listPages, type Fetcher } from './pages.ts';
 import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
 import { readSupportPlan, suggestAnswers } from './gatherAi.ts';
+import { lookupPostcodes } from './geo.ts';
+import { askAboutProvider, checkCompliance, claimCompliance, finishCompliance, listCompliance, listQuestions, saveQuestion } from './insights.ts';
 import { UsageTally } from './usage.ts';
 
 export type WebAuthn = Pick<
@@ -138,7 +140,8 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
+        // Map tiles (Find): OpenStreetMap's standard tile server.
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://tile.openstreetmap.org'],
         mediaSrc: ["'self'", 'blob:'],
         connectSrc: ["'self'"],
         frameAncestors: ["'none'"],
@@ -350,8 +353,13 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     const body = await parse(c, z.object({ action: ActionSchema }));
     if (body instanceof Response) return body;
     const result = await applyAction(db, c.get('app').id, body.action, c.get('user'));
-    // Shortlisting a provider reads its prices (finding the price list first if needed).
-    if (body.action.type === 'selection/add' && getAnthropic) await startPriceCheck(body.action.providerId, false);
+    // Shortlisting a provider reads its prices (finding the price list first if needed), and checks its public
+    // claims and its quality and compliance record, so the comparison is complete (improvement plan 2.4).
+    if (body.action.type === 'selection/add' && getAnthropic) {
+      await startPriceCheck(body.action.providerId, false);
+      await startCompliance(body.action.providerId, false);
+      await startClaimsCheck(body.action.providerId, c.get('user').id, false);
+    }
     return c.json(result);
   });
 
@@ -381,6 +389,34 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
       if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
       console.error('[conversation]', err);
       return c.json({ error: 'Unexpected error reading the conversation.' }, 500);
+    }
+  });
+
+  /** Checks (or re-checks) a provider's quality and compliance record. */
+  member.post('/compliance/:providerId', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ refresh: z.boolean().default(false) }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const row = await startCompliance(c.req.param('providerId'), body.refresh);
+    return row ? c.json({ compliance: row }) : c.json({ error: 'Provider not found.' }, 404);
+  });
+
+  /** Questions this family has asked Claude about providers. */
+  member.get('/questions', async (c) => c.json({ questions: await listQuestions(db, c.get('app').id, c.req.query('provider') || undefined) }));
+  /** Ask Claude about a provider: a fresh web search, answered with sources and kept for the family. */
+  member.post('/questions', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ provider_id: z.string().min(1).max(100), question: z.string().trim().min(5, 'Ask a question of a few words or more.').max(500) }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const provider = (await currentProviders()).find((p) => p.id === body.provider_id);
+    if (!provider) return c.json({ error: 'Provider not found.' }, 404);
+    try {
+      const { answer, sources } = await askAboutProvider(getAnthropic(), provider, body.question);
+      return c.json({ question: await saveQuestion(db, { application_id: c.get('app').id, provider_id: provider.id, question: body.question, answer, sources, asked_by: c.get('user').display_name }) }, 201);
+    } catch (err) {
+      if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
+      console.error('[ask]', err);
+      return c.json({ error: 'Unexpected error asking Claude.' }, 500);
     }
   });
 
@@ -515,12 +551,50 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
 
   app.get('/api/claims', requireUser, async (c) => c.json({ claims: await listClaims(db), max_age_days: CLAIMS_MAX_AGE_DAYS }));
   app.get('/api/price-checks', requireUser, async (c) => c.json({ checks: await listPriceChecks(db) }));
+  app.get('/api/compliance', requireUser, async (c) => c.json({ compliance: await listCompliance(db) }));
+  /** Suburb centres for the Find map. */
+  app.get('/api/geo', requireUser, (c) => c.json({ postcodes: lookupPostcodes((c.req.query('postcodes') ?? '').split(',').slice(0, 300)) }));
 
   // --- Common provider catalogue ---
 
   const seedProviders = seed.providers;
   const currentProviders = async () => effectiveProviders(seedProviders, (await catalogueEdits(db)).providers);
   const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
+  const startCompliance = async (providerId: string, refresh: boolean) => {
+    const provider = (await currentProviders()).find((p) => p.id === providerId);
+    if (!provider || !getAnthropic) return null;
+    const { row, start } = await claimCompliance(db, provider.id, refresh);
+    if (start)
+      background(
+        (async () => {
+          try {
+            await finishCompliance(db, provider.id, { result: await checkCompliance(getAnthropic(), provider) });
+          } catch (err) {
+            if (!(err instanceof NotesError)) console.error('[compliance]', provider.id, err);
+            await finishCompliance(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error checking compliance.' });
+          }
+        })(),
+      );
+    return row;
+  };
+  /** Public claims for a newly shortlisted provider: the cheapest way that brings them up to date (none if fresh). */
+  const startClaimsCheck = async (providerId: string, userId: string, refresh: boolean) => {
+    const provider = (await currentProviders()).find((p) => p.id === providerId);
+    if (!provider || !getAnthropic) return;
+    const before = await getClaims(db, provider.id);
+    const { start } = await claimSearch(db, provider.id, userId, refresh);
+    if (!start) return;
+    background(
+      (async () => {
+        try {
+          await refreshClaims(enrichDeps(), provider, before, { force: refresh, takeResearch: () => true, usage: new UsageTally() });
+        } catch (err) {
+          if (!(err instanceof NotesError)) console.error('[claims]', provider.id, err);
+          await finishSearch(db, provider.id, { error: err instanceof NotesError ? err.message : 'Unexpected error researching this provider.' });
+        }
+      })(),
+    );
+  };
   const startPriceCheck = async (providerId: string, force: boolean) => {
     const provider = (await currentProviders()).find((p) => p.id === providerId);
     if (!provider) return null;

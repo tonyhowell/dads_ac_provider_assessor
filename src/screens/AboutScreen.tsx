@@ -34,6 +34,19 @@ export function AboutScreen() {
             , rules as verified 25 Oct 2026.
           </li>
           <li>Interview questions and "what matters to you" questions: written for this app, reviewed by the family.</li>
+          <li>
+            Suburb locations for the map:{' '}
+            <a href="https://www.matthewproctor.com/australian_postcodes" target="_blank" rel="noreferrer">
+              Matthew Proctor's Australian Postcodes
+            </a>
+            . Map tiles: ©{' '}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+              OpenStreetMap
+            </a>{' '}
+            contributors. Providers are placed by suburb only; no address is looked up.
+          </li>
+          <li>Provider lists: the government's aged care service list (GEN), and Claude searches of public pages, each marked where it came from.</li>
+          <li>Quality and compliance: the Aged Care Quality and Safety Commission's website, searched by Claude, with links to each finding.</li>
         </ul>
         <p>Rules change. Check with My Aged Care and DVA before relying on any figure.</p>
       </section>

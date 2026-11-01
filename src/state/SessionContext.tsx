@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ApplicationSummary, Backend, Catalogue, ClaimsRow, PriceCheckRow } from '../backend';
+import type { ApplicationSummary, Backend, Catalogue, ClaimsRow, ComplianceRow, PriceCheckRow } from '../backend';
 import type { SeedData } from '../data/load';
 import type { Provider } from '../types';
 import { effectiveProviders } from './reducer';
@@ -52,6 +52,9 @@ interface SessionValue {
   /** Looks again soon: call after shortlisting, since the server starts a price read then. */
   watchPriceChecks(): void;
   startPriceCheck(applicationId: string, providerId: string): Promise<void>;
+  /** Quality and compliance findings by provider id; polled while any check is running. */
+  compliance: Map<string, ComplianceRow>;
+  startCompliance(applicationId: string, providerId: string, refresh?: boolean): Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -107,12 +110,41 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
     return () => clearInterval(timer);
   }, [pricesRunning, refreshPrices]);
   const watchPriceChecks = useCallback(() => {
-    setTimeout(refreshPrices, 1500);
-  }, [refreshPrices]);
+    setTimeout(() => {
+      refreshPrices();
+      refreshClaims();
+    }, 1500);
+  }, [refreshPrices, refreshClaims]);
   const startPriceCheck = useCallback(
     async (applicationId: string, providerId: string) => {
       const row = await backend.startPriceCheck(applicationId, providerId);
       setPriceRows((rows) => [...rows.filter((r) => r.provider_id !== providerId), row]);
+    },
+    [backend],
+  );
+
+  const [complianceRows, setComplianceRows] = useState<ComplianceRow[]>([]);
+  const refreshCompliance = useCallback(async () => {
+    try {
+      setComplianceRows(await backend.listCompliance());
+    } catch {
+      /* keep what we have */
+    }
+  }, [backend]);
+  const complianceRunning = complianceRows.some((r) => r.status === 'running');
+  useEffect(() => {
+    refreshCompliance();
+  }, [refreshCompliance]);
+  useEffect(() => {
+    if (!complianceRunning && !pricesRunning) return;
+    // Shortlisting starts a compliance check too, so look while prices are being read.
+    const timer = setInterval(refreshCompliance, CLAIMS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [complianceRunning, pricesRunning, refreshCompliance]);
+  const startCompliance = useCallback(
+    async (applicationId: string, providerId: string, refresh = false) => {
+      const row = await backend.startCompliance(applicationId, providerId, refresh);
+      setComplianceRows((rows) => [...rows.filter((r) => r.provider_id !== providerId), row]);
     },
     [backend],
   );
@@ -175,8 +207,10 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
       priceChecks: new Map(priceRows.map((r) => [r.provider_id, r])),
       watchPriceChecks,
       startPriceCheck,
+      compliance: new Map(complianceRows.map((r) => [r.provider_id, r])),
+      startCompliance,
     };
-  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims, priceRows, watchPriceChecks, startPriceCheck]);
+  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims, priceRows, watchPriceChecks, startPriceCheck, complianceRows, startCompliance]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
