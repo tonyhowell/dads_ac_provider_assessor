@@ -303,7 +303,8 @@ describe('Interview pack and scoring', () => {
     expect(items[0]).toHaveTextContent(/Bolton Clarke.*3\.7 out of 5/);
     expect(items[1]).toHaveTextContent(/Anglicare Southern Queensland.*3\.0 out of 5/);
     expect(items[0]).toHaveTextContent('Disqualify? 11 must-ask questions not answered in writing');
-    expect(server.state.scores).toEqual({ 'bolton-clarke::veteran': 5, 'anglicare-southern-queensland::veteran': 3, 'bolton-clarke::price': 1 });
+    // Each person's scores are kept separately (v11).
+    expect(server.state.select.memberScores.u1).toEqual({ name: 'Alex', scores: { 'bolton-clarke::veteran': 5, 'anglicare-southern-queensland::veteran': 3, 'bolton-clarke::price': 1 } });
   });
 
   it('prints one section per shortlisted provider', async () => {

@@ -154,3 +154,46 @@ export async function suggestAnswers(client: Anthropic, transcript: string, grou
     return choices.length || s.detail.trim() ? [{ ...s, choices }] : [];
   });
 }
+
+// Interview (improvement plan 3.3): during a recorded interview, Claude Haiku checks the transcript so far
+// against the question checklist about once a minute, and says which questions have been answered — so the
+// family can see what's still to ask before the interview ends. Nothing is saved.
+
+export const GapCheckSchema = z.object({
+  answered: z.array(
+    z.object({
+      question_id: z.string(),
+      /** "yes" fully answered; "partly" touched on but not settled. */
+      level: z.enum(['yes', 'partly']),
+      /** The provider's answer, in a few words. */
+      answer: z.string().max(300),
+    }),
+  ),
+});
+export type GapAnswer = z.infer<typeof GapCheckSchema>['answered'][number];
+
+const GAP_SYSTEM = `You help an Australian family during an interview with a home care provider. Given the transcript so far and their question checklist, list only the questions the provider has actually answered, with "yes" when fully answered or "partly" when touched on but not settled, and the answer in a few words. Skip questions not yet discussed. Never guess. The transcript comes from speech recognition, so expect misheard words.`;
+
+export async function checkGaps(client: Anthropic, transcript: string, questions: { id: string; text: string }[], usage = new UsageTally()): Promise<GapAnswer[]> {
+  const listing = questions.map((q) => `${q.id}: ${q.text}`).join('\n');
+  let result;
+  try {
+    result = await client.beta.messages.parse(
+      {
+        model: EXTRACT_MODEL,
+        max_tokens: 4000,
+        output_config: { effort: 'low', format: betaZodOutputFormat(GapCheckSchema) },
+        system: GAP_SYSTEM,
+        messages: [{ role: 'user', content: `Checklist:\n${listing}\n\n<transcript>\n${transcript.slice(-150_000)}\n</transcript>` }],
+      },
+      { timeout: 60_000, maxRetries: 1 },
+    );
+  } catch (err) {
+    apiError(err);
+  }
+  usage.add(EXTRACT_MODEL, result.usage);
+  if (!result.parsed_output) return [];
+  const ids = new Set(questions.map((q) => q.id));
+  const seen = new Set<string>();
+  return result.parsed_output.answered.filter((a) => ids.has(a.question_id) && !seen.has(a.question_id) && seen.add(a.question_id));
+}

@@ -9,6 +9,7 @@ import { LevelIcon, useMatches, VerdictText } from '../components/Finder';
 import { usePhone } from '../components/useMinWidth';
 import { entriesAt } from '../state/reducer';
 import { useApplicantTopics } from '../components/Claims';
+import { FamilyVote } from '../components/FamilyVote';
 import type { Match } from '../matching';
 
 // Compare the shortlist (v4): the same page for both ways of looking. Side by side on wider screens,
@@ -68,6 +69,7 @@ export function CompareScreen() {
       <section className="space-y-3">
         <h1>Who do you want to meet?</h1>
         <p>Two or three is usually enough.</p>
+        <FamilyVote shortlist={shortlist.map((x) => x.match.provider)} />
         {shortlist.map(({ match: m }) => (
           <article key={m.provider.id} className={`card space-y-1 ${isInterview(m) ? 'border-2 border-[var(--charcoal)]' : ''}`} aria-label={m.provider.provider}>
             <h2 className="text-[1.2rem]">{m.provider.provider}</h2>
@@ -114,7 +116,8 @@ export function CompareScreen() {
 
   return (
     <section className="space-y-6">
-      <ScreenHeader title="Compare your shortlist" purpose="Your shortlist side by side. Tick the ones you want to interview — two or three is usually enough." helpTopic="selection" />
+      <ScreenHeader title="Compare your shortlist" purpose="Your shortlist side by side. Vote on who to meet, or tick them yourself — two or three is usually enough." helpTopic="selection" />
+      <FamilyVote shortlist={shortlist.map((x) => x.match.provider)} />
       <div className="overflow-x-auto">
         <table className="data-table compare-table">
           <thead>

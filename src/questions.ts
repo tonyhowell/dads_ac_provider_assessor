@@ -37,12 +37,15 @@ export interface PackSection {
 }
 
 /** The interview pack: included sections in full, plus "must" questions from excluded sections. */
-export function interviewPack(sections: InterviewSection[], included: Set<string>, custom: CustomQuestion[]): PackSection[] {
+/** The interview pack. With `providerId`, questions added for that provider are included as well as those for everyone. */
+export function interviewPack(sections: InterviewSection[], included: Set<string>, custom: CustomQuestion[], providerId?: string): PackSection[] {
+  custom = custom.filter((c) => !c.provider_id || c.provider_id === providerId);
   return sections
     .map((s) => {
       const inc = included.has(s.code);
       const own = s.questions.filter((q) => inc || q.priority === 'must').map((q) => ({ ...q, custom: false }));
-      const extra = inc ? custom.filter((c) => c.section === s.code).map((c) => ({ id: c.id, text: c.text, priority: 'should' as const, custom: true })) : [];
+      // A question added for one provider is always asked of it; questions for everyone follow the section.
+      const extra = custom.filter((c) => c.section === s.code && (inc || c.provider_id)).map((c) => ({ id: c.id, text: c.text, priority: 'should' as const, custom: true }));
       return { code: s.code, section: s.section, included: inc, questions: [...own, ...extra] };
     })
     .filter((s) => s.questions.length > 0);

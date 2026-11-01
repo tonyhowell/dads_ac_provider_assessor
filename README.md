@@ -161,6 +161,20 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
   - Shortlisting also reads prices, checks public claims and checks compliance.
 - State v10 adds `find`. DB migration 7 adds provider compliance and questions.
 
+### Select, prep and interview (improvement plan, package 3)
+- **Family vote** (on Compare): each voter (coordinators, contributors and the applicant) picks up to three to meet. Results stay hidden until everyone has voted; the applicant's picks break ties. The coordinator moves the choice to "to interview" in one click. Hidden in the interface only: the vote data is shared with the application.
+- **Prepare** (`/prepare`), per provider you'll meet:
+  - **Questions** built from the predefined list, with what matters for this provider first and why: compliance findings, missing prices and possible extra fees, priorities with nothing found publicly, claims they only partly answer, your own questions, then must-asks. Add your own question for this provider or for every provider.
+  - **Booking:** date, time, in person/phone/video, where, who's attending and who leads, with a calendar file (.ics, Australia/Sydney).
+  - **Send the pack:** an email draft in your own mail app with the questions, plus the dossier to save as PDF; ticks for what's been sent.
+  - **Family briefing** (`/prepare/:provider/briefing`, printable): listen for, red flags, must ask, how to score.
+- **In the interview** (record screen):
+  - **Question checklist:** tick each tailored question Answered, Partly or Not answered, with a short note (saved as interview responses).
+  - **Live gap prompts:** while recording with live transcription, Claude Haiku checks the transcript about once a minute (only when there's new speech) and marks what it heard answered, so you can see the must-asks still to go. Only the transcript is sent; nothing is saved from the check.
+  - **Phone interview mode:** guidance for speakerphone calls, one question at a time in larger text. On by default when the booking is by phone.
+- **Decide:** each member scores separately; scores combine with the applicant's counting double, and differences of two points or more are flagged. The decision record names who, why and the next steps (tell them, agree the service agreement, tell the others, start date).
+- State v11 adds `select` (votes, bookings, member scores, decision); older shared scores carry over as "Family (earlier scores)".
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

@@ -1,4 +1,5 @@
 import { GATHER, stepPath } from './gather';
+import { combinedScores } from './family';
 import type { SeedData } from './data/load';
 import { entriesAt, type AppState } from './state/reducer';
 import { CRITERIA, failedMustQuestions, scoreKey } from './scoring';
@@ -42,6 +43,13 @@ export const PHASES: Phase[] = [
       { id: 'compare', label: 'Compare shortlist', to: '/compare', match: ['/compare'], done: (s) => entriesAt(s, 'interview').length >= 2 },
       { id: 'selection', label: 'Selection board', to: '/selection', match: ['/selection'], done: (s) => entriesAt(s, 'interview').length >= 2 },
       {
+        id: 'prepare',
+        label: 'Prepare',
+        to: '/prepare',
+        match: ['/prepare'],
+        done: (s) => entriesAt(s, 'interview').length > 0 && entriesAt(s, 'interview').every((e) => !!s.select.bookings[e.provider_id]?.date),
+      },
+      {
         id: 'pack',
         label: 'Interview questions',
         to: '/interview-pack',
@@ -59,7 +67,8 @@ export const PHASES: Phase[] = [
         match: ['/scoring', '/summary'],
         done: (s) => {
           const ids = entriesAt(s, 'interview').map((e) => e.provider_id);
-          return ids.length > 0 && s.decisionNotes.trim() !== '' && ids.every((id) => CRITERIA.every((c) => s.scores[scoreKey(id, c.id)] !== undefined));
+          const family = combinedScores(s).scores;
+          return ids.length > 0 && !!s.select.decision.provider_id && ids.every((id) => CRITERIA.every((c) => family[scoreKey(id, c.id)] !== undefined));
         },
       },
     ],

@@ -2,7 +2,9 @@ import { answerLabels } from '../lookingFor';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
-import { entriesAt } from '../state/reducer';
+import { DECISION_STEPS, entriesAt, type DecisionStep } from '../state/reducer';
+import { useAuth } from '../auth/AuthContext';
+import { combinedScores } from '../family';
 import { CRITERIA, effectiveWeights, failedMustQuestions, rank, scoreKey, suggestedPriceScore, type CriterionId } from '../scoring';
 import { usePlanCosts } from '../components/usePlanCosts';
 import { CommitTextarea } from '../components/CommitTextarea';
@@ -28,9 +30,16 @@ const weightWords = (w: number) => (w === 0 ? "doesn't count" : w === 1 ? 'count
 
 export function ScoringScreen() {
   const { seed, state, providers, dispatch, canEdit } = useApp();
+  const { user } = useAuth();
   const shortlist = entriesAt(state, 'interview').flatMap((e) => providers.filter((p) => p.id === e.provider_id));
   const weights = effectiveWeights(state.weights);
-  const ranked = rank(shortlist, state.scores, weights);
+  // Everyone scores on their own; the ranking uses the family's combined scores (the applicant's count twice).
+  const combined = combinedScores(state);
+  const familyScores = combined.scores;
+  const mine = (user && state.select.memberScores[user.id]?.scores) || {};
+  const setMine = (providerId: string, criterion: CriterionId, score: number | null) =>
+    dispatch({ type: 'select/score', userId: user?.id ?? '', name: user?.display_name ?? '', providerId, criterion, score });
+  const ranked = rank(shortlist, familyScores, weights);
   const { benchmark, byProvider } = usePlanCosts(shortlist);
   const [currentId, setCurrentId] = useState<string | null>(shortlist[0]?.id ?? null);
   const current = shortlist.find((p) => p.id === currentId) ?? shortlist[0];
@@ -90,12 +99,12 @@ export function ScoringScreen() {
                       <WhyNumber
                         figure={<span className="font-semibold">{r.total.toFixed(1)} out of 5</span>}
                         title={`${r.provider.provider} — overall score`}
-                        lines={CRITERIA.filter((c) => state.scores[scoreKey(r.provider.id, c.id)] !== undefined && weights[c.id] > 0).map((c) => {
-                          const s = state.scores[scoreKey(r.provider.id, c.id)];
+                        lines={CRITERIA.filter((c) => familyScores[scoreKey(r.provider.id, c.id)] !== undefined && weights[c.id] > 0).map((c) => {
+                          const s = familyScores[scoreKey(r.provider.id, c.id)];
                           return { label: c.label, working: `${s} (${scoreWord(s)}) × ${weights[c.id]}`, value: String(s * weights[c.id]) };
                         })}
                         total={[{ label: 'Overall', working: 'total ÷ total of weights', value: r.total.toFixed(2) }]}
-                        footer={`${r.scored} of ${CRITERIA.length} criteria scored. Unscored criteria are left out, not counted as zero.`}
+                        footer={`${r.scored} of ${CRITERIA.length} criteria scored, combining ${combined.members} ${combined.members === 1 ? 'person' : 'people'}'s scores (the applicant's count twice). Unscored criteria are left out, not counted as zero.`}
                       />
                     )}
                   </span>
@@ -115,9 +124,11 @@ export function ScoringScreen() {
 
       <section className="card space-y-4" aria-labelledby="scores-heading">
         <h2 id="scores-heading">Your scores</h2>
+        <p>Score on your own: everyone's scores are combined above, and big differences are shown so you can talk them through.</p>
+        <MemberList />
         <div role="group" aria-label="Provider to score" className="flex flex-wrap gap-2">
           {shortlist.map((p) => {
-            const scored = CRITERIA.filter((c) => state.scores[scoreKey(p.id, c.id)] !== undefined).length;
+            const scored = CRITERIA.filter((c) => mine[scoreKey(p.id, c.id)] !== undefined).length;
             return (
               <button key={p.id} type="button" aria-pressed={current?.id === p.id} className="btn" onClick={() => setCurrentId(p.id)}>
                 {p.provider} <span className="font-normal">· {scored} of {CRITERIA.length}</span>
@@ -128,7 +139,9 @@ export function ScoringScreen() {
         {current && (
           <ol className="space-y-5">
             {CRITERIA.map((c) => {
-              const value = state.scores[scoreKey(current.id, c.id)];
+              const value = mine[scoreKey(current.id, c.id)];
+              const family = familyScores[scoreKey(current.id, c.id)];
+              const differ = combined.differences[scoreKey(current.id, c.id)];
               const hint = c.id === 'price' ? priceHint(current.id) : null;
               return (
                 <li key={c.id} className="space-y-2 border-t border-[var(--rule)] pt-4 first:border-t-0 first:pt-0">
@@ -141,9 +154,20 @@ export function ScoringScreen() {
                   <Explain question="What good looks like">
                     <p>{GOOD_LOOKS_LIKE[c.id]}</p>
                   </Explain>
-                  <ScoreInput label={`${c.label} score for ${current.provider}`} disabled={!canEdit} value={value} onChange={(score) => dispatch({ type: 'score/set', providerId: current.id, criterion: c.id, score })} />
+                  <ScoreInput label={`${c.label} score for ${current.provider}`} disabled={!canEdit} value={value} onChange={(score) => setMine(current.id, c.id, score)} />
+                  {family !== undefined && (
+                    <p className="text-[0.95rem]">
+                      Family: {family} out of 5
+                      {differ && (
+                        <span className="text-[var(--caution)]">
+                          {' '}
+                          · scores range from {differ.low} to {differ.high} — worth talking through
+                        </span>
+                      )}
+                    </p>
+                  )}
                   {hint !== null && value === undefined && canEdit && (
-                    <button type="button" className="btn-quiet" onClick={() => dispatch({ type: 'score/set', providerId: current.id, criterion: 'price', score: hint })}>
+                    <button type="button" className="btn-quiet" onClick={() => setMine(current.id, 'price', hint)}>
                       Use the suggested score: {hint} ({scoreWord(hint)}), from your plan's cost compared with the guide price <span className="sr-only">for {current.provider}</span>
                     </button>
                   )}
@@ -176,14 +200,7 @@ export function ScoringScreen() {
         </Explain>
       </section>
 
-      <fieldset disabled={!canEdit} className="card min-w-0 space-y-2" aria-labelledby="decision-heading">
-        <h2 id="decision-heading">Your decision</h2>
-        <label htmlFor="decision" className="label">
-          Decision notes
-        </label>
-        <span className="hint">Who you've chosen and why, and anything still to check. Shared with your family; saved when you leave the box.</span>
-        <CommitTextarea id="decision" className="input min-h-32" value={state.decisionNotes} onCommit={(text) => dispatch({ type: 'decision/set', text })} />
-      </fieldset>
+      <DecisionRecord shortlist={shortlist} topId={ranked[0]?.total !== null ? ranked[0]?.provider.id : undefined} />
 
       <ResolutionCard
         status="info"
@@ -197,5 +214,86 @@ export function ScoringScreen() {
         }
       />
     </section>
+  );
+}
+
+/** Who has scored, and whose scores count double. */
+function MemberList() {
+  const { state } = useApp();
+  const entries = Object.entries(state.select.memberScores).filter(([, m]) => Object.keys(m.scores).length);
+  if (!entries.length) return null;
+  return (
+    <p className="small">
+      Scored so far:{' '}
+      {entries.map(([id, m], i) => (
+        <span key={id}>
+          {i > 0 && ', '}
+          {m.name}
+          {id === state.gather.applicantUserId && ' (the applicant, counts double)'}
+        </span>
+      ))}
+      .
+    </p>
+  );
+}
+
+const STEP_WORDS: Record<DecisionStep, string> = {
+  told_chosen: 'Tell the chosen provider',
+  agreement: 'Read and agree the service agreement',
+  told_others: 'Tell the other providers',
+  start_date: 'Agree a start date',
+};
+
+/** The decision: who, why, and the next steps (improvement plan 3.4). */
+function DecisionRecord({ shortlist, topId }: { shortlist: { id: string; provider: string }[]; topId?: string }) {
+  const { state, dispatch, canEdit } = useApp();
+  const d = state.select.decision;
+  const chosen = shortlist.find((p) => p.id === d.provider_id);
+  return (
+    <fieldset disabled={!canEdit} className="card min-w-0 space-y-3" aria-labelledby="decision-heading">
+      <h2 id="decision-heading">Your decision</h2>
+      <div>
+        <label htmlFor="decision-provider" className="label">
+          Who you've chosen
+        </label>
+        <select id="decision-provider" className="input max-w-md" value={d.provider_id ?? ''} onChange={(e) => dispatch({ type: 'select/decision', provider_id: e.target.value || null, at: new Date().toISOString(), by: '' })}>
+          <option value="">Not decided yet</option>
+          {shortlist.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.provider}
+              {p.id === topId ? ' (highest score)' : ''}
+            </option>
+          ))}
+        </select>
+        {chosen && d.at && <p className="small mt-1">Recorded{d.by ? ` by ${d.by}` : ''} on {new Date(d.at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}.</p>}
+      </div>
+      <div>
+        <label htmlFor="decision" className="label">
+          Why
+        </label>
+        <span className="hint">Why you chose them, and anything still to check. Saved when you leave the box.</span>
+        <CommitTextarea id="decision" className="input min-h-32" value={state.decisionNotes} onCommit={(text) => dispatch({ type: 'decision/set', text })} />
+      </div>
+      {chosen && (
+        <fieldset className="space-y-1">
+          <legend className="label">Next steps</legend>
+          {DECISION_STEPS.map((step) => (
+            <label key={step} className="flex min-h-[var(--target-min)] items-center gap-3">
+              <input type="checkbox" checked={d.steps[step]} onChange={(e) => dispatch({ type: 'select/decision', steps: { [step]: e.target.checked } })} />
+              {STEP_WORDS[step].replace('the chosen provider', chosen.provider)}
+              {step === 'start_date' && (
+                <input
+                  type="date"
+                  aria-label="Start date"
+                  className="input ml-2 w-auto"
+                  value={d.start_date}
+                  onChange={(e) => dispatch({ type: 'select/decision', start_date: e.target.value, steps: { start_date: !!e.target.value } })}
+                />
+              )}
+            </label>
+          ))}
+        </fieldset>
+      )}
+    </fieldset>
   );
 }

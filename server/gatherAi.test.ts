@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type Anthropic from '@anthropic-ai/sdk';
-import { readSupportPlan, suggestAnswers } from './gatherAi.ts';
+import { checkGaps, readSupportPlan, suggestAnswers } from './gatherAi.ts';
 import { NotesError } from './interviewNotes.ts';
 import { loadSeedData } from '../src/data/load.ts';
 
@@ -50,5 +50,29 @@ describe('suggesting answers from a conversation', () => {
       ['B8.2', []],
     ]);
     expect(JSON.stringify(parse.mock.calls[0][0])).toContain('B8.1 (choose up to 3)');
+  });
+});
+
+describe('checking an interview for unanswered questions', () => {
+  it('keeps only checklist questions, once each, using Claude Haiku', async () => {
+    const { parse, client } = fake({
+      answered: [
+        { question_id: 'C1', level: 'yes', answer: 'Same two workers' },
+        { question_id: 'C1', level: 'partly', answer: 'dup' },
+        { question_id: 'ZZ', level: 'yes', answer: 'not on the list' },
+        { question_id: 'G1', level: 'partly', answer: 'Will send prices' },
+      ],
+    });
+    const out = await checkGaps(client, 'transcript so far', [
+      { id: 'C1', text: 'Will Dad have the same workers?' },
+      { id: 'G1', text: 'What are your prices?' },
+    ]);
+    expect(out).toEqual([
+      { question_id: 'C1', level: 'yes', answer: 'Same two workers' },
+      { question_id: 'G1', level: 'partly', answer: 'Will send prices' },
+    ]);
+    const sent = parse.mock.calls[0][0] as { model: string; messages: { content: string }[] };
+    expect(sent.model).toBe('claude-haiku-5-5');
+    expect(sent.messages[0].content).toContain('C1: Will Dad have the same workers?');
   });
 });

@@ -23,7 +23,7 @@ import type {
 import { responseKey, scoreKey } from '../scoring';
 
 export interface AppState {
-  version: 10;
+  version: 11;
   notes: ProviderNote[];
   /** Providers the user has selected, each at one stage. Array order within a stage is the rank. */
   selection: SelectionEntry[];
@@ -59,7 +59,39 @@ export interface AppState {
   gather: GatherState;
   /** The Find stage (v10): shortlist target, providers brought back from the filtered-out list, family reactions. */
   find: FindState;
+  /** Select, prep & interview (v11): the family vote, interview bookings, each member's scores and the decision. */
+  select: SelectState;
 }
+
+export const DECISION_STEPS = ['told_chosen', 'agreement', 'told_others', 'start_date'] as const;
+export type DecisionStep = (typeof DECISION_STEPS)[number];
+
+export interface Booking {
+  date: string;
+  time: string;
+  mode: 'in_person' | 'phone' | 'video';
+  place: string;
+  attendees: string;
+  lead: string;
+  /** What's been sent to the provider beforehand. */
+  sent: { questions: boolean; dossier: boolean; price_list_request: boolean };
+}
+
+export interface SelectState {
+  /** Each member's picks of who to interview (up to three), by user id. */
+  votes: Record<string, { name: string; picks: string[]; at: string }>;
+  bookings: Record<string, Booking>;
+  /** Each member's 1–5 scores, keyed like `scores` (`${providerId}::${criterion}`), by user id. */
+  memberScores: Record<string, { name: string; scores: Record<string, number> }>;
+  decision: { provider_id: string | null; at: string | null; by: string | null; steps: Record<DecisionStep, boolean>; start_date: string };
+}
+
+export const emptySelect = (): SelectState => ({
+  votes: {},
+  bookings: {},
+  memberScores: {},
+  decision: { provider_id: null, at: null, by: null, steps: { told_chosen: false, agreement: false, told_others: false, start_date: false }, start_date: '' },
+});
 
 export interface Reaction {
   user_id: string;
@@ -107,7 +139,7 @@ const V4_DEFAULTS = {
   weights: {},
   decisionNotes: '',
   screenNotes: [],
-} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections' | 'servicePicks' | 'gather' | 'find'>;
+} satisfies Omit<AppState, 'version' | 'notes' | 'selection' | 'interviews' | 'specialRates' | 'profile' | 'lookingFor' | 'dossierSections' | 'servicePicks' | 'gather' | 'find' | 'select'>;
 
 export type { Action };
 
@@ -148,7 +180,7 @@ export const emptyProfile = (): ApplicantProfile => ({
   anything_else: '',
 });
 
-export const emptyState = (): AppState => ({ version: 10, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind() });
+export const emptyState = (): AppState => ({ version: 11, notes: [], selection: [], interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind(), select: emptySelect() });
 
 export function initialState(seedShortlist: ShortlistSeed[], providers: Provider[], now: string): AppState {
   // The seed shortlist (SPEC §4) is the ranked list of providers to interview.
@@ -159,7 +191,7 @@ export function initialState(seedShortlist: ShortlistSeed[], providers: Provider
       const id = byName.get(nameKey(s.provider));
       return id ? [{ provider_id: id, stage: 'interview', why: s.why, watch: s.watch, added_at: now, stage_changed_at: now }] : [];
     });
-  return { version: 10, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind() };
+  return { version: 11, notes: [], selection, interviews: [], ...V4_DEFAULTS, specialRates: {}, ...V7_DEFAULTS, servicePicks: {}, gather: emptyGather(), find: emptyFind(), select: emptySelect() };
 }
 
 interface StateV1 {
@@ -198,11 +230,19 @@ function remapProviderIds<S extends Pick<AppState, 'notes' | 'selection' | 'inte
  * v8 → v9: the Gather stage (applicant, step assignments, brief, care plan source) is added, empty. A care plan
  * the family already set counts as entered by hand.
  * v9 → v10: the Find stage (shortlist target of 5, brought-back providers, reactions) is added, empty.
+ * v10 → v11: Select, prep & interview (votes, bookings, member scores, decision) is added. Scores the family
+ * entered together before v11 become one member's scores, named "Family (earlier scores)".
  */
 export function migrate(saved: unknown): AppState | undefined {
   const s = saved as { version?: number } | undefined;
-  if (s?.version === 10) return s as AppState;
-  if (s?.version === 9) return { ...(s as unknown as Omit<AppState, 'version' | 'find'>), find: emptyFind(), version: 10 };
+  if (s?.version === 11) return s as AppState;
+  if (s?.version === 10) {
+    const v10 = s as unknown as Omit<AppState, 'version' | 'select'>;
+    const select = emptySelect();
+    if (Object.keys(v10.scores ?? {}).length) select.memberScores.earlier = { name: 'Family (earlier scores)', scores: v10.scores };
+    return { ...v10, select, version: 11 };
+  }
+  if (s?.version === 9) return migrate({ ...(s as object), find: emptyFind(), version: 10 });
   if (s?.version === 8) {
     const v8 = s as unknown as Omit<AppState, 'version' | 'gather' | 'find'>;
     return migrate({ ...v8, gather: { ...emptyGather(), planSource: v8.plan ? 'manual' : null }, version: 9 });
@@ -258,6 +298,35 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case 'selection/remove':
       return { ...state, selection: state.selection.filter((e) => e.provider_id !== action.providerId) };
+    case 'select/vote': {
+      const { [action.userId]: _old, ...rest } = state.select.votes;
+      const votes = action.picks.length ? { ...rest, [action.userId]: { name: action.name, picks: action.picks.slice(0, 3), at: action.at } } : rest;
+      return { ...state, select: { ...state.select, votes } };
+    }
+    case 'select/booking': {
+      const { [action.providerId]: _old, ...rest } = state.select.bookings;
+      return { ...state, select: { ...state.select, bookings: action.booking ? { ...rest, [action.providerId]: action.booking } : rest } };
+    }
+    case 'select/score': {
+      const key = scoreKey(action.providerId, action.criterion);
+      const mine = state.select.memberScores[action.userId] ?? { name: action.name, scores: {} };
+      const { [key]: _old, ...others } = mine.scores;
+      const scores = action.score === null ? others : { ...others, [key]: action.score };
+      return { ...state, select: { ...state.select, memberScores: { ...state.select.memberScores, [action.userId]: { name: action.name || mine.name, scores } } } };
+    }
+    case 'select/decision':
+      return {
+        ...state,
+        select: {
+          ...state.select,
+          decision: {
+            ...state.select.decision,
+            ...(action.provider_id !== undefined ? { provider_id: action.provider_id, at: action.at, by: action.by } : {}),
+            ...(action.steps ? { steps: { ...state.select.decision.steps, ...action.steps } } : {}),
+            ...(action.start_date !== undefined ? { start_date: action.start_date } : {}),
+          },
+        },
+      };
     case 'find/target':
       return { ...state, find: { ...state.find, target: action.target } };
     case 'find/bringBack':

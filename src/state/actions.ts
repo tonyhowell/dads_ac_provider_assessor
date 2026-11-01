@@ -31,6 +31,32 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('note/delete'), id }),
   z.object({ type: z.literal('selection/add'), providerId: id, at }),
   z.object({ type: z.literal('selection/remove'), providerId: id }),
+  /** Select, prep & interview (v11). The server sets userId, name, at and by from the signed-in person. */
+  z.object({ type: z.literal('select/vote'), userId: z.string().max(100), name: z.string().max(200), picks: z.array(id).max(3), at }),
+  z.object({
+    type: z.literal('select/booking'),
+    providerId: id,
+    booking: z
+      .object({
+        date: z.string().max(20),
+        time: z.string().max(20),
+        mode: z.enum(['in_person', 'phone', 'video']),
+        place: z.string().max(300),
+        attendees: z.string().max(500),
+        lead: z.string().max(200),
+        sent: z.object({ questions: z.boolean(), dossier: z.boolean(), price_list_request: z.boolean() }),
+      })
+      .nullable(),
+  }),
+  z.object({ type: z.literal('select/score'), userId: z.string().max(100), name: z.string().max(200), providerId: id, criterion: z.enum(CRITERION_IDS), score: z.number().int().min(1).max(5).nullable() }),
+  z.object({
+    type: z.literal('select/decision'),
+    provider_id: id.nullable().optional(),
+    at: z.string().max(40).nullable().optional(),
+    by: z.string().max(200).nullable().optional(),
+    steps: z.object({ told_chosen: z.boolean(), agreement: z.boolean(), told_others: z.boolean(), start_date: z.boolean() }).partial().optional(),
+    start_date: z.string().max(20).optional(),
+  }),
   /** Find stage (v10). */
   z.object({ type: z.literal('find/target'), target: z.number().int().min(1).max(20) }),
   z.object({ type: z.literal('find/bringBack'), providerId: id, back: z.boolean() }),

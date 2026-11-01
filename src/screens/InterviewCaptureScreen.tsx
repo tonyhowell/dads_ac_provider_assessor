@@ -8,11 +8,12 @@ import type { Interview } from '../types';
 import { ResolutionCard, ScreenHeader } from '../components/ui/Cards';
 import { Icon } from '../components/ui/Icon';
 import { MoreText } from '../components/ui/Expander';
+import { InterviewChecklist } from '../components/InterviewChecklist';
 
 export function InterviewCaptureScreen() {
   const { providerId } = useParams();
   const provider = useProvider(providerId);
-  const { dispatch, audio, canEdit } = useApp();
+  const { state, dispatch, audio, canEdit } = useApp();
   const navigate = useNavigate();
   const support = recorderSupport();
 
@@ -23,6 +24,7 @@ export function InterviewCaptureScreen() {
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const rec = useRecorder({ transcribe: liveTranscription });
+  const [phone, setPhone] = useState(() => !!providerId && state.select.bookings[providerId]?.mode === 'phone');
 
   if (!provider) {
     return (
@@ -81,6 +83,25 @@ export function InterviewCaptureScreen() {
   return (
     <section className="space-y-6">
       <ScreenHeader title={`Record your interview with ${provider.provider}`} purpose="Record or note an interview, then turn it into notes you can check and keep." helpTopic="interviews" />
+
+      <label className="flex min-h-[var(--target-min)] items-center gap-3">
+        <input type="checkbox" checked={phone} onChange={(e) => setPhone(e.target.checked)} />
+        <span className="font-medium">Phone interview mode</span>
+        <span className="small">one question at a time, in larger text</span>
+      </label>
+      {phone && (
+        <section className="card space-y-2" aria-labelledby="phone-heading">
+          <h2 id="phone-heading" className="text-[1.2rem]">
+            For a phone interview
+          </h2>
+          <ul className="list-disc space-y-1 pl-6">
+            <li>Put the phone on speaker, close to this device, in a quiet room.</li>
+            <li>Ask "Is it OK if we record this call for our notes?" before you start, so their answer is on the recording.</li>
+            <li>Work through one question at a time. Tick each as it's answered; Claude marks the ones it hears.</li>
+            <li>Before you hang up, ask any must-ask questions still left, and ask them to put prices in writing.</li>
+          </ul>
+        </section>
+      )}
 
       {rec.status === 'recording' && (
         <div role="status" className="card tone-stop sticky top-2 z-10 flex items-center gap-3 border-l-4 font-semibold">
@@ -197,6 +218,8 @@ export function InterviewCaptureScreen() {
           )}
         </>
       )}
+
+      <InterviewChecklist provider={provider} transcript={rec.transcript} recording={rec.status === 'recording' && liveTranscription} phone={phone} />
     </section>
   );
 }

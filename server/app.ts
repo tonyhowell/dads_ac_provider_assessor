@@ -63,7 +63,7 @@ import { CLAIMS_MAX_AGE_DAYS, claimSearch, finishSearch, getClaims, listClaims }
 import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, listSources, refreshClaims, removeSource, requestCancel, runEnrichment, updateSource, type EnrichDeps } from './enrich.ts';
 import { listPages, type Fetcher } from './pages.ts';
 import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
-import { readSupportPlan, suggestAnswers } from './gatherAi.ts';
+import { checkGaps, readSupportPlan, suggestAnswers } from './gatherAi.ts';
 import { lookupPostcodes } from './geo.ts';
 import { askAboutProvider, checkCompliance, claimCompliance, finishCompliance, listCompliance, listQuestions, saveQuestion } from './insights.ts';
 import { UsageTally } from './usage.ts';
@@ -389,6 +389,26 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
       if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
       console.error('[conversation]', err);
       return c.json({ error: 'Unexpected error reading the conversation.' }, 500);
+    }
+  });
+
+  /** Interview: which checklist questions the transcript so far answers. Called about once a minute while recording. */
+  member.post('/gap-check', requireEdit, rateLimit(6, 60_000), async (c) => {
+    const body = await parse(
+      c,
+      z.object({
+        transcript: z.string().trim().min(1).max(400_000),
+        questions: z.array(z.object({ id: z.string().min(1).max(100), text: z.string().min(1).max(2000) })).min(1).max(150),
+      }),
+    );
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    try {
+      return c.json({ answered: await checkGaps(getAnthropic(), body.transcript, body.questions) });
+    } catch (err) {
+      if (err instanceof NotesError) return c.json({ error: err.message }, err.status as 400);
+      console.error('[gap-check]', err);
+      return c.json({ error: 'Unexpected error checking the interview.' }, 500);
     }
   });
 

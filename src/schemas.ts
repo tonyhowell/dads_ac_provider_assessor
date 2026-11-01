@@ -229,6 +229,8 @@ export const CustomQuestionSchema = z.object({
   id: z.string().min(1).max(100),
   section: z.string().min(1).max(10),
   text: z.string().trim().min(1).max(2000),
+  /** Asked of one provider only (v11); otherwise of every provider. */
+  provider_id: z.string().max(100).optional(),
 });
 
 /** A provider's answer to one interview question (SPEC §4 InterviewResponse). */

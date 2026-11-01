@@ -24,6 +24,7 @@ import { AppProvider } from './state/AppContext';
 import { HelpProvider } from './components/ui/HelpPanel';
 import { AboutScreen } from './screens/AboutScreen';
 import { DossierScreen } from './screens/DossierScreen';
+import { PrepareScreen, BriefingScreen } from './screens/PrepareScreen';
 import { AdminEnrichmentScreen } from './screens/AdminEnrichmentScreen';
 import { LoadProvidersScreen } from './screens/LoadProvidersScreen';
 import type { SeedData } from './data/load';
@@ -119,6 +120,7 @@ function ApplicationRoutes() {
     <Routes>
       <Route path="interview-pack/print" element={<PrintPackScreen />} />
       <Route path="dossier/:providerId" element={<DossierScreen />} />
+      <Route path="prepare/:providerId/briefing" element={<BriefingScreen />} />
       <Route element={<Layout />}>
         <Route index element={<GatherScreen />} />
         <Route path="gather" element={<Navigate to="/gather/situation" replace />} />
@@ -134,6 +136,7 @@ function ApplicationRoutes() {
         <Route path="selection/:stage" element={<SelectionScreen />} />
         <Route path="shortlist" element={<Navigate to="/selection/interview" replace />} />
         <Route path="bounding" element={<Navigate to="/gather/needs" replace />} />
+        <Route path="prepare" element={<PrepareScreen />} />
         <Route path="interview-pack" element={<InterviewPackScreen />} />
         <Route path="interviews" element={<InterviewsScreen />} />
         <Route path="interviews/new/:providerId" element={<InterviewCaptureScreen />} />

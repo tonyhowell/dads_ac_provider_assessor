@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
+import { combinedScores } from '../family';
 import { entriesAt } from '../state/reducer';
 import { usePlanCosts } from '../components/usePlanCosts';
 import { CRITERIA, effectiveWeights, failedMustQuestions, rank } from '../scoring';
@@ -23,7 +24,7 @@ export function SummaryScreen() {
   });
   const { budget, benchmark, byProvider, rates } = usePlanCosts(shortlist.map((s) => s.provider));
   const weights = effectiveWeights(state.weights);
-  const ranked = rank(shortlist.map((s) => s.provider), state.scores, weights);
+  const ranked = rank(shortlist.map((s) => s.provider), combinedScores(state).scores, weights);
   const p = state.participant;
   const openNotes = state.screenNotes.filter((n) => !n.done);
 
