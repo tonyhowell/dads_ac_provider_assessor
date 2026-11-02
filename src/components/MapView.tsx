@@ -23,6 +23,9 @@ export function MapView({ home, providers, onSelect, label }: { home: [number, n
     map.current = L.map(el.current, { scrollWheelZoom: false, attributionControl: true }).setView(home ?? [-27.47, 153.03], 11);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
+      // OpenStreetMap's tile policy requires a Referer. The site sends none by default (Referrer-Policy:
+      // no-referrer), so tiles send just our origin; without it OSM blocks them.
+      referrerPolicy: 'strict-origin-when-cross-origin',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map.current);
     layer.current = L.layerGroup().addTo(map.current);
