@@ -420,6 +420,20 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     }
   });
 
+  /** Find: research a narrowed list in one go (at most 25 providers). Progress shows through each provider's checks. */
+  member.post('/research', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ providerIds: z.array(z.string().min(1).max(100)).min(1).max(25) }));
+    if (body instanceof Response) return body;
+    if (!getAnthropic) return c.json({ error: 'Claude features are not configured: set ANTHROPIC_API_KEY on the server.' }, 503);
+    const appId = c.get('app').id;
+    if (researching.has(appId)) return c.json({ error: 'Already checking a list for this application. Wait for it to finish.' }, 409);
+    const known = new Set((await currentProviders()).map((p) => p.id));
+    const ids = [...new Set(body.providerIds)].filter((id) => known.has(id));
+    background(researchProviders(appId, ids, c.get('user').id));
+    return c.json({ started: true, providers: ids.length }, 202);
+  });
+  member.get('/research', (c) => c.json({ running: researching.get(c.get('app').id) ?? null }));
+
   /** Checks (or re-checks) a provider's quality and compliance record. */
   member.post('/compliance/:providerId', requireEdit, async (c) => {
     const body = await parse(c, z.object({ refresh: z.boolean().default(false) }));
@@ -593,12 +607,13 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
   const seedProviders = seed.providers;
   const currentProviders = async () => effectiveProviders(seedProviders, (await catalogueEdits(db)).providers);
   const topics = seed.interviewSections.flatMap((s) => s.questions.map((q) => ({ id: q.id, text: q.text })));
-  const startCompliance = async (providerId: string, refresh: boolean) => {
+  // Each check runs in the background; `run` lets bulk research wait for them instead.
+  const startCompliance = async (providerId: string, refresh: boolean, run: (p: Promise<unknown>) => void = (p) => background(p.then(() => undefined))) => {
     const provider = (await currentProviders()).find((p) => p.id === providerId);
     if (!provider || !getAnthropic) return null;
     const { row, start } = await claimCompliance(db, provider.id, refresh);
     if (start)
-      background(
+      run(
         (async () => {
           try {
             await finishCompliance(db, provider.id, { result: await checkCompliance(getAnthropic(), provider) });
@@ -611,13 +626,13 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     return row;
   };
   /** Public claims for a newly shortlisted provider: the cheapest way that brings them up to date (none if fresh). */
-  const startClaimsCheck = async (providerId: string, userId: string, refresh: boolean) => {
+  const startClaimsCheck = async (providerId: string, userId: string, refresh: boolean, run: (p: Promise<unknown>) => void = (p) => background(p.then(() => undefined))) => {
     const provider = (await currentProviders()).find((p) => p.id === providerId);
     if (!provider || !getAnthropic) return;
     const before = await getClaims(db, provider.id);
     const { start } = await claimSearch(db, provider.id, userId, refresh);
     if (!start) return;
-    background(
+    run(
       (async () => {
         try {
           await refreshClaims(enrichDeps(), provider, before, { force: refresh, takeResearch: () => true, usage: new UsageTally() });
@@ -628,12 +643,39 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
       })(),
     );
   };
-  const startPriceCheck = async (providerId: string, force: boolean) => {
+  const startPriceCheck = async (providerId: string, force: boolean, run: (p: Promise<unknown>) => void = (p) => background(p.then(() => undefined))) => {
     const provider = (await currentProviders()).find((p) => p.id === providerId);
     if (!provider) return null;
     const { row, start } = await claimPriceCheck(db, provider.id, force);
-    if (start) background(runPriceCheck(enrichDeps(), provider));
+    if (start) run(runPriceCheck(enrichDeps(), provider));
     return row;
+  };
+  /** Bulk research (Find → "Check these"): prices, compliance and public claims, two providers at a time. */
+  const researching = new Map<string, { total: number; done: number }>();
+  const researchProviders = async (applicationId: string, ids: string[], userId: string) => {
+    const progress = { total: ids.length, done: 0 };
+    researching.set(applicationId, progress);
+    const queue = [...ids];
+    const worker = async () => {
+      for (let id = queue.shift(); id; id = queue.shift()) {
+        const work: Promise<unknown>[] = [];
+        const collect = (p: Promise<unknown>) => void work.push(p);
+        try {
+          await startPriceCheck(id, false, collect);
+          await startCompliance(id, false, collect);
+          await startClaimsCheck(id, userId, false, collect);
+          await Promise.allSettled(work);
+        } catch (err) {
+          console.error('[research]', id, err);
+        }
+        progress.done++;
+      }
+    };
+    try {
+      await Promise.all([worker(), worker()]);
+    } finally {
+      researching.delete(applicationId);
+    }
   };
   const enrichDeps = (): EnrichDeps => ({
     db,

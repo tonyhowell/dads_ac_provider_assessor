@@ -60,6 +60,7 @@ export interface MemoryBackend extends Backend {
   claimRequests: { providerId: string; refresh: boolean }[];
   priceRows: PriceCheckRow[];
   priceRequests: string[];
+  researchRequests: string[][];
   complianceRows: ComplianceRow[];
   questions: ProviderQuestion[];
 }
@@ -73,6 +74,7 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
     claimRequests: [],
     priceRows: [],
     priceRequests: [],
+    researchRequests: [],
     complianceRows: [],
     questions: [],
     listCompliance: async () => backend.complianceRows,
@@ -80,6 +82,12 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
       const row: ComplianceRow = { provider_id: providerId, status: 'running', result: null, error: null, started_at: new Date().toISOString(), finished_at: null };
       backend.complianceRows = [...backend.complianceRows.filter((r) => r.provider_id !== providerId), row];
       return row;
+    },
+    startResearch: async (_app, ids) => {
+      backend.researchRequests.push(ids);
+      const at = new Date().toISOString();
+      backend.complianceRows = [...backend.complianceRows.filter((r) => !ids.includes(r.provider_id)), ...ids.map((provider_id) => ({ provider_id, status: 'running' as const, result: null, error: null, started_at: at, finished_at: null }))];
+      return { providers: ids.length };
     },
     listQuestions: async (_app, providerId) => backend.questions.filter((q) => q.provider_id === providerId),
     askQuestion: async (_app, providerId, question) => {

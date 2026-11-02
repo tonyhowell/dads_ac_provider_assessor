@@ -106,7 +106,7 @@ describe('finding the list', () => {
 
 describe('planning changes', () => {
   const svc = (provider: string, suburb: string, postcode: string, careType = 'Home Care', region = 'Brisbane South'): GenService => ({
-    service: `${provider} ${suburb}`, provider, address: '', suburb, state: 'QLD', postcode, careType, orgType: '', region, homeCarePlaces: null,
+    service: `${provider} ${suburb}`, provider, address: '', suburb, state: 'QLD', postcode, careType, orgType: '', region, homeCarePlaces: null, funding: null,
   });
 
   it('adds new home care providers, updates loaded ones, leaves hand-entered ones, flags missing ones', () => {
@@ -188,6 +188,22 @@ describe('running an import', () => {
     await saveGenSettings(db, { url: TOPIC, scope: 'national', auto: true }, null);
     const failed = await runGenImport({ db, seedProviders: seed.providers, fetcher: blocked }, { trigger: 'schedule' });
     expect(failed.error).toMatch(/answered 403\. The site blocked the server’s automatic request\. Download the Australia-wide file/);
+  });
+
+  it('records each provider’s total government funding (all its services) and the year', async () => {
+    const header = [...HEADER, 'Home Care Places', '2024-25 Australian Government Funding - Residential', '2024-25 Australian Government Funding - Total'];
+    const bytes = xlsx([
+      header,
+      [...row('Bayside Home Care', 'Bayside Care Ltd', 'Wynnum', '4178'), '', '0', '$1,500,000'],
+      [...row('Bayside Nursing Home', 'Bayside Care Ltd', 'Wynnum', '4178', 'Residential'), '', '9000000', '9,000,000'],
+      [...row('Bolton Clarke Wynnum', 'Bolton Clarke', 'Wynnum', '4178'), '', '', '412000000'],
+    ]);
+    const run = await runGenImport({ db, seedProviders: seed.providers, fetcher }, { trigger: 'upload', upload: { name: 'aged-care-service-list-30-june-2025-australia.xlsx', bytes } });
+    expect(run.status).toBe('done');
+    const catalogue = (await catalogueEdits(db)).providers;
+    expect(catalogue.find((p) => p.provider === 'Bayside Care Ltd')).toMatchObject({ gov_funding: 10_500_000, gov_funding_year: '2024–25' });
+    // A hand-entered provider gets its funding filled in, nothing else changed.
+    expect(catalogue.find((p) => p.id === 'bolton-clarke')).toMatchObject({ gov_funding: 412_000_000, pc: seed.providers.find((p) => p.id === 'bolton-clarke')!.pc });
   });
 
   it('defaults to the GEN providers page, or the configured link', async () => {

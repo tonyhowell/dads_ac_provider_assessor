@@ -14,15 +14,18 @@ import { SIDE_PANEL_MIN, useMinWidth, usePhone } from '../components/useMinWidth
 import { ProvidersScreen } from './ProvidersScreen';
 import { servesArea } from '../area';
 import { distanceText, useDistances, type Nearest } from '../geo';
+import { DEFAULT_NARROW, narrowPasses, narrowReasons, providerFacts, type NarrowFilters, type Row } from '../narrow';
 import { MapView } from '../components/MapView';
 import { QuickReasons } from '../components/Shortlisting';
+import { NarrowSteps } from '../components/Narrow';
+import { AdvancedFind } from './AdvancedFind';
 import type { PlanItem, RateKey } from '../types';
 
 // "Find providers" (v4): one page, two ways to look — one provider for the whole plan, or the best provider
 // for each service — with the insight panel beside every list. Phones get a reduced version: one thing per
 // screen, words instead of scores, the top three first.
 
-type View = 'plan' | 'service' | 'all' | 'filtered';
+type View = 'plan' | 'service' | 'all' | 'filtered' | 'table';
 
 export function FindProvidersScreen() {
   const [params] = useSearchParams();
@@ -30,6 +33,7 @@ export function FindProvidersScreen() {
   if (view === 'all') return <ProvidersScreen />;
   if (view === 'service') return <ByService />;
   if (view === 'filtered') return <FilteredOut />;
+  if (view === 'table') return <AdvancedFind />;
   // Find opens on the map and the ranked list (improvement plan 2.1).
   return <WholePlan />;
 }
@@ -63,6 +67,21 @@ function ViewSwitch({ view }: { view: 'plan' | 'service' }) {
       </Link>
       <Link to={link({ view: 'service', p: null })} aria-current={view === 'service' ? 'page' : undefined} className={`btn -ml-px rounded-l-none ${view === 'service' ? 'btn-selected' : ''}`}>
         By service
+      </Link>
+    </div>
+  );
+}
+
+/** Basic (guided narrowing beside the ranked list) or advanced (the filter table). Not on phones. */
+export function ModeSwitch({ mode }: { mode: 'basic' | 'advanced' }) {
+  const link = useParamLink();
+  return (
+    <div role="group" aria-label="Find mode" className="inline-flex">
+      <Link to={link({ view: null, p: null })} aria-current={mode === 'basic' ? 'page' : undefined} className={`btn rounded-r-none ${mode === 'basic' ? 'btn-selected' : ''}`}>
+        Basic
+      </Link>
+      <Link to={link({ view: 'table', p: null })} aria-current={mode === 'advanced' ? 'page' : undefined} className={`btn -ml-px rounded-l-none ${mode === 'advanced' ? 'btn-selected' : ''}`}>
+        Advanced
       </Link>
     </div>
   );
@@ -171,25 +190,64 @@ function readFilters(): MatchFilters {
   }
 }
 
-/** Filters (kept for this browser session, so the list and the filtered-out page agree) and what they leave. */
+const NARROW_KEY = 'sah-assessor:find-narrow';
+function readNarrow(): NarrowFilters {
+  try {
+    return { ...DEFAULT_NARROW, ...JSON.parse(sessionStorage.getItem(NARROW_KEY) ?? '{}') };
+  } catch {
+    return DEFAULT_NARROW;
+  }
+}
+const keep = (key: string, value: unknown) => {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* private mode: filters just don't persist */
+  }
+};
+
+/**
+ * Filters (kept for this browser session, so basic, advanced and the filtered-out page agree), the facts behind
+ * them for every provider in the area, and what they leave.
+ */
 export function useFinderState() {
   const { state, areaPostcode, nearPostcodes } = useApp();
+  const { compliance, claims } = useSession();
   const [filters, setFiltersState] = useState<MatchFilters>(readFilters);
   const setFilters = (f: MatchFilters) => {
     setFiltersState(f);
-    try {
-      sessionStorage.setItem(FILTERS_KEY, JSON.stringify(f));
-    } catch {
-      /* private mode: filters just don't persist */
-    }
+    keep(FILTERS_KEY, f);
+  };
+  const [narrow, setNarrowState] = useState<NarrowFilters>(readNarrow);
+  const setNarrow = (f: NarrowFilters) => {
+    setNarrowState(f);
+    keep(NARROW_KEY, f);
   };
   const [showOutside, setShowOutside] = useState(false);
   const back = useMemo(() => new Set(state.find.broughtBack), [state.find.broughtBack]);
   const found = useMatches(showOutside || back.size > 0);
   const anyWithinBudget = found.matches.some((m) => m.verdict !== 'quote' && m.cost.over_budget !== null && m.cost.over_budget <= 0);
   const inArea = (m: Match) => showOutside || servesArea(m.provider, areaPostcode, nearPostcodes) !== 'outside';
-  const shown = found.matches.filter((m) => back.has(m.provider.id) || (passes(m, filters) && inArea(m)));
-  return { ...found, filters, setFilters, showOutside, setShowOutside, anyWithinBudget, shown, outside: found.outside, back };
+  const allProviders = useMemo(() => found.matches.map((m) => m.provider), [found.matches]);
+  const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, allProviders);
+  const rows: Row[] = useMemo(
+    () =>
+      found.matches.map((m) => ({
+        m,
+        facts: providerFacts(m.provider, {
+          km: dist.near.get(m.provider.id)?.km ?? null,
+          serves: servesArea(m.provider, areaPostcode, nearPostcodes) === 'serves',
+          compliance: compliance.get(m.provider.id),
+          claims: claims.get(m.provider.id)?.status === 'ready' && !!claims.get(m.provider.id)?.claims,
+        }),
+      })),
+    [found.matches, dist.near, areaPostcode, nearPostcodes, compliance, claims],
+  );
+  /** In the area and through the match filters: what the narrowing filters (and their counts) work on. */
+  const base = rows.filter((r) => inArea(r.m) && passes(r.m, filters));
+  const shownRows = rows.filter((r) => back.has(r.m.provider.id) || (inArea(r.m) && passes(r.m, filters) && narrowPasses(r.m, r.facts, narrow)));
+  const shown = shownRows.map((r) => r.m);
+  return { ...found, filters, setFilters, narrow, setNarrow, showOutside, setShowOutside, anyWithinBudget, shown, shownRows, base, rows, dist, outside: found.outside, back };
 }
 
 /** The selected provider (from `?p=`), its place in the list and the next one. */
@@ -204,7 +262,6 @@ function WholePlan() {
   const phone = usePhone();
   const side = useMinWidth(SIDE_PANEL_MIN);
   const link = useParamLink();
-  const { state, areaPostcode } = useApp();
   const f = useFinderState();
   const [showAll, setShowAll] = useState(false);
   const [phoneMap, setPhoneMap] = useState(false);
@@ -213,8 +270,7 @@ function WholePlan() {
   const hidden = f.matches.length - f.shown.length + f.outside;
   const selected = useSelected(f.shown);
   const closeTo = link({ p: null });
-  const providers = useMemo(() => f.shown.map((m) => m.provider), [f.shown]);
-  const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, providers);
+  const dist = f.dist;
   const mapProviders = useMemo(
     () => f.shown.map((m) => ({ id: m.provider.id, name: m.provider.provider, places: dist.places.get(m.provider.id) ?? [], selected: selected?.match.provider.id === m.provider.id })),
     [f.shown, dist.places, selected],
@@ -251,6 +307,7 @@ function WholePlan() {
         {!phone && <RankedOn priorities={f.priorities} />}
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {!phone && <ModeSwitch mode="basic" />}
         {!phone && <ViewSwitch view="plan" />}
         {phone ? <QuickToggles {...f} /> : <Refine {...f} />}
         {!phone && <CheckAllClaims providerIds={f.matches.map((m) => m.provider.id)} />}
@@ -271,6 +328,16 @@ function WholePlan() {
         </p>
       )}
       {!f.anyWithinBudget && !phone && f.budget && <p className="text-[0.95rem]">All of them cost more than your budget at your planned hours.</p>}
+      {phone ? (
+        <details className="card">
+          <summary className="cursor-pointer font-semibold">Narrow down ({f.shownRows.length} left)</summary>
+          <div className="mt-3">
+            <NarrowSteps f={f} />
+          </div>
+        </details>
+      ) : (
+        <NarrowSteps f={f} />
+      )}
 
       {phone && phoneMap ? (
         map
@@ -754,15 +821,17 @@ function FilteredOut() {
   const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, providers);
   const bringBack = (id: string, back: boolean) => dispatch({ type: 'find/bringBack', providerId: id, back });
 
+  const factsById = new Map(f.rows.map((r) => [r.m.provider.id, r.facts]));
   const groups: { id: string; title: string; why: string; rows: { m: Match; detail: string }[] }[] = [
     {
       id: 'filters',
       title: 'Hidden by your filters',
-      why: 'The filters you set in Refine.',
+      why: 'The filters you set to narrow the list.',
       rows: all
         .filter((m) => !shownIds.has(m.provider.id))
         .flatMap((m) => {
-          const why = FILTER_REASON.filter((r) => r.test(m, f.filters)).map((r) => r.words);
+          const facts = factsById.get(m.provider.id);
+          const why = [...FILTER_REASON.filter((r) => r.test(m, f.filters)).map((r) => r.words), ...(facts ? narrowReasons(m, facts, f.narrow) : [])];
           return why.length ? [{ m, detail: why.join('; ') }] : [];
         }),
     },

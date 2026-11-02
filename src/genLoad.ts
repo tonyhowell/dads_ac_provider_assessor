@@ -5,7 +5,7 @@ import type { Provider } from './types';
 // Each row is one service (outlet); a provider can have several. The admin uploads the file, checks the
 // columns we found, picks the area, and the providers that aren't in the catalogue yet are added.
 
-export const GEN_FIELDS = ['service', 'provider', 'address', 'suburb', 'state', 'postcode', 'care_type', 'org_type', 'region', 'home_care_places'] as const;
+export const GEN_FIELDS = ['service', 'provider', 'address', 'suburb', 'state', 'postcode', 'care_type', 'org_type', 'region', 'home_care_places', 'funding'] as const;
 export type GenField = (typeof GEN_FIELDS)[number];
 
 export const GEN_FIELD_LABELS: Record<GenField, string> = {
@@ -19,6 +19,7 @@ export const GEN_FIELD_LABELS: Record<GenField, string> = {
   org_type: 'Organisation type',
   region: 'Planning region',
   home_care_places: 'Home care places',
+  funding: 'Government funding',
 };
 
 /** Header words for each field, most specific first. */
@@ -33,6 +34,7 @@ const PATTERNS: Record<GenField, RegExp> = {
   org_type: /organi[sz]ation\s*type|org(\.|anisation)?\s*type|ownership/i,
   region: /planning\s*region|acpr/i,
   home_care_places: /home\s*care\s*places/i,
+  funding: /funding|subsid(y|ies)|government\s*(expenditure|payments?)/i,
 };
 
 export type Mapping = Record<GenField, number | null>;
@@ -55,7 +57,14 @@ export function guessMapping(headers: string[]): Mapping {
   const used = new Set<number>();
   const mapping = Object.fromEntries(GEN_FIELDS.map((f) => [f, null])) as Mapping;
   // Postcode and suburb before address, so "Physical Address Suburb" isn't taken as the address.
-  for (const f of ['home_care_places', 'postcode', 'suburb', 'state', 'provider', 'service', 'care_type', 'org_type', 'region', 'address'] as GenField[]) {
+  // Government funding: the total column if there is one.
+  const total = headers.findIndex((h) => h && PATTERNS.funding.test(h) && /total/i.test(h));
+  if (total >= 0) {
+    mapping.funding = total;
+    used.add(total);
+  }
+  for (const f of ['funding', 'home_care_places', 'postcode', 'suburb', 'state', 'provider', 'service', 'care_type', 'org_type', 'region', 'address'] as GenField[]) {
+    if (mapping[f] !== null) continue;
     const i = headers.findIndex((h, n) => !used.has(n) && h && PATTERNS[f].test(h));
     if (i >= 0) {
       mapping[f] = i;
@@ -76,6 +85,30 @@ export interface GenService {
   orgType: string;
   region: string;
   homeCarePlaces: number | null;
+  /** Government funding for this service in the year the list reports (AUD). */
+  funding: number | null;
+}
+
+/** "2024-25 Australian Government funding" → "2024–25". */
+export function fundingYear(header: string | undefined): string | null {
+  const m = header?.match(/(20\d\d)\s*[-–/]\s*(\d\d)(?!\d)/);
+  return m ? `${m[1]}–${m[2]}` : (header?.match(/20\d\d/)?.[0] ?? null);
+}
+
+const money = (s: string) => {
+  const n = Number(s.replace(/[$,\s]/g, ''));
+  return s && Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+/** Each provider's total government funding across all its services (residential too), by normalised name. */
+export function fundingTotals(services: GenService[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const s of services) {
+    if (s.funding === null) continue;
+    const key = normaliseName(s.provider) || s.provider.toLowerCase();
+    out.set(key, (out.get(key) ?? 0) + s.funding);
+  }
+  return out;
 }
 
 export function toServices(rows: Cell[][], headerIndex: number, mapping: Mapping): GenService[] {
@@ -95,6 +128,7 @@ export function toServices(rows: Cell[][], headerIndex: number, mapping: Mapping
         orgType: get(r, 'org_type'),
         region: get(r, 'region'),
         homeCarePlaces: places && !Number.isNaN(Number(places)) ? Number(places) : null,
+        funding: money(get(r, 'funding')),
       };
     })
     .filter((s) => s.provider);
@@ -152,7 +186,7 @@ export function groupProviders(services: GenService[], catalogue: Provider[]): L
 }
 
 /** A catalogue record for a loaded provider: no prices yet, marked as from the government list. */
-export function candidateToProvider(c: LoadCandidate, takenIds: Set<string>, asAt: string, note: string): Provider {
+export function candidateToProvider(c: LoadCandidate, takenIds: Set<string>, asAt: string, note: string, funding?: { amount: number; year: string | null } | null): Provider {
   let id = slugify(c.name) || 'provider';
   for (let n = 2; takenIds.has(id); n++) id = `${slugify(c.name)}-${n}`;
   takenIds.add(id);
@@ -178,5 +212,6 @@ export function candidateToProvider(c: LoadCandidate, takenIds: Set<string>, asA
     source_url: null,
     locations,
     origin: { kind: 'gen', note: note.slice(0, 300), at: asAt },
+    ...(funding ? { gov_funding: Math.round(funding.amount), ...(funding.year ? { gov_funding_year: funding.year } : {}) } : {}),
   };
 }

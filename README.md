@@ -177,6 +177,15 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
 - **Decide:** each member scores separately; scores combine with the applicant's counting double, and differences of two points or more are flagged. The decision record names who, why and the next steps (tell them, agree the service agreement, tell the others, start date).
 - State v11 adds `select` (votes, bookings, member scores, decision); older shared scores carry over as "Family (earlier scores)".
 
+### Narrowing providers (Find: basic and advanced)
+- **Basic** (Find's default): a "Narrow down" panel above the ranked list and map, with a count beside every choice:
+  1. How far away: any, or within 5, 10, 20 or 40 km of the nearest outlet (by suburb).
+  2. Type of organisation (not-for-profit, for-profit, government), size, and "no sanctions or non-compliance" (checked ones only).
+  3. Check what's left: one button researches up to 25 providers (price list, quality record, public claims), with a rough cost and progress; results fill in as each finishes.
+- **Advanced** (`/providers?view=table`, not on phones): every provider in the area in a sortable table (distance, type, size, fit, cost a quarter, record, data held), filters down the side with counts (adds fit, data held, extra fees, budget, deal-breakers, veteran experience, most a quarter, include outside the area), tick providers to check, shortlist or compare them, and saved views (kept in this browser).
+- **Size** comes from the government service list's funding column: each provider's total Australian Government aged care funding across all its services (residential too). Small under $5m a year, medium $5–50m, large $50–250m, very large over $250m. Upload the list again with "Re-import even if it's the same file" ticked to add funding to providers already loaded; hand-entered providers get their funding filled in, nothing else.
+- Bulk research: `POST /api/applications/:id/research` (two providers at a time, three checks each). Filters live in `src/narrow.ts`.
+
 ### Interface (docs/UI-SPEC.md)
 - Quantivate design tokens (`design/tokens.css`), with light, dark and high-contrast themes.
 - A four-step journey bar: Your situation → Compare → Choose who to meet → Interview & decide.

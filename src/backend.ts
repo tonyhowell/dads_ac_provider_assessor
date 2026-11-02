@@ -128,6 +128,8 @@ export interface Backend {
   /** Quality and compliance findings (shared), and starting a check. */
   listCompliance(): Promise<ComplianceRow[]>;
   startCompliance(applicationId: string, providerId: string, refresh: boolean): Promise<ComplianceRow>;
+  /** Find: research up to 25 providers (prices, compliance, public claims). */
+  startResearch(applicationId: string, providerIds: string[]): Promise<{ providers: number }>;
   /** Questions this family asked Claude about a provider, and asking a new one (waits for the answer). */
   listQuestions(applicationId: string, providerId: string): Promise<ProviderQuestion[]>;
   askQuestion(applicationId: string, providerId: string, question: string): Promise<ProviderQuestion>;
@@ -155,6 +157,7 @@ export const httpBackend: Backend = {
   listCompliance: async () => (await api<{ compliance: ComplianceRow[] }>('/api/compliance')).compliance,
   startCompliance: async (applicationId, providerId, refresh) =>
     (await api<{ compliance: ComplianceRow }>(`/api/applications/${encodeURIComponent(applicationId)}/compliance/${encodeURIComponent(providerId)}`, { body: { refresh } })).compliance,
+  startResearch: async (applicationId, providerIds) => api<{ providers: number }>(`/api/applications/${encodeURIComponent(applicationId)}/research`, { body: { providerIds } }),
   listQuestions: async (applicationId, providerId) =>
     (await api<{ questions: ProviderQuestion[] }>(`/api/applications/${encodeURIComponent(applicationId)}/questions?provider=${encodeURIComponent(providerId)}`)).questions,
   askQuestion: async (applicationId, providerId, question) =>

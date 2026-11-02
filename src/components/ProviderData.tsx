@@ -1,3 +1,4 @@
+import { fundingText, SIZE_BANDS, sizeBand } from '../narrow';
 import { useState, type ReactNode } from 'react';
 import { useApp } from '../state/AppContext';
 import { useSession } from '../state/SessionContext';
@@ -89,6 +90,12 @@ export function ProviderDataBox({ provider }: { provider: Provider }) {
       {provider.origin && (
         <p className="small">
           {provider.origin.kind === 'gen' ? 'Added from the government service list' : 'Found by a provider search'} on {formatDate(provider.origin.at)}.
+        </p>
+      )}
+      {provider.gov_funding != null && (
+        <p className="small">
+          Size: {SIZE_BANDS.find((b) => b.id === sizeBand(provider.gov_funding))!.label.toLowerCase()} — {fundingText(provider.gov_funding)} in Australian Government aged care funding
+          {provider.gov_funding_year ? ` (${provider.gov_funding_year})` : ''}, from the government service list.
         </p>
       )}
       {provider.origin?.missing_since && (

@@ -122,6 +122,7 @@ export function GenAutoImport() {
     }
   };
   const [file, setFile] = useState<File | null>(null);
+  const [forceUpload, setForceUpload] = useState(false);
   const [sent, setSent] = useState<number | null>(null);
   /** When this page started an import: its progress and result are shown until dismissed. */
   const [startedAt, setStartedAt] = useState<{ before: string | null } | null>(null);
@@ -137,7 +138,7 @@ export function GenAutoImport() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = '';
       for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      await postWithProgress('/api/admin/gen-import/upload', { name: file.name, data: btoa(binary), force: false }, setSent);
+      await postWithProgress('/api/admin/gen-import/upload', { name: file.name, data: btoa(binary), force: forceUpload }, setSent);
       setSent(null);
       await load();
     } catch (err) {
@@ -277,6 +278,9 @@ export function GenAutoImport() {
             <button type="button" className="btn btn-primary" disabled={busy} onClick={startImport}>
               Import this file
             </button>
+            <label className="flex min-h-[var(--target-min)] items-center gap-2 small">
+              <input type="checkbox" checked={forceUpload} onChange={(e) => setForceUpload(e.target.checked)} /> Re-import even if it's the same file as last time (adds anything new we now read, such as funding)
+            </label>
           </div>
         )}
       </div>

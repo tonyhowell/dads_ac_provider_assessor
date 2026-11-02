@@ -55,6 +55,8 @@ interface SessionValue {
   /** Quality and compliance findings by provider id; polled while any check is running. */
   compliance: Map<string, ComplianceRow>;
   startCompliance(applicationId: string, providerId: string, refresh?: boolean): Promise<void>;
+  /** Research a narrowed list: prices, compliance and public claims. Statuses update as each finishes. */
+  startResearch(applicationId: string, providerIds: string[]): Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -149,6 +151,21 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
     [backend],
   );
 
+  const startResearch = useCallback(
+    async (applicationId: string, providerIds: string[]) => {
+      await backend.startResearch(applicationId, providerIds);
+      // The server starts them a couple at a time; look now and again soon (polling carries on while any run).
+      const look = () => {
+        refreshCompliance();
+        refreshPrices();
+        refreshClaims();
+      };
+      look();
+      setTimeout(look, 2000);
+    },
+    [backend, refreshCompliance, refreshPrices, refreshClaims],
+  );
+
   const setCatalogue = useCallback((c: Catalogue) => setEdits(c.providers), []);
   const refreshCatalogue = useCallback(async () => {
     try {
@@ -209,8 +226,9 @@ export function SessionProvider({ backend, seed, children }: { backend: Backend;
       startPriceCheck,
       compliance: new Map(complianceRows.map((r) => [r.provider_id, r])),
       startCompliance,
+      startResearch,
     };
-  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims, priceRows, watchPriceChecks, startPriceCheck, complianceRows, startCompliance]);
+  }, [backend, seed, edits, setCatalogue, refreshCatalogue, applications, applicationsError, reloadApplications, chosen, setCurrentId, claimRows, claimsMaxAgeDays, startClaims, priceRows, watchPriceChecks, startPriceCheck, complianceRows, startCompliance, startResearch]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

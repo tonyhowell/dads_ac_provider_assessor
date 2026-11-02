@@ -35,6 +35,10 @@ export const ProviderSchema = z.object({
   website: z.url().nullable().optional(),
   /** Where its outlets are, e.g. "Wynnum 4178" (from the government service list). Not the area it serves. */
   locations: z.array(z.string().max(120)).max(50).optional(),
+  /** Total Australian Government funding across all its services, from the government service list (AUD a year). */
+  gov_funding: z.number().nonnegative().nullable().optional(),
+  /** The financial year that funding is for, e.g. "2024–25". */
+  gov_funding_year: z.string().max(40).optional(),
   /** How it got into the catalogue, when it wasn't added by hand: the government list or a Claude search. */
   origin: z
     .object({

@@ -5,7 +5,7 @@ import { useSession } from '../state/SessionContext';
 import { parseCsv } from '../csv';
 import { toIsoDate } from '../rules';
 import type { Catalogue } from '../backend';
-import { candidateToProvider, findHeader, GEN_FIELD_LABELS, GEN_FIELDS, groupProviders, isHomeCare, toServices, type Cell, type GenField, type Mapping } from '../genLoad';
+import { candidateToProvider, findHeader, fundingTotals, fundingYear, GEN_FIELD_LABELS, GEN_FIELDS, groupProviders, isHomeCare, toServices, type Cell, type GenField, type Mapping } from '../genLoad';
 import { ResolutionCard } from '../components/ui/Cards';
 import { Icon } from '../components/ui/Icon';
 import { GenAutoImport } from '../components/GenAutoImport';
@@ -102,7 +102,12 @@ export function LoadProvidersScreen() {
       const taken = new Set(catalogue.map((p) => p.id));
       const today = toIsoDate(new Date());
       const note = `${fileName}${regions.size ? `, ${[...regions].join(', ')}` : ''}`;
-      const providers = toAdd.map((c) => candidateToProvider(c, taken, today, note));
+      const totals = fundingTotals(services);
+      const year = mapping?.funding != null ? fundingYear(headers[mapping.funding]) : null;
+      const providers = toAdd.map((c) => {
+        const amount = totals.get(c.key);
+        return candidateToProvider(c, taken, today, note, amount === undefined ? null : { amount, year });
+      });
       const r = await api<{ added: string[] } & Catalogue>('/api/admin/providers/load', { body: { providers } });
       setCatalogue(r);
       setDone(r.added.length);

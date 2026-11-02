@@ -3,7 +3,7 @@ import readXlsxFile from 'read-excel-file/node';
 import type { Db, Queryable } from './db.ts';
 import { catalogueEdits, upsertCatalogue } from './catalogue.ts';
 import { effectiveProviders } from '../src/state/reducer.ts';
-import { candidateToProvider, findHeader, groupProviders, isHomeCare, toServices, type Cell, type GenService } from '../src/genLoad.ts';
+import { candidateToProvider, findHeader, fundingTotals, fundingYear, groupProviders, isHomeCare, normaliseName, toServices, type Cell, type GenService } from '../src/genLoad.ts';
 import { parseCsv } from '../src/csv.ts';
 import type { Provider } from '../src/types.ts';
 import type { Fetcher } from './pages.ts';
@@ -222,11 +222,13 @@ export async function readRows(bytes: Buffer, fileUrl: string, contentType: stri
 }
 
 /** Services from every sheet that looks like the service list (other sheets are notes). */
-export function servicesFrom(sheets: Cell[][][]): GenService[] {
-  const out: GenService[] = [];
+export function servicesFrom(sheets: Cell[][][]): GenService[] & { fundingYear?: string | null } {
+  const out: GenService[] & { fundingYear?: string | null } = [];
   for (const rows of sheets) {
     const header = findHeader(rows);
-    if (header) out.push(...toServices(rows, header.index, header.mapping));
+    if (!header) continue;
+    out.push(...toServices(rows, header.index, header.mapping));
+    if (header.mapping.funding !== null && !out.fundingYear) out.fundingYear = fundingYear(header.headers[header.mapping.funding]);
   }
   if (out.length) return out;
   throw new GenImportError("Couldn't find the provider columns in the file (looked for provider name, suburb, postcode and care type).");
@@ -235,7 +237,13 @@ export function servicesFrom(sheets: Cell[][][]): GenService[] {
 const sameList = (a: string[] | undefined, b: string[] | undefined) => JSON.stringify([...(a ?? [])].sort()) === JSON.stringify([...(b ?? [])].sort());
 
 /** Works out what changes in the catalogue. Pure, so it can be tested without a database. */
-export function planImport(services: GenService[], catalogue: Provider[], opts: { asAt: string; note: string; regions: Set<string> | null }) {
+export function planImport(services: GenService[], catalogue: Provider[], opts: { asAt: string; note: string; regions: Set<string> | null; fundingYear?: string | null }) {
+  // Funding across all of a provider's services (residential too) shows how big the organisation is.
+  const totals = fundingTotals(services);
+  const fundingFor = (c: { key: string; services: GenService[] }) => {
+    const amount = totals.get(c.key) ?? totals.get(normaliseName(c.services[0]?.provider ?? ''));
+    return amount === undefined ? null : { amount, year: opts.fundingYear ?? null };
+  };
   const home = services.filter(isHomeCare);
   const kept = opts.regions ? home.filter((s) => opts.regions!.has(s.region || s.state || 'Unknown')) : home;
   const candidates = groupProviders(kept, catalogue);
@@ -247,27 +255,34 @@ export function planImport(services: GenService[], catalogue: Provider[], opts: 
 
   for (const c of candidates) {
     if (!c.existing) {
-      add.push(candidateToProvider(c, taken, opts.asAt, opts.note));
+      add.push(candidateToProvider(c, taken, opts.asAt, opts.note, fundingFor(c)));
       stats.added!++;
       continue;
     }
     const p = c.existing;
     if (seen.has(p.id)) continue;
     seen.add(p.id);
-    const fresh = candidateToProvider(c, new Set(), opts.asAt, opts.note);
+    const fresh = candidateToProvider(c, new Set(), opts.asAt, opts.note, fundingFor(c));
+    const funding = fresh.gov_funding !== undefined ? { gov_funding: fresh.gov_funding, ...(fresh.gov_funding_year ? { gov_funding_year: fresh.gov_funding_year } : {}) } : {};
     if (p.origin?.kind === 'gen') {
       const wasMissing = !!p.origin.missing_since;
-      const next: Provider = { ...p, outlet: fresh.outlet, locations: fresh.locations, type: p.type ?? fresh.type, origin: { kind: 'gen', note: opts.note.slice(0, 300), at: p.origin.at } };
-      if (wasMissing || p.outlet !== next.outlet || !sameList(p.locations, next.locations)) {
+      const next: Provider = { ...p, outlet: fresh.outlet, locations: fresh.locations, type: p.type ?? fresh.type, ...funding, origin: { kind: 'gen', note: opts.note.slice(0, 300), at: p.origin.at } };
+      const fundingChanged = next.gov_funding !== p.gov_funding || next.gov_funding_year !== p.gov_funding_year;
+      if (wasMissing || fundingChanged || p.outlet !== next.outlet || !sameList(p.locations, next.locations)) {
         update.push({ provider: next, change: wasMissing ? `Back on the government service list (${opts.note})` : `Outlets updated from the government service list (${opts.note})` });
         if (wasMissing) stats.back!++;
         else stats.updated!++;
       } else stats.unchanged!++;
-    } else if (!p.locations?.length && fresh.locations?.length) {
-      // Entered by hand: only fill in where its outlets are, if we didn't know.
-      update.push({ provider: { ...p, locations: fresh.locations }, change: `Outlet locations added from the government service list (${opts.note})` });
-      stats.updated!++;
-    } else stats.kept_by_hand!++;
+    } else {
+      // Entered by hand: only fill in where its outlets are, and its government funding (public facts we didn't have).
+      const fill: Partial<Provider> = {};
+      if (!p.locations?.length && fresh.locations?.length) fill.locations = fresh.locations;
+      if (fresh.gov_funding !== undefined && (p.gov_funding !== fresh.gov_funding || p.gov_funding_year !== fresh.gov_funding_year)) Object.assign(fill, funding);
+      if (Object.keys(fill).length) {
+        update.push({ provider: { ...p, ...fill }, change: `${fill.locations ? 'Outlet locations' : 'Government funding'} added from the government service list (${opts.note})` });
+        stats.updated!++;
+      } else stats.kept_by_hand!++;
+    }
   }
 
   // Loaded from an earlier list but not on this one. With a regional import, only judge providers in those regions.
@@ -389,7 +404,7 @@ export async function runGenImport(
       note(`Regions around active applications: ${[...regions].join(', ') || 'none found'}.`);
     }
     const listNote = `service list as at ${asAt}`;
-    const plan = planImport(services, catalogue, { asAt, note: listNote, regions });
+    const plan = planImport(services, catalogue, { asAt, note: listNote, regions, fundingYear: services.fundingYear });
     // Saved in batches, with progress between them (a national list is over a thousand providers).
     const writes = [...plan.add.map((p) => ({ provider: p, change: `Loaded from the government service list (${listNote})` })), ...plan.update];
     note(`${writes.length} changes to save.`);
