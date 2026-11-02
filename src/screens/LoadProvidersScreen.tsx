@@ -8,6 +8,7 @@ import type { Catalogue } from '../backend';
 import { candidateToProvider, findHeader, GEN_FIELD_LABELS, GEN_FIELDS, groupProviders, isHomeCare, toServices, type Cell, type GenField, type Mapping } from '../genLoad';
 import { ResolutionCard } from '../components/ui/Cards';
 import { Icon } from '../components/ui/Icon';
+import { GenAutoImport } from '../components/GenAutoImport';
 
 // Site administration → Provider catalogue → Load from the government list. Reads the GEN aged care service
 // list in the browser (nothing is uploaded but the providers chosen), then adds the ones not yet in the catalogue.
@@ -130,6 +131,9 @@ export function LoadProvidersScreen() {
           </a>
         </p>
       </div>
+
+      <GenAutoImport />
+      <h3 className="text-[1.2rem]">Or load a file yourself</h3>
 
       {error && (
         <ResolutionCard status="stop" title="That didn't work" role="alert">

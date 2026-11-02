@@ -275,8 +275,8 @@ function ProviderEditControls() {
 
 /** Where this provider works, against the applicant's postcode. */
 function AreaLine({ provider }: { provider: Provider }) {
-  const { areaPostcode } = useApp();
-  const match = servesArea(provider, areaPostcode);
+  const { areaPostcode, nearPostcodes } = useApp();
+  const match = servesArea(provider, areaPostcode, nearPostcodes);
   if (match === 'serves') return <StatusText status="good">Serves {areaPostcode}</StatusText>;
   if (match === 'outside')
     return (

@@ -20,6 +20,8 @@ Set these on the app service (Variables tab):
 | `ANTHROPIC_API_KEY` | your Claude API key (needed to draft interview notes) |
 | `ENRICH_EVERY_HOURS` | optional: run the data check automatically, e.g. `24` |
 | `ENRICH_MAX_RESEARCH` | optional: most full web searches per scheduled check (default `3`) |
+| `GEN_SERVICE_LIST_URL` | optional: where to find the government aged care service list (page or file); admins can change it. Default: GEN's providers page |
+| `GEN_IMPORT_EVERY_HOURS` | optional: how often to check for a new government list (default `168`, weekly; `0` = only on request) |
 
 `NODE_ENV=production` is set by `npm start`. Railway sets `PORT`.
 

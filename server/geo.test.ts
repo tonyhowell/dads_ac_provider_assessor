@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { lookupPostcodes } from './geo.ts';
+import { lookupPostcodes, nearPostcodes } from './geo.ts';
 import { distanceText, km, nearest, parseLocation, providerPlaces, type GeoTable } from '../src/geo.ts';
 import { loadSeedData } from '../src/data/load.ts';
 
@@ -32,5 +32,13 @@ describe('suburb centres for the map', () => {
     const places = providerPlaces(p, geo);
     expect(places.map((x) => [x.label, x.kind])).toEqual([['Serves 4178', 'serves']]);
     expect(distanceText(nearest(geo['4178'].centre, places))).toBe('Serves your postcode');
+  });
+
+  it('lists postcodes within a distance of home', () => {
+    const near = nearPostcodes('4178', 60);
+    expect(near).toContain('4178');
+    expect(near).toContain('4000'); // Brisbane city, about 15 km
+    expect(near).not.toContain('2000'); // Sydney
+    expect(nearPostcodes('nope', 60)).toEqual([]);
   });
 });

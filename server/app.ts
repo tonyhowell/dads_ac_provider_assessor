@@ -64,7 +64,8 @@ import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, list
 import { listPages, type Fetcher } from './pages.ts';
 import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
 import { checkGaps, readSupportPlan, suggestAnswers } from './gatherAi.ts';
-import { lookupPostcodes } from './geo.ts';
+import { GenImportError, getGenSettings, listGenImports, runGenImport, saveGenSettings } from './genImport.ts';
+import { lookupPostcodes, nearPostcodes } from './geo.ts';
 import { askAboutProvider, checkCompliance, claimCompliance, finishCompliance, listCompliance, listQuestions, saveQuestion } from './insights.ts';
 import { UsageTally } from './usage.ts';
 
@@ -101,6 +102,9 @@ const publicUser = (u: User) => ({
   last_login_at: u.last_login_at,
   created_at: u.created_at,
 });
+
+/** How far an outlet can be from home and still count as possibly serving it (km). */
+const NEAR_KM = 60;
 
 /** Very small fixed-window limiter for the sign-in endpoints. */
 function rateLimit(max: number, windowMs: number): MiddlewareHandler {
@@ -573,6 +577,11 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
   app.get('/api/price-checks', requireUser, async (c) => c.json({ checks: await listPriceChecks(db) }));
   app.get('/api/compliance', requireUser, async (c) => c.json({ compliance: await listCompliance(db) }));
   /** Suburb centres for the Find map. */
+  /** Postcodes near a home postcode: a loaded provider whose outlets are all further away is outside the area. */
+  app.get('/api/near', requireUser, (c) => {
+    const postcode = c.req.query('postcode') ?? '';
+    return c.json({ km: NEAR_KM, postcodes: /^\d{4}$/.test(postcode) ? nearPostcodes(postcode, NEAR_KM) : [] });
+  });
   app.get('/api/geo', requireUser, (c) => c.json({ postcodes: lookupPostcodes((c.req.query('postcodes') ?? '').split(',').slice(0, 300)) }));
 
   // --- Common provider catalogue ---
@@ -738,6 +747,32 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
       }
     });
     return c.json({ added, ...(await catalogueEdits(db)) });
+  });
+  // Automatic import of the government aged care service list.
+  admin.get('/gen-import', async (c) =>
+    c.json({ settings: await getGenSettings(db, config.genServiceListUrl), runs: await listGenImports(db), every_hours: config.genImportEveryHours }),
+  );
+  admin.put('/gen-import', async (c) => {
+    const body = await parse(
+      c,
+      z.object({ url: z.url().max(2000).refine((u) => /^https:\/\//.test(u), 'Use an https web address'), scope: z.enum(['national', 'regions']), auto: z.boolean() }),
+    );
+    if (body instanceof Response) return body;
+    await saveGenSettings(db, body, c.get('user').id);
+    return c.json({ settings: await getGenSettings(db, config.genServiceListUrl) });
+  });
+  admin.post('/gen-import/run', async (c) => {
+    const body = await parse(c, z.object({ force: z.boolean().default(false) }));
+    if (body instanceof Response) return body;
+    if ((await listGenImports(db, 1))[0]?.status === 'running') return c.json({ error: 'An import is already running.' }, 409);
+    background(
+      runGenImport({ db, seedProviders, envUrl: config.genServiceListUrl, fetcher }, { trigger: 'admin', userId: c.get('user').id, force: body.force })
+        .then(() => undefined)
+        .catch((err) => {
+          if (!(err instanceof GenImportError)) console.error('[gen-import]', err);
+        }),
+    );
+    return c.json({ started: true }, 202);
   });
   admin.delete('/providers/:id', async (c) => {
     await revertCatalogue(db, c.req.param('id'), c.get('user').id);

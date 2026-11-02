@@ -1,7 +1,8 @@
 import type { Provider } from './types';
 
 // Service areas: each provider lists the postcodes it serves, as single postcodes ("4178") or ranges
-// ("4150-4179"). A provider with no list hasn't had its area confirmed, so it is never hidden.
+// ("4150-4179"). A provider with no list hasn't had its area confirmed, so it isn't hidden — unless we know where
+// its outlets are (from the government list) and none is near home (`near`: postcodes within 60 km).
 
 export type AreaMatch = 'serves' | 'outside' | 'unknown';
 
@@ -16,9 +17,14 @@ export function parseAreas(text: string): string[] {
     .filter((s) => SINGLE.test(s) || RANGE.test(s));
 }
 
-export function servesArea(provider: Pick<Provider, 'postcodes_served'>, postcode: string | null): AreaMatch {
+export function servesArea(provider: Pick<Provider, 'postcodes_served' | 'locations'>, postcode: string | null, near?: Set<string> | null): AreaMatch {
   const list = provider.postcodes_served ?? [];
-  if (!postcode || !SINGLE.test(postcode) || list.length === 0) return 'unknown';
+  if (!postcode || !SINGLE.test(postcode)) return 'unknown';
+  if (list.length === 0) {
+    const outlets = (provider.locations ?? []).map((l) => l.match(/(\d{4})\s*$/)?.[1]).filter((pc): pc is string => !!pc);
+    if (!near || !near.size || !outlets.length) return 'unknown';
+    return outlets.some((pc) => near.has(pc)) ? 'unknown' : 'outside';
+  }
   const n = Number(postcode);
   const hit = list.some((entry) => {
     const range = entry.match(RANGE);

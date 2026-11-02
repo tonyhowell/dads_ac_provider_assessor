@@ -91,6 +91,12 @@ export function ProviderDataBox({ provider }: { provider: Provider }) {
           {provider.origin.kind === 'gen' ? 'Added from the government service list' : 'Found by a provider search'} on {formatDate(provider.origin.at)}.
         </p>
       )}
+      {provider.origin?.missing_since && (
+        <p className="small font-semibold">
+          Not on the government service list as at {formatDate(provider.origin.missing_since)}. They may have stopped offering home care, or changed their name: check before
+          going further.
+        </p>
+      )}
       {priceLine && <div className="flex flex-wrap items-center gap-2">{priceLine}</div>}
       <div className="flex flex-wrap items-center gap-2">{enrichLine}</div>
       <QuickReasons providerId={provider.id} />

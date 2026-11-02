@@ -25,7 +25,7 @@ const PERIOD: Record<Period, { factor: number; word: string }> = {
 };
 
 export function CostsScreen() {
-  const { state, providers, seed, dispatch, serviceDate, plan, canEdit, areaPostcode } = useApp();
+  const { state, providers, seed, dispatch, serviceDate, plan, canEdit, areaPostcode, nearPostcodes } = useApp();
   const [scope, setScope] = useState<Scope>(state.selection.length > 0 ? 'selected' : 'all');
   const [period, setPeriod] = useState<Period>('quarter');
   const { factor, word } = PERIOD[period];
@@ -33,9 +33,9 @@ export function CostsScreen() {
   const shown = useMemo(() => {
     const stageOf = new Map(state.selection.map((e) => [e.provider_id, e.stage]));
     // "All" means all in the applicant's area: providers that list other postcodes only are left out.
-    if (scope === 'all') return providers.filter((p) => servesArea(p, areaPostcode) !== 'outside');
+    if (scope === 'all') return providers.filter((p) => servesArea(p, areaPostcode, nearPostcodes) !== 'outside');
     return providers.filter((p) => (scope === 'interview' ? stageOf.get(p.id) === 'interview' : stageOf.has(p.id)));
-  }, [providers, state.selection, scope, areaPostcode]);
+  }, [providers, state.selection, scope, areaPostcode, nearPostcodes]);
 
   const { rates, budget, benchmark, byProvider } = usePlanCosts(shown);
   // A provider with no published price for any service in the plan would just repeat the guide price.

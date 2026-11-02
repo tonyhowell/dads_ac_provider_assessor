@@ -30,9 +30,9 @@ import { AskPanel, QualityPanel } from './Insights';
 
 /** Ranked whole-plan matches for providers in the applicant's area (or all, when `includeOutside`). */
 export function useMatches(includeOutside = false) {
-  const { providers, state, plan, areaPostcode } = useApp();
+  const { providers, state, plan, areaPostcode, nearPostcodes } = useApp();
   const { claims } = useSession();
-  const inArea = useMemo(() => providers.filter((p) => includeOutside || servesArea(p, areaPostcode) !== 'outside'), [providers, areaPostcode, includeOutside]);
+  const inArea = useMemo(() => providers.filter((p) => includeOutside || servesArea(p, areaPostcode, nearPostcodes) !== 'outside'), [providers, areaPostcode, nearPostcodes, includeOutside]);
   const { byProvider, benchmark, budget } = usePlanCosts(inArea);
   const outside = providers.length - inArea.length;
   const matches = useMemo(() => {

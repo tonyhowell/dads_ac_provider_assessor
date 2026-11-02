@@ -83,3 +83,45 @@ describe('loading from the government list', () => {
     expect(await screen.findByText('1 provider added')).toBeInTheDocument();
   });
 });
+
+describe('automatic import of the government list', () => {
+  it('shows recent imports, saves settings and starts a check', async () => {
+    const user = userEvent.setup();
+    const calls: { path: string; method: string; body: unknown }[] = [];
+    let status = 'done';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+        calls.push({ path, method, body });
+        if (path === '/api/admin/gen-import' && method === 'GET')
+          return Response.json({
+            settings: { url: 'https://www.gen-agedcaredata.gov.au/topics/providers-of-aged-care', scope: 'national', auto: true },
+            every_hours: 168,
+            runs: [
+              { id: 'r1', trigger: 'schedule', status, file_url: 'x', as_at: '2026-06-30', stats: { added: 812, updated: 3, missing: 2, providers: 830, home_care: 3400 }, log: [], error: null, started_at: AT, finished_at: AT },
+            ],
+          });
+        if (path === '/api/admin/gen-import' && method === 'PUT') return Response.json({ settings: body });
+        if (path === '/api/admin/gen-import/run') {
+          status = 'running';
+          return Response.json({ started: true }, { status: 202 });
+        }
+        return Response.json({ suggestions: [], applications: [] });
+      }),
+    );
+    await renderApp('/admin/providers/load', { waitForNav: false });
+    const card = await screen.findByRole('region', { name: 'Automatic import' });
+    expect(within(card).getByText(/checking every 7 days/)).toBeInTheDocument();
+    expect(await within(card).findByText(/812 added, 3 updated, 2 no longer listed · 830 home care providers/)).toBeInTheDocument();
+
+    await user.click(within(card).getByLabelText('Only the regions around active applications'));
+    await user.click(within(card).getByRole('button', { name: 'Save settings' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'https://www.gen-agedcaredata.gov.au/topics/providers-of-aged-care', scope: 'regions', auto: true }));
+
+    await user.click(within(card).getByRole('button', { name: 'Check for a new list now' }));
+    await waitFor(() => expect(calls.find((c) => c.path === '/api/admin/gen-import/run')?.body).toEqual({ force: false }));
+    expect(await within(card).findByRole('button', { name: 'Importing…' })).toBeDisabled();
+  });
+});

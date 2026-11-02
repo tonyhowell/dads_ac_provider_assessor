@@ -10,6 +10,7 @@ import { EnrichmentBusyError, recoverAfterRestart, runEnrichment } from './enric
 import { effectiveProviders } from '../src/state/reducer.ts';
 import { loadSeedData } from '../src/data/load.ts';
 import { catalogueEdits } from './catalogue.ts';
+import { GenImportError, getGenSettings, reapGenImports, runGenImport } from './genImport.ts';
 
 const config = loadConfig();
 const db = await openDb(config);
@@ -67,6 +68,27 @@ if (config.enrichEveryHours && config.anthropicApiKey) {
     setInterval(() => void tick(), config.enrichEveryHours! * 3_600_000).unref();
   }, 10 * 60_000).unref();
   console.log(`[enrich] Data check every ${config.enrichEveryHours} hours.`);
+}
+
+// Scheduled import of the government aged care service list (GEN_IMPORT_EVERY_HOURS, default weekly). No Claude
+// calls; when the file hasn't changed it does nothing.
+await reapGenImports(db);
+if (config.genImportEveryHours > 0) {
+  const seedProviders = loadSeedData().providers;
+  const tick = async () => {
+    try {
+      if (!(await getGenSettings(db, config.genServiceListUrl)).auto) return;
+      const run = await runGenImport({ db, seedProviders, envUrl: config.genServiceListUrl }, { trigger: 'schedule' });
+      console.log(`[gen-import] ${run.status}${run.error ? `: ${run.error}` : ''} ${JSON.stringify(run.stats)}`);
+    } catch (err) {
+      if (!(err instanceof GenImportError)) console.error('[gen-import]', err);
+    }
+  };
+  setTimeout(() => {
+    void tick();
+    setInterval(() => void tick(), config.genImportEveryHours * 3_600_000).unref();
+  }, 5 * 60_000).unref();
+  console.log(`[gen-import] Government service list checked every ${config.genImportEveryHours} hours.`);
 }
 
 const shutdown = async () => {

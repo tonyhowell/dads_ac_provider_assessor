@@ -9,6 +9,7 @@ export const testConfig: Config = {
   rpName: 'Provider Assessor',
   dataDir: '',
   enrichMaxResearch: 3,
+  genImportEveryHours: 0,
   production: true,
 };
 

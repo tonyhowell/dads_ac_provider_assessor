@@ -93,15 +93,17 @@ export function distanceText(n: Nearest | null): string | null {
   return `${d} away · outlet in ${suburb.replace(/\b\w+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())}`;
 }
 
-/** The coordinates for the given postcodes, fetched once per set. */
+/** The coordinates for the given postcodes, fetched once per set (in batches: the server takes 300 at a time). */
 export function useGeo(postcodes: string[]): GeoTable {
   const key = postcodes.join(',');
   const [geo, setGeo] = useState<GeoTable>({});
   useEffect(() => {
     if (!key) return;
     let live = true;
-    api<{ postcodes: GeoTable }>(`/api/geo?postcodes=${encodeURIComponent(key)}`)
-      .then((r) => live && setGeo(r.postcodes))
+    const all = key.split(',');
+    const batches = Array.from({ length: Math.ceil(all.length / 300) }, (_, i) => all.slice(i * 300, i * 300 + 300));
+    Promise.all(batches.map((b) => api<{ postcodes: GeoTable }>(`/api/geo?postcodes=${encodeURIComponent(b.join(','))}`)))
+      .then((rs) => live && setGeo(Object.assign({}, ...rs.map((r) => r.postcodes))))
       .catch(() => undefined);
     return () => {
       live = false;

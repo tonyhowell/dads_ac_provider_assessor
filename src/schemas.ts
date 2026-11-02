@@ -41,6 +41,8 @@ export const ProviderSchema = z.object({
       kind: z.enum(['gen', 'search']),
       note: z.string().max(300),
       at: isoDate,
+      /** The date of the first government list it was missing from (it may have closed or changed name). */
+      missing_since: isoDate.optional(),
     })
     .optional(),
 });

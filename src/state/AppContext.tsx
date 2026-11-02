@@ -7,6 +7,7 @@ import { useSession } from './SessionContext';
 import { toIsoDate } from '../rules';
 import type { PlanItem, Provider } from '../types';
 import type { StateSync } from './sync';
+import { api } from '../api';
 
 const POLL_MS = 20_000;
 
@@ -28,6 +29,8 @@ interface AppContextValue {
   canEdit: boolean;
   /** The applicant's postcode, for matching providers' service areas: from About you, else the application. */
   areaPostcode: string | null;
+  /** Postcodes within 60 km of home (null until known): rules out loaded providers whose outlets are all far away. */
+  nearPostcodes: Set<string> | null;
   /** Fetch the latest shared state now, e.g. after the server changed it. */
   refresh: () => Promise<void>;
   /** The family's plan, or the sample plan until they edit it. */
@@ -125,6 +128,20 @@ export function AppProvider({
     [sync, refresh, canEdit],
   );
 
+  const areaPostcode = (state?.participant?.postcode || application.postcode || '').trim() || null;
+  const [nearPostcodes, setNearPostcodes] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    setNearPostcodes(null);
+    if (!areaPostcode || !/^\d{4}$/.test(areaPostcode)) return;
+    let live = true;
+    api<{ postcodes: string[] }>(`/api/near?postcode=${areaPostcode}`)
+      .then((r) => live && Array.isArray(r.postcodes) && setNearPostcodes(new Set(r.postcodes)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [areaPostcode]);
+
   const value = useMemo(
     () =>
       state
@@ -142,14 +159,15 @@ export function AppProvider({
             application,
             role,
             canEdit,
-            areaPostcode: (state.participant?.postcode || application.postcode || '').trim() || null,
+            areaPostcode,
+            nearPostcodes,
             refresh: async () => {
               version.current = -1;
               await refresh();
             },
           }
         : null,
-    [seed, catalogue, state, dispatch, audio, syncError, saving, savedAt, application, role, canEdit, refresh],
+    [seed, catalogue, state, dispatch, audio, syncError, saving, savedAt, application, role, canEdit, refresh, areaPostcode, nearPostcodes],
   );
 
   if (!value) {

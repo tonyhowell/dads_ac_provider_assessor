@@ -173,7 +173,7 @@ function readFilters(): MatchFilters {
 
 /** Filters (kept for this browser session, so the list and the filtered-out page agree) and what they leave. */
 export function useFinderState() {
-  const { state, areaPostcode } = useApp();
+  const { state, areaPostcode, nearPostcodes } = useApp();
   const [filters, setFiltersState] = useState<MatchFilters>(readFilters);
   const setFilters = (f: MatchFilters) => {
     setFiltersState(f);
@@ -187,7 +187,7 @@ export function useFinderState() {
   const back = useMemo(() => new Set(state.find.broughtBack), [state.find.broughtBack]);
   const found = useMatches(showOutside || back.size > 0);
   const anyWithinBudget = found.matches.some((m) => m.verdict !== 'quote' && m.cost.over_budget !== null && m.cost.over_budget <= 0);
-  const inArea = (m: Match) => showOutside || servesArea(m.provider, areaPostcode) !== 'outside';
+  const inArea = (m: Match) => showOutside || servesArea(m.provider, areaPostcode, nearPostcodes) !== 'outside';
   const shown = found.matches.filter((m) => back.has(m.provider.id) || (passes(m, filters) && inArea(m)));
   return { ...found, filters, setFilters, showOutside, setShowOutside, anyWithinBudget, shown, outside: found.outside, back };
 }
@@ -745,7 +745,7 @@ const FILTER_REASON: { key: keyof MatchFilters; test: (m: Match, f: MatchFilters
 ];
 
 function FilteredOut() {
-  const { state, dispatch, canEdit, areaPostcode } = useApp();
+  const { state, dispatch, canEdit, areaPostcode, nearPostcodes } = useApp();
   const link = useParamLink();
   const f = useFinderState();
   const all = useMatches(true).matches;
@@ -780,7 +780,8 @@ function FilteredOut() {
       title: 'Outside your area',
       why: "Their service area doesn't include your postcode.",
       rows: all
-        .filter((m) => servesArea(m.provider, areaPostcode) === 'outside')
+        .filter((m) => servesArea(m.provider, areaPostcode, nearPostcodes) === 'outside')
+        .sort((a, b) => (dist.near.get(a.provider.id)?.km ?? Infinity) - (dist.near.get(b.provider.id)?.km ?? Infinity))
         .map((m) => ({ m, detail: distanceText(dist.near.get(m.provider.id) ?? null) ?? `Doesn't list ${areaPostcode}` })),
     },
     {
@@ -841,7 +842,7 @@ function FilteredOut() {
             <p className="card">None.</p>
           ) : (
             <ul className="space-y-2">
-              {g.rows.map(({ m, detail }) => {
+              {g.rows.slice(0, GROUP_LIMIT).map(({ m, detail }) => {
                 const inList = shownIds.has(m.provider.id);
                 return (
                   <li key={m.provider.id} className="card flex flex-wrap items-start justify-between gap-3">
@@ -867,6 +868,7 @@ function FilteredOut() {
                   </li>
                 );
               })}
+              {g.rows.length > GROUP_LIMIT && <li className="small">and {g.rows.length - GROUP_LIMIT} more{g.id === 'outside' ? ', further away' : ''}.</li>}
             </ul>
           )}
         </section>
@@ -874,6 +876,9 @@ function FilteredOut() {
     </section>
   );
 }
+
+/** Most providers listed in each filtered-out group (the government list adds many far-away providers). */
+const GROUP_LIMIT = 50;
 
 /** A warning on the card when the Commission's record shows sanctions or non-compliance. */
 function ComplianceLine({ providerId }: { providerId: string }) {

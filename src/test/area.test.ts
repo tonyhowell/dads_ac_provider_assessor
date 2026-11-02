@@ -18,4 +18,14 @@ describe('service areas', () => {
   it('parses a typed list, dropping anything that is not a postcode or range', () => {
     expect(parseAreas('4178, 4150 - 4169; 41x9\n4183')).toEqual(['4178', '4150-4169', '4183']);
   });
+
+  it('rules out a provider with no listed area only when all its outlets are far from home', () => {
+    const near = new Set(['4178', '4179']);
+    expect(servesArea({ locations: ['Sydney 2000'] }, '4178', near)).toBe('outside');
+    expect(servesArea({ locations: ['Sydney 2000', 'Manly 4179'] }, '4178', near)).toBe('unknown');
+    expect(servesArea({ locations: ['Sydney 2000'] }, '4178', null)).toBe('unknown');
+    expect(servesArea({}, '4178', near)).toBe('unknown');
+    // A listed area still decides.
+    expect(servesArea({ postcodes_served: ['4178'], locations: ['Sydney 2000'] }, '4178', near)).toBe('serves');
+  });
 });

@@ -15,6 +15,10 @@ export interface Config {
   enrichEveryHours?: number;
   /** Most full web searches for public claims in one scheduled run. */
   enrichMaxResearch: number;
+  /** Where the government aged care service list is found: a page linking to it, or the file. Admins can change it. */
+  genServiceListUrl?: string;
+  /** Check the government list this often (hours); 0 = only when an admin asks. Default weekly. */
+  genImportEveryHours: number;
   production: boolean;
 }
 
@@ -33,6 +37,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bootstrapAdmin: env.BOOTSTRAP_ADMIN_USERNAME?.trim() || undefined,
     enrichEveryHours: Number(env.ENRICH_EVERY_HOURS) > 0 ? Number(env.ENRICH_EVERY_HOURS) : undefined,
     enrichMaxResearch: Number.isFinite(Number(env.ENRICH_MAX_RESEARCH)) && env.ENRICH_MAX_RESEARCH ? Math.max(0, Number(env.ENRICH_MAX_RESEARCH)) : 3,
+    genServiceListUrl: env.GEN_SERVICE_LIST_URL?.trim() || undefined,
+    genImportEveryHours: env.GEN_IMPORT_EVERY_HOURS !== undefined && env.GEN_IMPORT_EVERY_HOURS !== '' && Number.isFinite(Number(env.GEN_IMPORT_EVERY_HOURS)) ? Math.max(0, Number(env.GEN_IMPORT_EVERY_HOURS)) : 168,
     production,
   };
 }

@@ -276,6 +276,30 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX provider_questions_app_idx ON provider_questions(application_id, provider_id, created_at)
   `,
+  // v8: automatic import of the government aged care service list (settings, and a record of each import).
+  `
+  CREATE TABLE app_settings (
+    key text PRIMARY KEY,
+    value jsonb NOT NULL,
+    updated_by text,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE TABLE gen_imports (
+    id text PRIMARY KEY,
+    trigger text NOT NULL,
+    status text NOT NULL CHECK (status IN ('running', 'done', 'unchanged', 'failed')),
+    source_url text NOT NULL,
+    file_url text,
+    sha256 text,
+    as_at date,
+    stats jsonb NOT NULL DEFAULT '{}'::jsonb,
+    log jsonb NOT NULL DEFAULT '[]'::jsonb,
+    error text,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+  );
+  CREATE INDEX gen_imports_started_idx ON gen_imports(started_at DESC)
+  `,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

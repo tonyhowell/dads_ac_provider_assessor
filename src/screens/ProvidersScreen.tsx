@@ -21,10 +21,10 @@ const hasVeteranExperience = (p: Provider) => /^strong|veteran/i.test(p.veteran_
 const hasFlags = (p: Provider) => p.flags.length > 0;
 
 export function ProvidersScreen() {
-  const { providers, state, canEdit, areaPostcode } = useApp();
+  const { providers, state, canEdit, areaPostcode, nearPostcodes } = useApp();
   const { user } = useAuth();
   const [showOutside, setShowOutside] = useState(false);
-  const outsideCount = providers.filter((p) => servesArea(p, areaPostcode) === 'outside').length;
+  const outsideCount = providers.filter((p) => servesArea(p, areaPostcode, nearPostcodes) === 'outside').length;
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
   const [stageFilter, setStageFilter] = useState<StageFilter>('all');
@@ -47,12 +47,12 @@ export function ProvidersScreen() {
         (!chips.has('veteran') || hasVeteranExperience(p)) &&
         (!chips.has('current') || !isStale(p.prices_as_at_date)) &&
         (!chips.has('noflags') || !hasFlags(p)) &&
-        (showOutside || servesArea(p, areaPostcode) !== 'outside'),
+        (showOutside || servesArea(p, areaPostcode, nearPostcodes) !== 'outside'),
     );
     return filtered.sort((a, b) =>
       sort === 'notes' ? (noteCounts.get(b.id) ?? 0) - (noteCounts.get(a.id) ?? 0) || a.provider.localeCompare(b.provider) : a.provider.localeCompare(b.provider),
     );
-  }, [providers, query, sort, noteCounts, stageFilter, stageOf, chips, showOutside, areaPostcode]);
+  }, [providers, query, sort, noteCounts, stageFilter, stageOf, chips, showOutside, areaPostcode, nearPostcodes]);
 
   return (
     <section className="space-y-6">
@@ -155,7 +155,7 @@ export function ProvidersScreen() {
                     {notes} note{notes === 1 ? '' : 's'}
                   </span>
                   {hasVeteranExperience(p) && <StatusText status="good">Veteran experience</StatusText>}
-                  <AreaBadge match={servesArea(p, areaPostcode)} postcode={areaPostcode} />
+                  <AreaBadge match={servesArea(p, areaPostcode, nearPostcodes)} postcode={areaPostcode} />
                 </div>
               </div>
               <StageControls provider={p} compact />
