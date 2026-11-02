@@ -129,51 +129,83 @@ export function pageLinks(html: string, base: string): { href: string; text: str
 }
 
 const isFile = (href: string) => /\.(xlsx|csv)(\?|#|$)/i.test(href);
+/** A link that's probably a download of the list even when its address doesn't end in .xlsx (CMS download links). */
+const looksLikeDownload = (l: { href: string; text: string }) => isFile(l.href) || /\b(xlsx|excel|csv)\b/i.test(l.text) || /\/getmedia\/|\/download(\b|\/|\?|$)|\/media\/\d+/i.test(l.href);
 const isServiceList = (l: { href: string; text: string }) => /service[\s_-]*list|service[\s_-]*information/i.test(`${l.text} ${decodeURIComponent(l.href)}`);
+const NATIONAL = /australia|national|all[\s_-]*states/i;
+const MONTH_SLUGS = ['october', 'september', 'november', 'december', 'august'];
+
+/** GEN's release pages follow a pattern: /resources/access-data/2025/october/aged-care-service-list-30-june-2025. */
+export function releaseGuesses(base: string, today = new Date()): string[] {
+  const origin = new URL(base).origin;
+  const year = today.getFullYear();
+  const out: string[] = [];
+  for (const y of [year, year - 1, year - 2]) for (const m of MONTH_SLUGS) out.push(`${origin}/resources/access-data/${y}/${m}/aged-care-service-list-30-june-${y}`);
+  return out;
+}
 
 /**
- * The newest service list files linked from a page (GEN publishes one file per state for each release), following
- * one link to a "service list" release page if the page itself has none.
+ * The newest service list files linked from a page. GEN publishes an Australia-wide file and one per state for each
+ * release: the Australia-wide one is used when there is one. Follows links to "service list" release pages, and
+ * if the page links to none, tries GEN's usual release addresses.
  */
-export async function findListFiles(url: string, get: (url: string) => Promise<Response>, log: (s: string) => void): Promise<string[]> {
+export async function findListFiles(url: string, get: (url: string) => Promise<Response>, log: (s: string) => void, today = new Date()): Promise<string[]> {
   if (isFile(url)) return [url];
   const pick = (links: { href: string; text: string }[]) => {
-    const files = links.filter((l) => isFile(l.href));
+    const files = links.filter(looksLikeDownload);
     const wanted = files.filter(isServiceList);
     // On a release page every file is part of the list, even if its name doesn't say so.
     const pool = (wanted.length ? wanted : files).map((l) => ({ ...l, date: listDate(`${l.text} ${l.href}`) ?? '' }));
     if (!pool.length) return [];
     const newest = pool.reduce((d, l) => (l.date > d ? l.date : d), '');
-    return [...new Set(pool.filter((l) => l.date === newest).map((l) => l.href))];
+    const latest = pool.filter((l) => l.date === newest);
+    const national = latest.filter((l) => NATIONAL.test(`${l.text} ${decodeURIComponent(l.href)}`));
+    return [...new Set((national.length ? national.slice(0, 1) : latest).map((l) => l.href))];
   };
-  const read = async (u: string) => {
+  const read = async (u: string, quiet = false): Promise<{ href: string; text: string }[] | null> => {
     const res = await get(u);
-    if (!res.ok) throw new GenImportError(`${u} answered ${res.status}.`);
+    if (!res.ok) {
+      if (quiet) return null;
+      throw new GenImportError(`${u} answered ${res.status}.`);
+    }
     const type = res.headers.get('content-type') ?? '';
     if (!/html/i.test(type)) throw new GenImportError(`${u} isn't a web page or a list file (${type || 'unknown type'}).`);
     return pageLinks(await res.text(), u);
   };
-  const links = await read(url);
+  const links = (await read(url))!;
+  log(`${links.length} links on ${url}; ${links.filter(looksLikeDownload).length} look like downloads.`);
+  // Files on this page, when they're clearly the service list (a release page, or a file list).
+  if (links.some((l) => looksLikeDownload(l) && isServiceList(l)) || /aged-care-service-list/i.test(url)) {
+    const here = pick(links);
+    if (here.length) return here;
+  }
   const releases = links
-    .filter((l) => isServiceList(l) && !isFile(l.href) && new URL(l.href).host === new URL(url).host && l.href.split('#')[0] !== url.split('#')[0])
+    .filter((l) => isServiceList(l) && !looksLikeDownload(l) && new URL(l.href).host === new URL(url).host && l.href.split('#')[0] !== url.split('#')[0])
     .map((l) => ({ ...l, date: listDate(`${l.text} ${l.href}`) ?? '' }))
     .sort((a, b) => b.date.localeCompare(a.date));
-  // Prefer files on this page only when they're clearly the service list; otherwise look on the newest release page.
-  const here = links.filter((l) => isFile(l.href) && isServiceList(l));
-  if (here.length) return pick(links);
   for (const page of releases.slice(0, 3)) {
     log(`Looking on ${page.href}`);
-    const found = pick(await read(page.href));
+    const found = pick((await read(page.href, true)) ?? []);
     if (found.length) return found;
   }
-  const any = pick(links);
-  if (any.length) return any;
-  throw new GenImportError(`No service list file (.xlsx or .csv) found on ${url}. Paste the release page or the file's own link instead.`);
+  // GEN's usual release addresses, newest first.
+  if (/gen-agedcaredata\.gov\.au$/i.test(new URL(url).host) || /gen\.example$/.test(new URL(url).host)) {
+    for (const guess of releaseGuesses(url, today)) {
+      const found = await read(guess, true);
+      if (!found) continue;
+      log(`Found the release page ${guess}`);
+      const files = pick(found);
+      if (files.length) return files;
+    }
+  }
+  throw new GenImportError(`No service list file (.xlsx or .csv) found on ${url}. Paste the release page (for example …/aged-care-service-list-30-june-2025) or the file's own link instead.`);
 }
 
 /** Every sheet's rows (CSV is one sheet). */
 export async function readRows(bytes: Buffer, fileUrl: string, contentType: string): Promise<Cell[][][]> {
-  if (/\.csv(\?|#|$)/i.test(fileUrl) || /text\/csv/i.test(contentType)) return [parseCsv(bytes.toString('utf8'))];
+  const zip = bytes[0] === 0x50 && bytes[1] === 0x4b; // .xlsx files are zip archives
+  if (!zip && (/\.csv(\?|#|$)/i.test(fileUrl) || /text\/(csv|plain)/i.test(contentType))) return [parseCsv(bytes.toString('utf8'))];
+  if (!zip) throw new GenImportError(`${fileUrl} isn't an Excel or CSV file (${contentType || 'unknown type'}).`);
   const sheets = await readXlsxFile(bytes);
   return sheets.map((s) => s.data as Cell[][]);
 }
@@ -332,6 +364,7 @@ export async function runGenImport(deps: GenImportDeps, opts: { trigger: string;
   } catch (err) {
     const message = err instanceof GenImportError ? err.message : `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
     if (!(err instanceof GenImportError)) console.error('[gen-import]', err);
+    console.log(`[gen-import] steps: ${log.join(' | ')}`);
     return await finish('failed', { file_url: fileUrl, error: message });
   }
 }

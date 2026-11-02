@@ -82,6 +82,19 @@ describe('finding the list', () => {
     expect(pageLinks('<a class="x" href="a.xlsx">A &amp; B</a>', 'https://h.example/p/')).toEqual([{ href: 'https://h.example/p/a.xlsx', text: 'A & B' }]);
   });
 
+  it('uses the Australia-wide file when there is one, and finds the release page by its usual address', async () => {
+    web.clear();
+    web.set(TOPIC, ['<p>No links here</p>', 'text/html']);
+    web.set(RELEASE, [
+      `<a href="/getmedia/abc/Aged-care-service-list-30-June-2026-Australia.xlsx">Australia (XLSX, 967 KB)</a><a href="${QLD}">Queensland</a><a href="/getmedia/def/download">NSW (XLSX)</a>`,
+      'text/html',
+    ]);
+    const get = (u: string) => fetcher(u, {});
+    const steps: string[] = [];
+    expect(await findListFiles(TOPIC, get, (s) => steps.push(s), new Date('2026-11-02'))).toEqual(['https://gen.example/getmedia/abc/Aged-care-service-list-30-June-2026-Australia.xlsx']);
+    expect(steps.at(-1)).toBe(`Found the release page ${RELEASE}`);
+  });
+
   it('reads services from .xlsx and .csv', async () => {
     const rows = [['Title'], HEADER, row('Bayside Home Care', 'Bayside Care Ltd', 'Wynnum', '4178')];
     const fromXlsx = servicesFrom(await readRows(xlsx(rows), QLD, ''));

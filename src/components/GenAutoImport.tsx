@@ -198,6 +198,18 @@ export function GenAutoImport() {
                   <td>
                     {STATUS[r.status]}
                     {r.error && <span className="small block">{r.error}</span>}
+                    {r.status === 'failed' && r.log.length > 0 && (
+                      <details className="small">
+                        <summary className="cursor-pointer">What it tried</summary>
+                        <ul className="list-disc pl-5">
+                          {r.log.map((line, i) => (
+                            <li key={i} className="break-all">
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                   </td>
                   <td>{r.as_at ? formatDate(r.as_at) : '—'}</td>
                   <td>
