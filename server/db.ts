@@ -300,6 +300,8 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX gen_imports_started_idx ON gen_imports(started_at DESC)
   `,
+  // v9: live progress of a government list import (stage, done, total).
+  `ALTER TABLE gen_imports ADD COLUMN progress jsonb`,
 ];
 
 /** Applies any migrations not yet recorded. Safe to run on every start. */

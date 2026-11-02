@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { memoryBackend, memoryServer, renderApp } from './renderApp';
@@ -124,4 +124,63 @@ describe('automatic import of the government list', () => {
     await waitFor(() => expect(calls.find((c) => c.path === '/api/admin/gen-import/run')?.body).toEqual({ force: false }));
     expect(await within(card).findByRole('button', { name: 'Importing…' })).toBeDisabled();
   });
+});
+
+describe('uploading the government list', () => {
+  it('imports only when asked, showing upload and processing progress, then the result', async () => {
+    const user = userEvent.setup();
+    const sentBodies: unknown[] = [];
+    let xhr: FakeXhr | null = null;
+    class FakeXhr {
+      upload: { onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = { onprogress: null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      status = 0;
+      responseText = '';
+      withCredentials = false;
+      open() {}
+      setRequestHeader() {}
+      send(body: string) {
+        sentBodies.push(JSON.parse(body));
+        xhr = this;
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXhr);
+    const settings = { url: 'https://www.gen-agedcaredata.gov.au/topics/providers-of-aged-care', scope: 'national', auto: true };
+    const earlier = { id: 'r0', trigger: 'schedule', status: 'failed', file_url: null, as_at: null, stats: {}, log: [], error: 'answered 403.', started_at: AT, finished_at: AT, progress: null };
+    let runs: unknown[] = [earlier];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string) => {
+        if (path === '/api/admin/gen-import') return Response.json({ settings, every_hours: 168, runs });
+        return Response.json({ suggestions: [], applications: [] });
+      }),
+    );
+    await renderApp('/admin/providers/load', { waitForNav: false });
+    const card = await screen.findByRole('region', { name: 'Automatic import' });
+    const file = new File([new Uint8Array([0x50, 0x4b, 1, 2])], 'aged-care-service-list-30-june-2025-australia.xlsx');
+    await user.upload(within(card).getByLabelText('Or upload the list yourself'), file);
+    expect(sentBodies).toHaveLength(0); // nothing happens until asked
+    expect(within(card).getByText('aged-care-service-list-30-june-2025-australia.xlsx')).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Import this file' }));
+
+    await waitFor(() => expect(xhr).not.toBeNull());
+    expect(sentBodies[0]).toMatchObject({ name: 'aged-care-service-list-30-june-2025-australia.xlsx', force: false });
+    act(() => xhr!.upload.onprogress!({ lengthComputable: true, loaded: 40, total: 100 }));
+    expect(within(card).getByText(/Sending the file \(40%\)/)).toBeInTheDocument();
+
+    runs = [{ ...earlier, id: 'r1', trigger: 'upload', status: 'running', error: null, progress: { stage: 'saving', done: 300, total: 1312, updated_at: AT } }, earlier];
+    act(() => {
+      xhr!.status = 202;
+      xhr!.onload!();
+    });
+    expect(await within(card).findByText(/Saving changes \(300 of 1,312\)/, {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(within(card).getByText(/✓ Reading the spreadsheet/)).toBeInTheDocument();
+
+    runs = [{ ...earlier, id: 'r1', trigger: 'upload', status: 'done', error: null, progress: null, stats: { added: 1290, updated: 20, missing: 0, providers: 1310, services: 9000 } }, earlier];
+    expect(await within(card).findByText('Import finished', {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(within(card).getByText(/1290 providers added, 20 updated, 0 no longer listed/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Done' }));
+    expect(within(card).queryByText('Import finished')).not.toBeInTheDocument();
+  }, 15_000);
 });

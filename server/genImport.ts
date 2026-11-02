@@ -52,6 +52,16 @@ export interface GenImportRun {
   error: string | null;
   started_at: string;
   finished_at: string | null;
+  /** While running: what it's doing, and how far through. */
+  progress: GenImportProgress | null;
+}
+
+export type GenImportStage = 'finding' | 'downloading' | 'reading' | 'matching' | 'saving';
+export interface GenImportProgress {
+  stage: GenImportStage;
+  done: number;
+  total: number;
+  updated_at: string;
 }
 
 export class GenImportError extends Error {}
@@ -85,6 +95,7 @@ const toRun = (r: Record<string, unknown>): GenImportRun => ({
   error: (r.error as string | null) ?? null,
   started_at: iso(r.started_at)!,
   finished_at: iso(r.finished_at),
+  progress: (r.progress as GenImportProgress | null) ?? null,
 });
 
 export async function listGenImports(db: Queryable, limit = 10): Promise<GenImportRun[]> {
@@ -292,8 +303,14 @@ export async function runGenImport(
   const note = (s: string) => log.push(s);
   const source = opts.upload ? `Uploaded: ${opts.upload.name}`.slice(0, 300) : settings.url;
   await db.query('INSERT INTO gen_imports (id, trigger, status, source_url) VALUES ($1, $2, $3, $4)', [id, opts.trigger, 'running', source]);
+  let lastProgress = 0;
+  const progress = async (stage: GenImportStage, done = 0, total = 0, force = true) => {
+    if (!force && Date.now() - lastProgress < 750) return;
+    lastProgress = Date.now();
+    await db.query('UPDATE gen_imports SET progress = $2::jsonb, log = $3::jsonb WHERE id = $1', [id, JSON.stringify({ stage, done, total, updated_at: new Date().toISOString() }), JSON.stringify(log.slice(-50))]);
+  };
   const finish = async (status: GenImportRun['status'], fields: { file_url?: string; sha256?: string; as_at?: string | null; stats?: GenImportStats; error?: string }) => {
-    await db.query('UPDATE gen_imports SET status = $2, file_url = $3, sha256 = $4, as_at = $5, stats = $6::jsonb, log = $7::jsonb, error = $8, finished_at = now() WHERE id = $1', [
+    await db.query('UPDATE gen_imports SET status = $2, file_url = $3, sha256 = $4, as_at = $5, stats = $6::jsonb, log = $7::jsonb, error = $8, finished_at = now(), progress = NULL WHERE id = $1', [
       id,
       status,
       fields.file_url ?? null,
@@ -332,7 +349,9 @@ export async function runGenImport(
       hash.update(opts.upload.bytes);
       downloads.push({ url: opts.upload.name, bytes: opts.upload.bytes, type: '' });
     } else {
+      await progress('finding');
       files = await findListFiles(settings.url, get, note);
+      await progress('downloading', 0, files.length);
       fileUrl = files.length === 1 ? files[0] : `${files.length} files: ${files.map((f) => decodeURIComponent(f.split('/').pop() ?? f)).join(', ')}`.slice(0, 2000);
       note(`Files: ${files.join(' ')}`);
       let total = 0;
@@ -344,6 +363,7 @@ export async function runGenImport(
         if (total > MAX_BYTES) throw new GenImportError('The files come to over 60 MB.');
         hash.update(bytes);
         downloads.push({ url: f, bytes, type: res.headers.get('content-type') ?? '' });
+        await progress('downloading', downloads.length, files.length);
       }
     }
     const sha256 = hash.digest('hex');
@@ -353,10 +373,12 @@ export async function runGenImport(
       note('Same files as the last import: nothing to do.');
       return await finish('unchanged', { file_url: fileUrl, sha256, as_at: asAt });
     }
+    await progress('reading');
     for (const d of downloads) sheets.push(...(await readRows(d.bytes, d.url, d.type)));
 
     const services = servicesFrom(sheets);
     note(`${services.length} services read.`);
+    await progress('matching', 0, services.length);
     const catalogue = effectiveProviders(deps.seedProviders, (await catalogueEdits(db)).providers);
     let regions: Set<string> | null = null;
     if (settings.scope === 'regions') {
@@ -368,10 +390,17 @@ export async function runGenImport(
     }
     const listNote = `service list as at ${asAt}`;
     const plan = planImport(services, catalogue, { asAt, note: listNote, regions });
-    await db.transaction(async (tx) => {
-      for (const p of plan.add) await upsertCatalogue(tx, p, opts.userId ?? null, `Loaded from the government service list (${listNote})`);
-      for (const u of plan.update) await upsertCatalogue(tx, u.provider, opts.userId ?? null, u.change);
-    });
+    // Saved in batches, with progress between them (a national list is over a thousand providers).
+    const writes = [...plan.add.map((p) => ({ provider: p, change: `Loaded from the government service list (${listNote})` })), ...plan.update];
+    note(`${writes.length} changes to save.`);
+    await progress('saving', 0, writes.length);
+    for (let i = 0; i < writes.length; i += 100) {
+      const batch = writes.slice(i, i + 100);
+      await db.transaction(async (tx) => {
+        for (const w of batch) await upsertCatalogue(tx, w.provider, opts.userId ?? null, w.change);
+      });
+      await progress('saving', Math.min(i + 100, writes.length), writes.length, i + 100 >= writes.length);
+    }
     note(`Added ${plan.stats.added}, updated ${plan.stats.updated}, flagged missing ${plan.stats.missing}.`);
     return await finish('done', { file_url: fileUrl, sha256, as_at: asAt, stats: plan.stats });
   } catch (err) {

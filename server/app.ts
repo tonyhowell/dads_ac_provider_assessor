@@ -770,16 +770,18 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     const body = await parse(c, z.object({ name: z.string().trim().min(1).max(300), data: z.string().min(10).max(40 * 1024 * 1024), force: z.boolean().default(false) }));
     if (body instanceof Response) return body;
     if ((await listGenImports(db, 1))[0]?.status === 'running') return c.json({ error: 'An import is already running.' }, 409);
-    try {
-      const run = await runGenImport(
+    // Runs in the background: the page follows its progress.
+    background(
+      runGenImport(
         { db, seedProviders, envUrl: config.genServiceListUrl, fetcher },
         { trigger: 'upload', userId: c.get('user').id, force: body.force, upload: { name: body.name, bytes: Buffer.from(body.data, 'base64') } },
-      );
-      return c.json({ run, ...(await catalogueEdits(db)) });
-    } catch (err) {
-      if (err instanceof GenImportError) return c.json({ error: err.message }, 409);
-      throw err;
-    }
+      )
+        .then(() => undefined)
+        .catch((err) => {
+          if (!(err instanceof GenImportError)) console.error('[gen-import]', err);
+        }),
+    );
+    return c.json({ started: true }, 202);
   });
   admin.post('/gen-import/run', async (c) => {
     const body = await parse(c, z.object({ force: z.boolean().default(false) }));

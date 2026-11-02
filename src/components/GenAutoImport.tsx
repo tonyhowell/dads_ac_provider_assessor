@@ -23,7 +23,48 @@ interface Run {
   error: string | null;
   started_at: string;
   finished_at: string | null;
+  progress?: { stage: Stage; done: number; total: number; updated_at: string } | null;
 }
+type Stage = 'finding' | 'downloading' | 'reading' | 'matching' | 'saving';
+
+const STAGES: { id: Stage | 'uploading'; label: string }[] = [
+  { id: 'uploading', label: 'Sending the file' },
+  { id: 'reading', label: 'Reading the spreadsheet' },
+  { id: 'matching', label: 'Matching providers to the catalogue' },
+  { id: 'saving', label: 'Saving changes' },
+];
+const FETCH_STAGES: { id: Stage; label: string }[] = [
+  { id: 'finding', label: 'Finding the newest list' },
+  { id: 'downloading', label: 'Downloading' },
+  { id: 'reading', label: 'Reading the spreadsheet' },
+  { id: 'matching', label: 'Matching providers to the catalogue' },
+  { id: 'saving', label: 'Saving changes' },
+];
+
+/** Sends JSON with upload progress (fetch can't report it). */
+function postWithProgress(url: string, body: unknown, onProgress: (fraction: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let message = `The server answered ${xhr.status}.`;
+      try {
+        message = (JSON.parse(xhr.responseText) as { error?: string }).error ?? message;
+      } catch {
+        /* not JSON */
+      }
+      reject(new Error(message));
+    };
+    xhr.onerror = () => reject(new Error("Can't reach the server. Check your internet connection."));
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+const sizeText = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 const STATUS: Record<Run['status'], string> = { running: 'Running', done: 'Imported', unchanged: 'No change', failed: 'Failed' };
 
@@ -58,7 +99,7 @@ export function GenAutoImport() {
     if (!running) return;
     const timer = setInterval(async () => {
       await load();
-    }, 3000);
+    }, 1500);
     return () => clearInterval(timer);
   }, [running, load]);
   // When an import finishes, show its providers straight away.
@@ -80,25 +121,41 @@ export function GenAutoImport() {
       setError(err instanceof Error ? err.message : 'Could not save.');
     }
   };
-  const [uploading, setUploading] = useState(false);
-  const upload = async (file: File) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [sent, setSent] = useState<number | null>(null);
+  /** When this page started an import: its progress and result are shown until dismissed. */
+  const [startedAt, setStartedAt] = useState<{ before: string | null } | null>(null);
+  const [inputKey, setInputKey] = useState(0);
+  const mine = startedAt && runs[0] && runs[0].id !== startedAt.before ? runs[0] : undefined;
+  const waiting = !!startedAt && sent === null && !mine;
+  const startImport = async () => {
+    if (!file) return;
     setError(null);
-    setUploading(true);
+    setStartedAt({ before: runs[0]?.id ?? null });
+    setSent(0);
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = '';
       for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      await api('/api/admin/gen-import/upload', { body: { name: file.name, data: btoa(binary), force: false } });
+      await postWithProgress('/api/admin/gen-import/upload', { name: file.name, data: btoa(binary), force: false }, setSent);
+      setSent(null);
       await load();
-      await refreshCatalogue();
     } catch (err) {
+      setSent(null);
+      setStartedAt(null);
       setError(err instanceof Error ? err.message : 'Could not import the file.');
-    } finally {
-      setUploading(false);
     }
   };
+  // Follow an import this page started (it starts a moment after the upload finishes).
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => void load(), 1000);
+    return () => clearInterval(timer);
+  }, [waiting, load]);
+  const busy = sent !== null || waiting || running;
   const run = async (force: boolean) => {
     setError(null);
+    setStartedAt({ before: runs[0]?.id ?? null });
     try {
       await api('/api/admin/gen-import/run', { body: { force } });
       await load();
@@ -173,7 +230,7 @@ export function GenAutoImport() {
           <button type="submit" className="btn">
             Save settings
           </button>
-          <button type="button" className="btn btn-primary" disabled={running} onClick={() => run(false)}>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => run(false)}>
             {running ? 'Importing…' : 'Check for a new list now'}
           </button>
           {last && last.status !== 'running' && (
@@ -199,13 +256,42 @@ export function GenAutoImport() {
           </a>{' '}
           and upload it here. It's imported the same way: added, updated and flagged as above.
         </span>
-        <input id="gen-upload" type="file" accept=".xlsx,.csv" className="block" disabled={uploading || running} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-        {uploading && (
-          <p role="status" className="small">
-            Importing the file…
-          </p>
+        <input
+          key={inputKey}
+          id="gen-upload"
+          type="file"
+          accept=".xlsx,.csv"
+          className="block"
+          disabled={busy}
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setStartedAt(null);
+            setError(null);
+          }}
+        />
+        {file && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span>
+              <b>{file.name}</b> ({sizeText(file.size)})
+            </span>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={startImport}>
+              Import this file
+            </button>
+          </div>
         )}
       </div>
+      {startedAt && (sent !== null || waiting || mine) && (
+        <ImportProgress
+          stages={mine?.trigger === 'upload' || sent !== null || (waiting && !!file) ? STAGES : FETCH_STAGES}
+          sent={sent}
+          run={mine}
+          onDismiss={() => {
+            setStartedAt(null);
+            setFile(null);
+            setInputKey((k) => k + 1);
+          }}
+        />
+      )}
       {error && (
         <ResolutionCard status="stop" title="That didn't work" role="alert">
           <p>{error}</p>
@@ -258,6 +344,59 @@ export function GenAutoImport() {
           </table>
         </div>
       )}
+    </section>
+  );
+}
+
+/** The steps of an import this page started, with a bar for the current one, then the result. */
+function ImportProgress({ stages, sent, run, onDismiss }: { stages: { id: string; label: string }[]; sent: number | null; run: Run | undefined; onDismiss: () => void }) {
+  const current: string = sent !== null ? 'uploading' : (run?.progress?.stage ?? (run ? 'reading' : 'uploading'));
+  const finished = run && run.status !== 'running';
+  const index = stages.findIndex((s) => s.id === current);
+  const p = run?.progress;
+  const fraction = sent !== null ? sent : p && p.total > 0 ? p.done / p.total : null;
+  if (finished) {
+    const st = run.stats;
+    return (
+      <ResolutionCard
+        status={run.status === 'failed' ? 'stop' : 'good'}
+        title={run.status === 'done' ? 'Import finished' : run.status === 'unchanged' ? 'Nothing new: same list as last time' : 'The import failed'}
+        role={run.status === 'failed' ? 'alert' : 'status'}
+        actions={
+          <button type="button" className="btn" onClick={onDismiss}>
+            Done
+          </button>
+        }
+      >
+        {run.status === 'done' && (
+          <p>
+            {st.added ?? 0} providers added, {(st.updated ?? 0) + (st.back ?? 0)} updated, {st.missing ?? 0} no longer listed. {st.providers ?? 0} home care providers found in {st.services ?? 0}{' '}
+            services. New providers show in Find for families near their outlets.
+          </p>
+        )}
+        {run.error && <p>{run.error}</p>}
+      </ResolutionCard>
+    );
+  }
+  return (
+    <section className="well space-y-2" aria-labelledby="import-progress-heading">
+      <h4 id="import-progress-heading" className="font-semibold">
+        Importing…
+      </h4>
+      <ol className="space-y-1">
+        {stages.map((s, i) => (
+          <li key={s.id} className={i === index ? 'font-semibold' : i < index ? '' : 'text-[var(--grey)]'}>
+            {i < index ? '✓ ' : i === index ? '→ ' : '○ '}
+            {s.label}
+            {i === index && s.id === 'uploading' && sent !== null && ` (${Math.round(sent * 100)}%)`}
+            {i === index && p && p.total > 0 && s.id !== 'uploading' && ` (${p.done.toLocaleString('en-AU')} of ${p.total.toLocaleString('en-AU')})`}
+          </li>
+        ))}
+      </ol>
+      <progress className="w-full" aria-label={stages[Math.max(0, index)]?.label ?? 'Importing'} {...(fraction !== null ? { value: Math.round(fraction * 100), max: 100 } : {})} />
+      <p className="small" role="status">
+        {stages[Math.max(0, index)]?.label ?? 'Starting'}… You can leave this page; the import carries on.
+      </p>
     </section>
   );
 }
