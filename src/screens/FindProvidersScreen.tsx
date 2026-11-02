@@ -403,7 +403,7 @@ function WholePlan() {
             )}
           </div>
           {!phone && (
-            <div className="space-y-3 lg:sticky lg:top-4">
+            <div className="space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:overscroll-contain" data-side-panel>
               {selected && side ? <InsightPanel match={selected.match} position={selected.position} next={selected.next} closeTo={closeTo} /> : map}
             </div>
           )}
@@ -636,7 +636,7 @@ function ByService() {
           {phone && <p className="text-[0.95rem]">Support at Home pays one provider. If you mix, one arranges the others — ask about it at interview.</p>}
         </div>
         {!phone && (
-          <div className="space-y-3 lg:sticky lg:top-4">
+          <div className="space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:overscroll-contain" data-side-panel>
             {selected ? (
               <InsightPanel
                 match={selected.match}
