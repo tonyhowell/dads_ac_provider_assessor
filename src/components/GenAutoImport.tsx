@@ -80,6 +80,23 @@ export function GenAutoImport() {
       setError(err instanceof Error ? err.message : 'Could not save.');
     }
   };
+  const [uploading, setUploading] = useState(false);
+  const upload = async (file: File) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      await api('/api/admin/gen-import/upload', { body: { name: file.name, data: btoa(binary), force: false } });
+      await load();
+      await refreshCatalogue();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not import the file.');
+    } finally {
+      setUploading(false);
+    }
+  };
   const run = async (force: boolean) => {
     setError(null);
     try {
@@ -171,6 +188,24 @@ export function GenAutoImport() {
           )}
         </div>
       </form>
+      <div className="space-y-1 border-t border-[var(--rule)] pt-3">
+        <label htmlFor="gen-upload" className="label">
+          Or upload the list yourself
+        </label>
+        <span className="hint">
+          If the government site blocks the server, download the Australia-wide file (.xlsx) from the{' '}
+          <a href="https://www.gen-agedcaredata.gov.au/topics/providers-of-aged-care" target="_blank" rel="noreferrer noopener">
+            GEN providers page<span className="sr-only"> (opens in new tab)</span>
+          </a>{' '}
+          and upload it here. It's imported the same way: added, updated and flagged as above.
+        </span>
+        <input id="gen-upload" type="file" accept=".xlsx,.csv" className="block" disabled={uploading || running} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+        {uploading && (
+          <p role="status" className="small">
+            Importing the file…
+          </p>
+        )}
+      </div>
       {error && (
         <ResolutionCard status="stop" title="That didn't work" role="alert">
           <p>{error}</p>
@@ -193,7 +228,7 @@ export function GenAutoImport() {
                 <tr key={r.id}>
                   <td>
                     {formatDateTime(r.started_at)}
-                    <span className="small block">{r.trigger === 'schedule' ? 'On schedule' : 'By an admin'}</span>
+                    <span className="small block">{r.trigger === 'schedule' ? 'On schedule' : r.trigger === 'upload' ? 'Uploaded by an admin' : 'By an admin'}</span>
                   </td>
                   <td>
                     {STATUS[r.status]}

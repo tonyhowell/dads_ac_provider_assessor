@@ -278,7 +278,10 @@ export interface GenImportDeps {
 }
 
 /** Runs one import. Returns the finished run record. */
-export async function runGenImport(deps: GenImportDeps, opts: { trigger: string; userId?: string | null; force?: boolean }): Promise<GenImportRun> {
+export async function runGenImport(
+  deps: GenImportDeps,
+  opts: { trigger: string; userId?: string | null; force?: boolean; /** A file an admin uploaded, instead of fetching. */ upload?: { name: string; bytes: Buffer } },
+): Promise<GenImportRun> {
   const { db } = deps;
   const fetcher = deps.fetcher ?? fetch;
   const running = await db.query("SELECT id FROM gen_imports WHERE status = 'running' AND started_at > now() - interval '30 minutes'");
@@ -287,7 +290,8 @@ export async function runGenImport(deps: GenImportDeps, opts: { trigger: string;
   const id = randomUUID();
   const log: string[] = [];
   const note = (s: string) => log.push(s);
-  await db.query('INSERT INTO gen_imports (id, trigger, status, source_url) VALUES ($1, $2, $3, $4)', [id, opts.trigger, 'running', settings.url]);
+  const source = opts.upload ? `Uploaded: ${opts.upload.name}`.slice(0, 300) : settings.url;
+  await db.query('INSERT INTO gen_imports (id, trigger, status, source_url) VALUES ($1, $2, $3, $4)', [id, opts.trigger, 'running', source]);
   const finish = async (status: GenImportRun['status'], fields: { file_url?: string; sha256?: string; as_at?: string | null; stats?: GenImportStats; error?: string }) => {
     await db.query('UPDATE gen_imports SET status = $2, file_url = $3, sha256 = $4, as_at = $5, stats = $6::jsonb, log = $7::jsonb, error = $8, finished_at = now() WHERE id = $1', [
       id,
@@ -316,22 +320,31 @@ export async function runGenImport(deps: GenImportDeps, opts: { trigger: string;
 
   let fileUrl: string | undefined;
   try {
-    note(`Source: ${settings.url}`);
-    const files = await findListFiles(settings.url, get, note);
-    fileUrl = files.length === 1 ? files[0] : `${files.length} files: ${files.map((f) => decodeURIComponent(f.split('/').pop() ?? f)).join(', ')}`.slice(0, 2000);
-    note(`Files: ${files.join(' ')}`);
+    note(`Source: ${source}`);
     const hash = createHash('sha256');
     const sheets: Cell[][][] = [];
     const downloads: { url: string; bytes: Buffer; type: string }[] = [];
-    let total = 0;
-    for (const f of [...files].sort()) {
-      const res = await get(f);
-      if (!res.ok) throw new GenImportError(`${f} answered ${res.status}.`);
-      const bytes = Buffer.from(await res.arrayBuffer());
-      total += bytes.length;
-      if (total > MAX_BYTES) throw new GenImportError('The files come to over 60 MB.');
-      hash.update(bytes);
-      downloads.push({ url: f, bytes, type: res.headers.get('content-type') ?? '' });
+    let files: string[];
+    if (opts.upload) {
+      if (opts.upload.bytes.length > MAX_BYTES) throw new GenImportError('The file is over 60 MB.');
+      files = [opts.upload.name];
+      fileUrl = opts.upload.name;
+      hash.update(opts.upload.bytes);
+      downloads.push({ url: opts.upload.name, bytes: opts.upload.bytes, type: '' });
+    } else {
+      files = await findListFiles(settings.url, get, note);
+      fileUrl = files.length === 1 ? files[0] : `${files.length} files: ${files.map((f) => decodeURIComponent(f.split('/').pop() ?? f)).join(', ')}`.slice(0, 2000);
+      note(`Files: ${files.join(' ')}`);
+      let total = 0;
+      for (const f of [...files].sort()) {
+        const res = await get(f);
+        if (!res.ok) throw new GenImportError(`${f} answered ${res.status}.`);
+        const bytes = Buffer.from(await res.arrayBuffer());
+        total += bytes.length;
+        if (total > MAX_BYTES) throw new GenImportError('The files come to over 60 MB.');
+        hash.update(bytes);
+        downloads.push({ url: f, bytes, type: res.headers.get('content-type') ?? '' });
+      }
     }
     const sha256 = hash.digest('hex');
     const asAt = files.map(listDate).find(Boolean) ?? new Date().toISOString().slice(0, 10);
@@ -362,7 +375,9 @@ export async function runGenImport(deps: GenImportDeps, opts: { trigger: string;
     note(`Added ${plan.stats.added}, updated ${plan.stats.updated}, flagged missing ${plan.stats.missing}.`);
     return await finish('done', { file_url: fileUrl, sha256, as_at: asAt, stats: plan.stats });
   } catch (err) {
-    const message = err instanceof GenImportError ? err.message : `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
+    let message = err instanceof GenImportError ? err.message : `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
+    if (/answered 40[13]\.$/.test(message))
+      message += ' The site blocked the server’s automatic request. Download the Australia-wide file in your browser and upload it here instead (same import: adds, updates and flags providers).';
     if (!(err instanceof GenImportError)) console.error('[gen-import]', err);
     console.log(`[gen-import] steps: ${log.join(' | ')}`);
     return await finish('failed', { file_url: fileUrl, error: message });

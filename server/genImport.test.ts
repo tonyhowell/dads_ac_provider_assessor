@@ -177,6 +177,19 @@ describe('running an import', () => {
     expect((await listGenImports(db)).find((r) => r.id === 'stuck')).toMatchObject({ status: 'failed', error: 'Stopped by a server restart.' });
   });
 
+  it('imports an uploaded file the same way, and explains a blocked request', async () => {
+    const bytes = xlsx([HEADER, row('Bayside Home Care', 'Bayside Care Ltd', 'Wynnum', '4178')]);
+    const run = await runGenImport({ db, seedProviders: seed.providers, fetcher }, { trigger: 'upload', upload: { name: 'aged-care-service-list-30-june-2026-australia.xlsx', bytes } });
+    expect(run).toMatchObject({ status: 'done', source_url: 'Uploaded: aged-care-service-list-30-june-2026-australia.xlsx', as_at: '2026-06-30', stats: { added: 1 } });
+    expect(fetched).toEqual([]);
+
+    web.set(TOPIC, ['Forbidden', 'text/html']);
+    const blocked: Fetcher = async () => new Response('Forbidden', { status: 403 });
+    await saveGenSettings(db, { url: TOPIC, scope: 'national', auto: true }, null);
+    const failed = await runGenImport({ db, seedProviders: seed.providers, fetcher: blocked }, { trigger: 'schedule' });
+    expect(failed.error).toMatch(/answered 403\. The site blocked the server’s automatic request\. Download the Australia-wide file/);
+  });
+
   it('defaults to the GEN providers page, or the configured link', async () => {
     expect((await getGenSettings(db)).url).toBe('https://www.gen-agedcaredata.gov.au/topics/providers-of-aged-care');
     expect((await getGenSettings(db, 'https://x.example/list.xlsx')).url).toBe('https://x.example/list.xlsx');

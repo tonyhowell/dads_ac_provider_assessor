@@ -165,7 +165,11 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     }
     await next();
   });
-  app.use('/api/*', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'Request is too large.' }, 413) }));
+  // Uploads (a support plan, the government list) may be larger; everything else is small.
+  const smallBody = bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'Request is too large.' }, 413) });
+  const uploadBody = bodyLimit({ maxSize: 40 * 1024 * 1024, onError: (c) => c.json({ error: 'The file is too large.' }, 413) });
+  const isUpload = (path: string) => /^\/api\/applications\/[^/]+\/support-plan$/.test(path) || path === '/api/admin/gen-import/upload';
+  app.use('/api/*', (c, next) => (isUpload(c.req.path) ? uploadBody(c, next) : smallBody(c, next)));
 
   const parse = async <T>(c: Context, schema: z.ZodType<T>): Promise<T | Response> => {
     const body = await c.req.json().catch(() => undefined);
@@ -760,6 +764,22 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     if (body instanceof Response) return body;
     await saveGenSettings(db, body, c.get('user').id);
     return c.json({ settings: await getGenSettings(db, config.genServiceListUrl) });
+  });
+  /** The same import, from a file an admin downloaded (GEN blocks automated requests from some servers). */
+  admin.post('/gen-import/upload', async (c) => {
+    const body = await parse(c, z.object({ name: z.string().trim().min(1).max(300), data: z.string().min(10).max(40 * 1024 * 1024), force: z.boolean().default(false) }));
+    if (body instanceof Response) return body;
+    if ((await listGenImports(db, 1))[0]?.status === 'running') return c.json({ error: 'An import is already running.' }, 409);
+    try {
+      const run = await runGenImport(
+        { db, seedProviders, envUrl: config.genServiceListUrl, fetcher },
+        { trigger: 'upload', userId: c.get('user').id, force: body.force, upload: { name: body.name, bytes: Buffer.from(body.data, 'base64') } },
+      );
+      return c.json({ run, ...(await catalogueEdits(db)) });
+    } catch (err) {
+      if (err instanceof GenImportError) return c.json({ error: err.message }, 409);
+      throw err;
+    }
   });
   admin.post('/gen-import/run', async (c) => {
     const body = await parse(c, z.object({ force: z.boolean().default(false) }));
