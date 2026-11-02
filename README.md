@@ -177,6 +177,14 @@ The full v1 build plan is in place: the SPEC §8 screens, calculations, question
 - **Decide:** each member scores separately; scores combine with the applicant's counting double, and differences of two points or more are flagged. The decision record names who, why and the next steps (tell them, agree the service agreement, tell the others, start date).
 - State v11 adds `select` (votes, bookings, member scores, decision); older shared scores carry over as "Family (earlier scores)".
 
+### Providers from My Aged Care (Find starts here)
+My Aged Care's Find a provider is the official directory of who serves an area, with the prices providers must publish (reviewed every two months). It doesn't accept automated requests, so a coordinator brings its pages in:
+1. **Search My Aged Care** from Find: the link opens Find a provider set to the family's suburb, state and postcode and the services in their plan.
+2. **Shortlist there and save as PDF** (Print → Save as PDF): *My shortlist* (who), *Compare* (up to three providers' prices for every service), and optionally a provider's *Show details* page (weekend, after-hours and public holiday rates, and prices Compare leaves out).
+3. **Upload the PDFs** in Find → a preview (providers, where based, phone, how many prices, which look wrong, catalogue match). Nothing is saved until confirmed. Confirmed providers become **this family's list** in Find (Basic and Advanced filter it; "Everyone in the catalogue" shows the rest), with their published prices stored as "My Aged Care, date". The app's eight costed rates come from them (social = individual social support); every price shows on the provider page. Implausible prices (e.g. $1.10 an hour) are kept but flagged and not used.
+- Shortlist and Compare pages are read from their text (`src/mac.ts`, tested on real printouts); a details page is read by Claude Haiku as a PDF (`server/macRead.ts`). Routes: `POST /api/applications/:id/mac/read` (preview) and `/mac/apply` (save).
+- The government list (GEN) stays in the background for organisation type and size.
+
 ### Narrowing providers (Find: basic and advanced)
 - **Basic** (Find's default): a "Narrow down" panel above the ranked list and map, with a count beside every choice:
   1. How far away: any, or within 5, 10, 20 or 40 km of the nearest outlet (by suburb).

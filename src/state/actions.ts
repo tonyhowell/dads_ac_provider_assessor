@@ -60,6 +60,9 @@ export const ActionSchema = z.discriminatedUnion('type', [
   /** Find stage (v10). */
   z.object({ type: z.literal('find/target'), target: z.number().int().min(1).max(20) }),
   z.object({ type: z.literal('find/bringBack'), providerId: id, back: z.boolean() }),
+  /** Providers found on My Aged Care for this family (added to the list, or replacing it). */
+  z.object({ type: z.literal('find/macList'), providerIds: z.array(id).max(200), shareUrl: z.url().max(300).nullable().optional(), at: z.string().max(40), replace: z.boolean().optional() }),
+  z.object({ type: z.literal('find/macRemove'), providerId: id }),
   /** One reaction per person: the server sets user_id, name and at. A null value removes it. */
   z.object({
     type: z.literal('find/react'),

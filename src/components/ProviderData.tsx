@@ -89,7 +89,7 @@ export function ProviderDataBox({ provider }: { provider: Provider }) {
     <section className="well space-y-2" aria-label={`What we know about ${provider.provider}`}>
       {provider.origin && (
         <p className="small">
-          {provider.origin.kind === 'gen' ? 'Added from the government service list' : 'Found by a provider search'} on {formatDate(provider.origin.at)}.
+          {provider.origin.kind === 'gen' ? 'Added from the government service list' : provider.origin.kind === 'mac' ? 'Added from My Aged Care' : 'Found by a provider search'} on {formatDate(provider.origin.at)}.
         </p>
       )}
       {provider.gov_funding != null && (

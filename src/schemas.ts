@@ -9,6 +9,24 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 export const RATE_KEYS = ['rn', 'en', 'pc', 'domestic', 'social', 'respite', 'gardening', 'care_mgmt'] as const;
 export const RateKeySchema = z.enum(RATE_KEYS);
 
+const macPeriod = z.union([z.number().nonnegative(), z.literal('not_offered')]).nullable().optional();
+export const MacPriceSchema = z.object({
+  service: z.string().min(1).max(200),
+  unit: z.string().min(1).max(40),
+  standard: z.number().nonnegative().nullable(),
+  non_standard: macPeriod,
+  saturday: macPeriod,
+  sunday: macPeriod,
+  public_holiday: macPeriod,
+  flag: z.string().max(200).optional(),
+});
+export const MacDataSchema = z.object({
+  as_at: isoDate,
+  prices: z.array(MacPriceSchema).max(120),
+  services: z.array(z.string().max(200)).max(150),
+  share_url: z.url().nullable().optional(),
+});
+
 export const ProviderSchema = z.object({
   id: z.string().min(1),
   provider: z.string().min(1),
@@ -39,10 +57,15 @@ export const ProviderSchema = z.object({
   gov_funding: z.number().nonnegative().nullable().optional(),
   /** The financial year that funding is for, e.g. "2024–25". */
   gov_funding_year: z.string().max(40).optional(),
-  /** How it got into the catalogue, when it wasn't added by hand: the government list or a Claude search. */
+  /** Phone and where it's based, as My Aged Care lists them. */
+  phone: z.string().max(40).optional(),
+  based_in: z.string().max(120).optional(),
+  /** Every service price it publishes on My Aged Care (from a Compare or details printout), and when. */
+  mac: MacDataSchema.optional(),
+  /** How it got into the catalogue, when it wasn't added by hand: the government list, a Claude search, or My Aged Care. */
   origin: z
     .object({
-      kind: z.enum(['gen', 'search']),
+      kind: z.enum(['gen', 'search', 'mac']),
       note: z.string().max(300),
       at: isoDate,
       /** The date of the first government list it was missing from (it may have closed or changed name). */

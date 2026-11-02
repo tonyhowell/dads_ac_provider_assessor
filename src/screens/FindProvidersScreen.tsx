@@ -18,6 +18,7 @@ import { DEFAULT_NARROW, narrowPasses, narrowReasons, providerFacts, type Narrow
 import { MapView } from '../components/MapView';
 import { QuickReasons } from '../components/Shortlisting';
 import { NarrowSteps } from '../components/Narrow';
+import { MacSource } from '../components/MacImport';
 import { AdvancedFind } from './AdvancedFind';
 import type { PlanItem, RateKey } from '../types';
 
@@ -191,6 +192,7 @@ function readFilters(): MatchFilters {
 }
 
 const NARROW_KEY = 'sah-assessor:find-narrow';
+const SCOPE_KEY = 'sah-assessor:find-scope';
 function readNarrow(): NarrowFilters {
   try {
     return { ...DEFAULT_NARROW, ...JSON.parse(sessionStorage.getItem(NARROW_KEY) ?? '{}') };
@@ -225,9 +227,25 @@ export function useFinderState() {
   };
   const [showOutside, setShowOutside] = useState(false);
   const back = useMemo(() => new Set(state.find.broughtBack), [state.find.broughtBack]);
-  const found = useMatches(showOutside || back.size > 0);
+  // Providers found on My Aged Care for this family: they serve the family's area (My Aged Care says so), and
+  // Find starts from them unless the family chooses to see everyone in the catalogue.
+  const macIds = useMemo(() => new Set(state.find.mac?.provider_ids ?? []), [state.find.mac?.provider_ids]);
+  const [scopeChoice, setScopeState] = useState<'mac' | 'all'>(() => {
+    try {
+      return sessionStorage.getItem(SCOPE_KEY) === '"all"' ? 'all' : 'mac';
+    } catch {
+      return 'mac';
+    }
+  });
+  const setScope = (v: 'mac' | 'all') => {
+    setScopeState(v);
+    keep(SCOPE_KEY, v);
+  };
+  const scope: 'mac' | 'all' = macIds.size ? scopeChoice : 'all';
+  const found = useMatches(showOutside || back.size > 0 || macIds.size > 0);
   const anyWithinBudget = found.matches.some((m) => m.verdict !== 'quote' && m.cost.over_budget !== null && m.cost.over_budget <= 0);
-  const inArea = (m: Match) => showOutside || servesArea(m.provider, areaPostcode, nearPostcodes) !== 'outside';
+  const inScope = (m: Match) => scope === 'all' || macIds.has(m.provider.id);
+  const inArea = (m: Match) => inScope(m) && (macIds.has(m.provider.id) || showOutside || servesArea(m.provider, areaPostcode, nearPostcodes) !== 'outside');
   const allProviders = useMemo(() => found.matches.map((m) => m.provider), [found.matches]);
   const dist = useDistances(state.participant?.suburb ?? null, areaPostcode, allProviders);
   const rows: Row[] = useMemo(
@@ -236,18 +254,18 @@ export function useFinderState() {
         m,
         facts: providerFacts(m.provider, {
           km: dist.near.get(m.provider.id)?.km ?? null,
-          serves: servesArea(m.provider, areaPostcode, nearPostcodes) === 'serves',
+          serves: macIds.has(m.provider.id) || servesArea(m.provider, areaPostcode, nearPostcodes) === 'serves',
           compliance: compliance.get(m.provider.id),
           claims: claims.get(m.provider.id)?.status === 'ready' && !!claims.get(m.provider.id)?.claims,
         }),
       })),
-    [found.matches, dist.near, areaPostcode, nearPostcodes, compliance, claims],
+    [found.matches, dist.near, areaPostcode, nearPostcodes, compliance, claims, macIds],
   );
   /** In the area and through the match filters: what the narrowing filters (and their counts) work on. */
   const base = rows.filter((r) => inArea(r.m) && passes(r.m, filters));
   const shownRows = rows.filter((r) => back.has(r.m.provider.id) || (inArea(r.m) && passes(r.m, filters) && narrowPasses(r.m, r.facts, narrow)));
   const shown = shownRows.map((r) => r.m);
-  return { ...found, filters, setFilters, narrow, setNarrow, showOutside, setShowOutside, anyWithinBudget, shown, shownRows, base, rows, dist, outside: found.outside, back };
+  return { ...found, filters, setFilters, narrow, setNarrow, showOutside, setShowOutside, anyWithinBudget, shown, shownRows, base, rows, dist, outside: found.outside, back, macIds, scope, setScope };
 }
 
 /** The selected provider (from `?p=`), its place in the list and the next one. */
@@ -328,6 +346,7 @@ function WholePlan() {
         </p>
       )}
       {!f.anyWithinBudget && !phone && f.budget && <p className="text-[0.95rem]">All of them cost more than your budget at your planned hours.</p>}
+      <MacSource f={f} />
       {phone ? (
         <details className="card">
           <summary className="cursor-pointer font-semibold">Narrow down ({f.shownRows.length} left)</summary>

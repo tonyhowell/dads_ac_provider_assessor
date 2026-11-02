@@ -53,7 +53,7 @@ import {
   type MemberRole,
 } from './applications.ts';
 import { catalogueEdits, createSuggestion, decideSuggestion, listSuggestions, providerHistory, revertCatalogue, upsertCatalogue } from './catalogue.ts';
-import { ProviderSchema } from '../src/schemas.ts';
+import { MacPriceSchema, ProviderSchema } from '../src/schemas.ts';
 import { effectiveProviders } from '../src/state/reducer.ts';
 import { loadSeedData } from '../src/data/load.ts';
 import { ActionSchema } from '../src/state/actions.ts';
@@ -64,6 +64,8 @@ import { activeRun, addSource, ENRICH_PARTS, EnrichmentBusyError, listRuns, list
 import { listPages, type Fetcher } from './pages.ts';
 import { claimPriceCheck, listPriceChecks, runPriceCheck } from './priceChecks.ts';
 import { checkGaps, readSupportPlan, suggestAnswers } from './gatherAi.ts';
+import { applyListing, readPrintouts } from './macRead.ts';
+import { macRates } from '../src/mac.ts';
 import { GenImportError, getGenSettings, listGenImports, runGenImport, saveGenSettings } from './genImport.ts';
 import { lookupPostcodes, nearPostcodes } from './geo.ts';
 import { askAboutProvider, checkCompliance, claimCompliance, finishCompliance, listCompliance, listQuestions, saveQuestion } from './insights.ts';
@@ -168,7 +170,7 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
   // Uploads (a support plan, the government list) may be larger; everything else is small.
   const smallBody = bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'Request is too large.' }, 413) });
   const uploadBody = bodyLimit({ maxSize: 40 * 1024 * 1024, onError: (c) => c.json({ error: 'The file is too large.' }, 413) });
-  const isUpload = (path: string) => /^\/api\/applications\/[^/]+\/support-plan$/.test(path) || path === '/api/admin/gen-import/upload';
+  const isUpload = (path: string) => /^\/api\/applications\/[^/]+\/(support-plan|mac\/read)$/.test(path) || path === '/api/admin/gen-import/upload';
   app.use('/api/*', (c, next) => (isUpload(c.req.path) ? uploadBody(c, next) : smallBody(c, next)));
 
   const parse = async <T>(c: Context, schema: z.ZodType<T>): Promise<T | Response> => {
@@ -433,6 +435,52 @@ export function createApp({ db, config, webauthn = simpleWebAuthn, getAnthropic,
     return c.json({ started: true, providers: ids.length }, 202);
   });
   member.get('/research', (c) => c.json({ running: researching.get(c.get('app').id) ?? null }));
+
+  /** My Aged Care printouts (shortlist, Compare, provider details) → a preview to confirm. Nothing is saved. */
+  member.post('/mac/read', requireEdit, async (c) => {
+    const body = await parse(c, z.object({ files: z.array(z.object({ name: z.string().max(300), data: z.string().min(10).max(20 * 1024 * 1024) })).min(1).max(12) }));
+    if (body instanceof Response) return body;
+    const files = body.files.map((f) => ({ name: f.name, data: Buffer.from(f.data, 'base64') }));
+    return c.json(await readPrintouts(files, await currentProviders(), getAnthropic));
+  });
+  /** Saves confirmed My Aged Care listings to the catalogue: new providers added, prices updated where published. */
+  member.post('/mac/apply', requireEdit, async (c) => {
+    const body = await parse(
+      c,
+      z.object({
+        share_url: z.url().max(300).nullable().default(null),
+        providers: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(200),
+              based_in: z.string().max(120).nullable(),
+              phone: z.string().max(40).nullable(),
+              prices: z.array(MacPriceSchema).max(120),
+              services: z.array(z.string().max(200)).max(150),
+              from: z.array(z.enum(['shortlist', 'compare', 'details', 'unknown'])).max(4),
+              match_id: z.string().max(100).nullable(),
+            }),
+          )
+          .min(1)
+          .max(60),
+      }),
+    );
+    if (body instanceof Response) return body;
+    const catalogue = await currentProviders();
+    const taken = new Set(catalogue.map((p) => p.id));
+    const asAt = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+    const user = c.get('user');
+    const ids: string[] = [];
+    await db.transaction(async (tx) => {
+      for (const listing of body.providers) {
+        const existing = listing.match_id ? (catalogue.find((p) => p.id === listing.match_id) ?? null) : null;
+        const next = applyListing(listing, existing, taken, { asAt, shareUrl: body.share_url, rates: macRates(listing.prices) });
+        await upsertCatalogue(tx, next, user.id, existing ? `Prices and services from My Aged Care (uploaded by ${user.display_name})` : `Added from My Aged Care (uploaded by ${user.display_name})`);
+        ids.push(next.id);
+      }
+    });
+    return c.json({ ids, ...(await catalogueEdits(db)) });
+  });
 
   /** Checks (or re-checks) a provider's quality and compliance record. */
   member.post('/compliance/:providerId', requireEdit, async (c) => {

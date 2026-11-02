@@ -108,6 +108,8 @@ export interface FindState {
   broughtBack: string[];
   /** Family reactions by provider id, one per person. */
   reactions: Record<string, Reaction[]>;
+  /** Providers found for this family on My Aged Care (from uploaded printouts): Find starts from these. */
+  mac?: { provider_ids: string[]; share_url: string | null; updated_at: string | null };
 }
 
 export const emptyFind = (): FindState => ({ target: 5, broughtBack: [], reactions: {} });
@@ -334,6 +336,13 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         find: { ...state.find, broughtBack: action.back ? [...new Set([...state.find.broughtBack, action.providerId])] : state.find.broughtBack.filter((id) => id !== action.providerId) },
       };
+    case 'find/macList': {
+      const prev = state.find.mac?.provider_ids ?? [];
+      const ids = action.replace ? action.providerIds : [...new Set([...prev, ...action.providerIds])];
+      return { ...state, find: { ...state.find, mac: { provider_ids: ids.slice(0, 200), share_url: action.shareUrl ?? state.find.mac?.share_url ?? null, updated_at: action.at } } };
+    }
+    case 'find/macRemove':
+      return state.find.mac ? { ...state, find: { ...state.find, mac: { ...state.find.mac, provider_ids: state.find.mac.provider_ids.filter((id) => id !== action.providerId) } } } : state;
     case 'find/react': {
       const others = (state.find.reactions[action.providerId] ?? []).filter((r) => r.user_id !== action.reaction.user_id);
       const list = action.reaction.value ? [...others, action.reaction as Reaction] : others;

@@ -1,3 +1,4 @@
+import type { MacKind, MacProvider } from './mac';
 import { api } from './api';
 import type { Action } from './state/actions';
 import type { VersionedState, StateSync } from './state/sync';
@@ -85,6 +86,12 @@ export interface ComplianceFinding {
   source_title: string;
 }
 
+export interface MacPreview {
+  providers: (MacProvider & { match: { id: string; provider: string } | null })[];
+  files: { name: string; kind: MacKind; providers: number; error?: string }[];
+  share_url: string | null;
+}
+
 export interface ComplianceRow {
   provider_id: string;
   status: 'running' | 'ready' | 'failed';
@@ -128,6 +135,10 @@ export interface Backend {
   /** Quality and compliance findings (shared), and starting a check. */
   listCompliance(): Promise<ComplianceRow[]>;
   startCompliance(applicationId: string, providerId: string, refresh: boolean): Promise<ComplianceRow>;
+  /** Find: read My Aged Care printouts into a preview (nothing saved). */
+  readMac(applicationId: string, files: { name: string; data: string }[]): Promise<MacPreview>;
+  /** Find: save confirmed My Aged Care listings to the catalogue; returns their ids and the catalogue. */
+  applyMac(applicationId: string, body: { share_url: string | null; providers: (MacProvider & { match_id: string | null })[] }): Promise<{ ids: string[] } & Catalogue>;
   /** Find: research up to 25 providers (prices, compliance, public claims). */
   startResearch(applicationId: string, providerIds: string[]): Promise<{ providers: number }>;
   /** Questions this family asked Claude about a provider, and asking a new one (waits for the answer). */
@@ -157,6 +168,8 @@ export const httpBackend: Backend = {
   listCompliance: async () => (await api<{ compliance: ComplianceRow[] }>('/api/compliance')).compliance,
   startCompliance: async (applicationId, providerId, refresh) =>
     (await api<{ compliance: ComplianceRow }>(`/api/applications/${encodeURIComponent(applicationId)}/compliance/${encodeURIComponent(providerId)}`, { body: { refresh } })).compliance,
+  readMac: async (applicationId, files) => api<MacPreview>(`/api/applications/${encodeURIComponent(applicationId)}/mac/read`, { body: { files } }),
+  applyMac: async (applicationId, body) => api<{ ids: string[] } & Catalogue>(`/api/applications/${encodeURIComponent(applicationId)}/mac/apply`, { body }),
   startResearch: async (applicationId, providerIds) => api<{ providers: number }>(`/api/applications/${encodeURIComponent(applicationId)}/research`, { body: { providerIds } }),
   listQuestions: async (applicationId, providerId) =>
     (await api<{ questions: ProviderQuestion[] }>(`/api/applications/${encodeURIComponent(applicationId)}/questions?provider=${encodeURIComponent(providerId)}`)).questions,

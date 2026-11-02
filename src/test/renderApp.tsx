@@ -5,9 +5,12 @@ import { loadSeedData, type SeedData } from '../data/load';
 import { AuthProvider, type SessionUser } from '../auth/AuthContext';
 import { emptyState, reducer, type AppState } from '../state/reducer';
 import type { StateSync } from '../state/sync';
-import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, ComplianceRow, MemberRole, PriceCheckRow, ProviderQuestion, Suggestion } from '../backend';
+import type { ApplicationInfo, Backend, Catalogue, ClaimsRow, ComplianceRow, MacPreview, MemberRole, PriceCheckRow, ProviderQuestion, Suggestion } from '../backend';
 import type { Provider } from '../types';
 import type { AudioStore } from '../storage/audioStore';
+
+/** A blank provider record for tests (no prices). */
+const seedProvider = (): Provider => ({ ...loadSeedData().providers[0], rn: null, en: null, pc: null, domestic: null, social: null, respite: null, gardening: null, care_mgmt: null, flags: [], postcodes_served: undefined, prices_as_at: 'Not published', prices_as_at_date: null, veteran_fit: null, source_url: null });
 
 export function memoryAudioStore(): AudioStore & { blobs: Map<string, Blob> } {
   const blobs = new Map<string, Blob>();
@@ -61,6 +64,8 @@ export interface MemoryBackend extends Backend {
   priceRows: PriceCheckRow[];
   priceRequests: string[];
   researchRequests: string[][];
+  macPreview: MacPreview | null;
+  macApplied: unknown[];
   complianceRows: ComplianceRow[];
   questions: ProviderQuestion[];
 }
@@ -75,6 +80,8 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
     priceRows: [],
     priceRequests: [],
     researchRequests: [],
+    macPreview: null,
+    macApplied: [],
     complianceRows: [],
     questions: [],
     listCompliance: async () => backend.complianceRows,
@@ -82,6 +89,17 @@ export function memoryBackend(server: MemoryServer, role: MemberRole = 'coordina
       const row: ComplianceRow = { provider_id: providerId, status: 'running', result: null, error: null, started_at: new Date().toISOString(), finished_at: null };
       backend.complianceRows = [...backend.complianceRows.filter((r) => r.provider_id !== providerId), row];
       return row;
+    },
+    readMac: async () => {
+      if (!backend.macPreview) throw new Error('No preview set');
+      return backend.macPreview;
+    },
+    applyMac: async (_app, body) => {
+      backend.macApplied.push(body);
+      const ids = body.providers.map((p) => p.match_id ?? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+      for (const [i, p] of body.providers.entries())
+        if (!p.match_id) backend.edits = [...backend.edits, { ...seedProvider(), id: ids[i], provider: p.name, origin: { kind: 'mac', note: 'From a My Aged Care printout', at: '2026-11-02' } }];
+      return { ids, providers: backend.edits, updated_at: null };
     },
     startResearch: async (_app, ids) => {
       backend.researchRequests.push(ids);

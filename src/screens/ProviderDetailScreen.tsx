@@ -1,5 +1,6 @@
 import { ClaimsPanel } from '../components/Claims';
 import { ProviderDataBox } from '../components/ProviderData';
+import { MacPrices } from '../components/MacPrices';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -197,6 +198,8 @@ export function ProviderDetailScreen() {
           )}
         </Expander>
       )}
+
+      <MacPrices provider={provider} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ProviderNotes providerId={provider.id} />

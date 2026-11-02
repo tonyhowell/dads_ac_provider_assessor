@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext';
 import { useSession } from '../state/SessionContext';
 import { useFinderState, ModeSwitch } from './FindProvidersScreen';
 import { ResearchControl } from '../components/Narrow';
+import { MacSource } from '../components/MacImport';
 import { ShortlistBar } from '../components/Finder';
 import { VERDICT_SHORT, type MatchFilters, type Verdict } from '../matching';
 import { countChoice, countWith, fundingText, ORG_KINDS, RADII, RESEARCH_MAX, SIZE_BANDS, type ComplianceState, type DataHeld, type NarrowFilters, type Row } from '../narrow';
@@ -128,6 +129,7 @@ export function AdvancedFind() {
         </span>
       </div>
 
+      <MacSource f={f} />
       <div className="grid items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="card space-y-4" aria-label="Filters">
           <Facet legend="Distance">
